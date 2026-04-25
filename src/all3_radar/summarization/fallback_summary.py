@@ -6,7 +6,13 @@ import re
 
 SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 WHITESPACE_RE = re.compile(r"\s+")
-ELLIPSIS_RE = re.compile(r"\s*(\.\.\.|…|\[\s*…\s*\]|\[\s*\.\.\.\s*\])\s*")
+ELLIPSIS_RE = re.compile(r"\s*(\.\.\.|вЂ¦|\[\s*вЂ¦\s*\]|\[\s*\.\.\.\s*\])\s*")
+LEADING_PREFIX_PATTERNS = [
+    re.compile(r"^\s*insider brief\s*[:.\-]?\s*", re.IGNORECASE),
+    re.compile(r"^\s*brief\s*[:.\-]\s*", re.IGNORECASE),
+    re.compile(r"^\s*robotics \& automation news\s*[:.\-]\s*", re.IGNORECASE),
+    re.compile(r"^\s*the robot report\s*[:.\-]\s*", re.IGNORECASE),
+]
 BOILERPLATE_PATTERNS = [
     re.compile(r"\bThe post .*? appeared first on .*", re.IGNORECASE),
     re.compile(r"\bRead more\b.*", re.IGNORECASE),
@@ -33,6 +39,8 @@ def _clean_text(value: str | None) -> str | None:
 
 def _strip_boilerplate(text: str) -> str:
     cleaned = text
+    for pattern in LEADING_PREFIX_PATTERNS:
+        cleaned = pattern.sub("", cleaned)
     for pattern in BOILERPLATE_PATTERNS:
         cleaned = pattern.sub("", cleaned)
     return WHITESPACE_RE.sub(" ", cleaned).strip()
@@ -47,11 +55,17 @@ def remove_repeated_headline(summary: str, headline: str) -> str:
 
 def compress_to_two_sentences(summary: str) -> str:
     sentences = [sentence.strip() for sentence in SENTENCE_SPLIT_RE.split(summary) if sentence.strip()]
-    clean_sentences = [
-        sentence
-        for sentence in sentences
-        if not any(marker in sentence.lower() for marker in CAPTION_MARKERS)
-    ]
+    clean_sentences: list[str] = []
+    seen_sentences: set[str] = set()
+    for sentence in sentences:
+        lowered = sentence.lower()
+        if any(marker in lowered for marker in CAPTION_MARKERS):
+            continue
+        normalized_sentence = WHITESPACE_RE.sub(" ", lowered).strip(" .:-")
+        if not normalized_sentence or normalized_sentence in seen_sentences:
+            continue
+        seen_sentences.add(normalized_sentence)
+        clean_sentences.append(sentence)
     while clean_sentences and clean_sentences[-1][-1] not in ".!?":
         clean_sentences.pop()
     return " ".join(clean_sentences[:2])
@@ -70,7 +84,7 @@ def sanitize_summary_text(headline: str, summary: str | None) -> str | None:
         return None
     if cleaned.endswith(":"):
         return None
-    if "..." in cleaned or "…" in cleaned:
+    if "..." in cleaned or "вЂ¦" in cleaned:
         return None
     if len(cleaned.split()) < 6:
         return None

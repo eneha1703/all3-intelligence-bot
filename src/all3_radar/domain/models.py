@@ -92,6 +92,7 @@ class StoredNormalizedItem:
     is_wrapper: bool
     directness_rank: int
     metadata: dict[str, Any] = field(default_factory=dict)
+    canonical_event_id: str | None = None
 
 
 @dataclass(frozen=True)

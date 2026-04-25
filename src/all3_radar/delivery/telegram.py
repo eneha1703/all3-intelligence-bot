@@ -19,7 +19,7 @@ def build_news_card(headline: str, summary_text: str | None, url: str) -> Telegr
     cleaned_summary = sanitize_summary_text(headline, summary_text)
     if not cleaned_summary:
         return None
-    text = "\n".join(
+    text = "\n\n".join(
         [
             f"<b>{html.escape(headline)}</b>",
             html.escape(cleaned_summary),

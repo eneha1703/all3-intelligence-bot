@@ -12,9 +12,14 @@ def test_build_news_card_formats_clean_message() -> None:
     )
 
     assert card is not None
-    assert "<b>Kewazo raises funding for construction robotics rollout</b>" in card.text
-    assert "The company said the round will support jobsite deployment expansion." in card.text
-    assert 'href="https://example.com/story"' in card.text
+    assert (
+        card.text
+        == (
+            "<b>Kewazo raises funding for construction robotics rollout</b>\n\n"
+            "The company said the round will support jobsite deployment expansion.\n\n"
+            '<a href="https://example.com/story">Link</a>'
+        )
+    )
 
 
 def test_build_news_card_skips_truncated_or_boilerplate_summary() -> None:
@@ -58,3 +63,18 @@ def test_build_news_card_accepts_bracketed_ellipsis_after_complete_sentences() -
     assert card is not None
     assert "[...]" not in card.text
     assert "global manufacturing." in card.text
+
+
+def test_build_news_card_strips_insider_brief_prefix() -> None:
+    card = build_news_card(
+        headline="Teradyne expands industrial automation footprint",
+        summary_text=(
+            "Insider Brief: Teradyne is expanding its industrial automation footprint through a new partnership. "
+            "The deal adds more robot deployment capacity across manufacturing operations."
+        ),
+        url="https://example.com/insider-story",
+    )
+
+    assert card is not None
+    assert "Insider Brief" not in card.text
+    assert "industrial automation footprint" in card.text

@@ -242,8 +242,10 @@ class RadarRepository:
             rows = connection.execute(
                 """
                 SELECT ni.id, ni.raw_item_id, ni.source_id, ni.canonical_url, ni.domain, ni.title, ni.text_preview,
-                       ni.published_ts, ni.collected_ts, ni.layer, ni.is_wrapper, ni.directness_rank, ni.metadata_json
+                       ni.published_ts, ni.collected_ts, ni.layer, ni.is_wrapper, ni.directness_rank, ni.metadata_json,
+                       rd.canonical_event_id
                 FROM normalized_items ni
+                LEFT JOIN radar_decisions rd ON rd.normalized_item_id = ni.id
                 WHERE julianday(ni.collected_ts) >= julianday('now', ?)
                 """,
                 (f"-{limit_hours} hours",),
@@ -308,6 +310,20 @@ class RadarRepository:
             ).fetchone()
         return bool(row)
 
+    def has_sent_alert_for_url(self, canonical_url: str) -> bool:
+        with connect(self.database_path) as connection:
+            row = connection.execute(
+                """
+                SELECT 1
+                FROM telegram_deliveries td
+                JOIN normalized_items ni ON ni.id = td.normalized_item_id
+                WHERE ni.canonical_url = ? AND td.bot_kind = 'alert' AND td.status = 'sent'
+                LIMIT 1
+                """,
+                (canonical_url,),
+            ).fetchone()
+        return bool(row)
+
     def record_telegram_delivery(
         self,
         run_id: str,
@@ -366,6 +382,7 @@ class RadarRepository:
             is_wrapper=bool(row["is_wrapper"]),
             directness_rank=int(row["directness_rank"]),
             metadata=json.loads(row["metadata_json"] or "{}"),
+            canonical_event_id=row["canonical_event_id"] if "canonical_event_id" in row.keys() else None,
         )
 
     def fetch_counts_for_run(self, run_id: str) -> dict[str, int]:

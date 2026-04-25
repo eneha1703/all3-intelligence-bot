@@ -26,6 +26,7 @@ from all3_radar.observability.run_summary import format_radar_run_summary
 from all3_radar.pipeline.collect import build_adapters, collect_from_source, log_source_inventory
 from all3_radar.pipeline.competitors import detect_competitor_matches, load_competitor_catalog
 from all3_radar.pipeline.dedupe import ClusterResult, ClusterableRecord, cluster_records
+from all3_radar.pipeline.editorial import evaluate_send_stage_editorial
 from all3_radar.pipeline.freshness import evaluate_freshness
 from all3_radar.pipeline.normalize import normalize_collected_item
 from all3_radar.pipeline.ranking import load_ranking_rules, rank_item
@@ -222,6 +223,7 @@ class RadarService:
                         source_priority=source_priority_map.get(item.source_id, 0),
                         competitor_count=self.repository.load_competitor_match_count(item.normalized_item_id),
                         current_run=False,
+                        canonical_event_id=item.canonical_event_id,
                     )
                     for item in historical_items
                 ],
@@ -264,24 +266,32 @@ class RadarService:
                         is_borderline=False,
                     )
                 else:
-                    already_sent = (
+                    already_sent_event = (
                         context.cluster_assignment is not None
                         and self.repository.has_sent_alert_for_event(context.cluster_assignment.canonical_event_id)
                     )
-                    context.already_sent = already_sent
+                    already_sent_url = self.repository.has_sent_alert_for_url(context.item.canonical_url)
+                    context.already_sent = already_sent_event or already_sent_url
                     context.decision = rank_item(
                         item=context.item,
                         competitor_count=competitor_count,
                         freshness_is_fresh=context.freshness.is_fresh,
                         ranking_rules=ranking_rules,
                     )
-                    if already_sent:
+                    if context.already_sent:
                         context.decision = RankedDecision(
                             relevance_status=context.decision.relevance_status,
                             send_status="skip",
-                            skip_reason="already_sent_canonical_event",
+                            skip_reason=(
+                                "already_sent_canonical_event" if already_sent_event else "already_sent_story_url"
+                            ),
                             score=context.decision.score,
-                            signals={**context.decision.signals, "already_sent": True},
+                            signals={
+                                **context.decision.signals,
+                                "already_sent": True,
+                                "already_sent_canonical_event": already_sent_event,
+                                "already_sent_story_url": already_sent_url,
+                            },
                             is_shortlisted=False,
                             is_borderline=False,
                         )
@@ -314,12 +324,49 @@ class RadarService:
                         is_shortlisted=False,
                         is_borderline=False,
                     )
-                if (
+                    continue
+                if not (
                     context.decision.relevance_status == "keep"
                     and context.decision.score >= send_threshold
                     and context.decision.send_status != "skip"
                 ):
-                    sendable_contexts.append(context)
+                    continue
+
+                editorial = evaluate_send_stage_editorial(context.item, context.decision)
+                if not editorial.allow_send:
+                    context.decision = RankedDecision(
+                        relevance_status=context.decision.relevance_status,
+                        send_status="stored_only",
+                        skip_reason=editorial.reason,
+                        score=context.decision.score,
+                        signals={**context.decision.signals, "editorial_flags": editorial.flags},
+                        is_shortlisted=context.decision.is_shortlisted,
+                        is_borderline=context.decision.is_borderline,
+                    )
+                    LOGGER.info(
+                        "Editorial shaping decision: item=%s allow_send=%s reason=%s",
+                        context.item.normalized_item_id,
+                        False,
+                        editorial.reason,
+                    )
+                    continue
+
+                context.decision = RankedDecision(
+                    relevance_status=context.decision.relevance_status,
+                    send_status=context.decision.send_status,
+                    skip_reason=context.decision.skip_reason,
+                    score=context.decision.score,
+                    signals={**context.decision.signals, "editorial_flags": editorial.flags},
+                    is_shortlisted=context.decision.is_shortlisted,
+                    is_borderline=context.decision.is_borderline,
+                )
+                LOGGER.info(
+                    "Editorial shaping decision: item=%s allow_send=%s reason=%s",
+                    context.item.normalized_item_id,
+                    True,
+                    "eligible",
+                )
+                sendable_contexts.append(context)
 
             sendable_contexts.sort(key=lambda context: context.decision.score if context.decision else 0, reverse=True)
             sendable_contexts = sendable_contexts[: self.settings.radar.max_cards_per_run]

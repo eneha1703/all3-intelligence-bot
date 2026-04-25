@@ -258,3 +258,221 @@ def test_radar_collection_continues_when_one_source_fails(monkeypatch, tmp_path,
     assert result.failed_sources == 1
     assert result.collected_items == 3
     assert "Source collection failed: id=broken_feed reason=malformed_feed" in caplog.text
+
+
+def test_send_stage_editorial_shaping_skips_thought_leadership(monkeypatch, tmp_path, caplog) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "radar_editorial.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+
+    now = datetime.now(timezone.utc)
+    feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Flex and Teradyne Robotics expand partnership to scale intelligent automation across global manufacturing</title>
+    <link>https://example.com/flex-story</link>
+    <description>Flex and Teradyne Robotics are expanding their collaboration to accelerate intelligent automation across global manufacturing.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=1))}</pubDate>
+    <guid>good-1</guid>
+  </item>
+  <item>
+    <title>From sci-fi to reality: Physical AI’s future with Dr. Jan Liphardt</title>
+    <link>https://example.com/thought-leadership</link>
+    <description>Dr. Jan Liphardt discusses the future of robotics and safety in human-robot interactions.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=2))}</pubDate>
+    <guid>bad-1</guid>
+  </item>
+</channel></rss>"""
+
+    registry = SourceRegistry(
+        (
+            SourceDefinition(
+                id="editorial_feed",
+                name="Editorial Feed",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://example.com/editorial.xml",
+                priority=100,
+                tags=("robotics", "industrial"),
+            ),
+        )
+    )
+
+    class FakeGeminiClient:
+        is_available = True
+
+        def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
+            return (preview or title, None)
+
+    class FakeTelegramSender:
+        def __init__(self) -> None:
+            self.sent_cards = []
+
+        def send_card(self, card):
+            self.sent_cards.append(card)
+            return [
+                TelegramDelivery(
+                    chat_id="123",
+                    status="sent",
+                    telegram_message_id="msg-1",
+                    error_text=None,
+                    payload_text=card.text,
+                )
+            ]
+
+    def fake_fetch_text(url: str) -> str:
+        assert url == "https://example.com/editorial.xml"
+        return feed
+
+    fake_sender = FakeTelegramSender()
+    caplog.set_level("INFO")
+    service = RadarService(
+        repo_root=repo_root,
+        registry=registry,
+        fetch_text_fn=fake_fetch_text,
+        gemini_client=FakeGeminiClient(),
+        telegram_sender=fake_sender,
+    )
+    result = service.run(dry_run=False)
+
+    assert result.sent_items == 1
+    assert len(fake_sender.sent_cards) == 1
+    assert "Flex and Teradyne Robotics expand partnership" in fake_sender.sent_cards[0].text
+
+    with sqlite3.connect(db_path) as connection:
+        thought_row = connection.execute(
+            """
+            SELECT send_status, skip_reason
+            FROM radar_decisions rd
+            JOIN normalized_items ni ON ni.id = rd.normalized_item_id
+            WHERE ni.title = ?
+            """,
+            ("From sci-fi to reality: Physical AI’s future with Dr. Jan Liphardt",),
+        ).fetchone()
+
+    assert thought_row == ("stored_only", "editorial_thought_leadership_without_operational_signal")
+    assert "Editorial shaping decision" in caplog.text
+
+
+def test_radar_does_not_resend_same_canonical_event_across_runs(monkeypatch, tmp_path, caplog) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "radar_repeat.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+
+    now = datetime.now(timezone.utc)
+    first_feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Kewazo raises funding for construction robot rollout</title>
+    <link>https://direct-a.example/story</link>
+    <description>The company said the round will support factory and jobsite deployment expansion.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=1))}</pubDate>
+    <guid>a1</guid>
+  </item>
+</channel></rss>"""
+    second_feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Construction robot startup Kewazo raises funding for rollout</title>
+    <link>https://direct-b.example/story</link>
+    <description>The funding will support deployment across industrial construction workflows.</description>
+    <pubDate>{format_datetime(now - timedelta(minutes=30))}</pubDate>
+    <guid>b1</guid>
+  </item>
+</channel></rss>"""
+
+    registry = SourceRegistry(
+        (
+            SourceDefinition(
+                id="direct_a",
+                name="Direct A",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://direct-a.example/feed.xml",
+                priority=90,
+                tags=("robotics",),
+            ),
+            SourceDefinition(
+                id="direct_b",
+                name="Direct B",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://direct-b.example/feed.xml",
+                priority=80,
+                tags=("robotics",),
+            ),
+        )
+    )
+
+    class FakeGeminiClient:
+        is_available = True
+
+        def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
+            return ("The round supports deployment expansion across construction robotics workflows.", None)
+
+    class FakeTelegramSender:
+        def __init__(self) -> None:
+            self.sent_cards = []
+
+        def send_card(self, card):
+            self.sent_cards.append(card)
+            return [
+                TelegramDelivery(
+                    chat_id="123",
+                    status="sent",
+                    telegram_message_id="msg-1",
+                    error_text=None,
+                    payload_text=card.text,
+                )
+            ]
+
+    feeds = {
+        "https://direct-a.example/feed.xml": first_feed,
+        "https://direct-b.example/feed.xml": second_feed,
+    }
+
+    def fake_fetch_text(url: str) -> str:
+        return feeds[url]
+
+    fake_sender = FakeTelegramSender()
+    caplog.set_level("INFO")
+    service = RadarService(
+        repo_root=repo_root,
+        registry=registry,
+        fetch_text_fn=fake_fetch_text,
+        gemini_client=FakeGeminiClient(),
+        telegram_sender=fake_sender,
+    )
+
+    first_result = service.run(source_id="direct_a", dry_run=False)
+    second_result = service.run(source_id="direct_b", dry_run=False)
+
+    assert first_result.sent_items == 1
+    assert second_result.sent_items == 0
+    assert len(fake_sender.sent_cards) == 1
+
+    with sqlite3.connect(db_path) as connection:
+        decision_row = connection.execute(
+            """
+            SELECT rd.send_status, rd.skip_reason
+            FROM radar_decisions rd
+            JOIN normalized_items ni ON ni.id = rd.normalized_item_id
+            WHERE ni.title = ?
+            """,
+            ("Construction robot startup Kewazo raises funding for rollout",),
+        ).fetchone()
+
+    assert decision_row == ("skip", "already_sent_canonical_event")
+    assert "already_sent_canonical_event" in caplog.text
