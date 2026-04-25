@@ -145,3 +145,4 @@ class RadarRunResult:
     shortlisted_items: int
     sent_items: int
     skipped_send_items: int
+    failed_sources: int

@@ -123,6 +123,7 @@ class RadarService:
         missing_published_count = 0
         sent_count = 0
         skipped_send_count = 0
+        failed_sources = 0
 
         try:
             for source in selected_sources:
@@ -134,7 +135,12 @@ class RadarService:
                     )
                     continue
 
-                items = collect_from_source(source=source, adapters=adapters, collected_at=now)
+                try:
+                    items = collect_from_source(source=source, adapters=adapters, collected_at=now)
+                except Exception as exc:
+                    failed_sources += 1
+                    LOGGER.warning("Source collection failed: id=%s reason=%s", source.id, exc)
+                    continue
                 LOGGER.info("Collected items from source: id=%s count=%s", source.id, len(items))
 
                 source_normalized_count = 0
@@ -424,6 +430,7 @@ class RadarService:
                 shortlisted_items=len(shortlisted_contexts),
                 sent_items=sent_count,
                 skipped_send_items=skipped_send_count,
+                failed_sources=failed_sources,
             )
             self.repository.finish_pipeline_run(
                 run_id,
@@ -440,6 +447,7 @@ class RadarService:
                     "shortlisted_items": result.shortlisted_items,
                     "sent_items": result.sent_items,
                     "skipped_send_items": result.skipped_send_items,
+                    "failed_sources": result.failed_sources,
                     "dry_run": dry_run,
                 },
             )

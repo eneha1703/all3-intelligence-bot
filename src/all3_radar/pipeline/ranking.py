@@ -9,25 +9,53 @@ from all3_radar.config.loader import load_yaml
 from all3_radar.domain.models import RankedDecision, StoredNormalizedItem
 from all3_radar.pipeline.filters import compute_relevance_status
 
-FUNDING_TERMS = ("funding", "raises", "raised", "series a", "series b", "seed round", "investment")
+FUNDING_TERMS = ("funding", "raises", "raised", "series a", "series b", "seed round", "investment", "pre-seed", "ipo")
 PARTNERSHIP_TERMS = ("partnership", "partners with", "partnered with", "collaboration")
 ACQUISITION_TERMS = ("acquires", "acquisition", "acquired")
 DEPLOYMENT_TERMS = ("deployment", "deployed", "pilot", "rollout", "contract", "framework agreement")
-FACTORY_TERMS = ("factory", "plant", "capacity", "expansion", "production line", "manufacturing facility")
-POLICY_TERMS = ("permitting", "permit", "code", "codes", "regulation", "approval", "standard", "policy")
+FACTORY_TERMS = (
+    "factory opening",
+    "factory expansion",
+    "new factory",
+    "production line",
+    "manufacturing facility",
+    "manufacturing plant",
+    "plant expansion",
+    "capacity expansion",
+)
+POLICY_TERMS = (
+    "permitting",
+    "permit",
+    "building code",
+    "code approval",
+    "approval pathway",
+    "planning approval",
+    "regulation",
+    "regulatory",
+    "zoning",
+    "standard",
+    "policy reform",
+)
 TIMBER_TERMS = ("timber", "mass timber", "glulam", "clt")
 TIMBER_STRATEGIC_TERMS = ("demand", "adoption", "floor area", "square metre", "sq m", "growth", "capacity")
 SHOWCASE_TIMBER_TERMS = ("showcase", "design", "architecture", "pavilion", "residence", "award")
 QUANTIFIED_SCALE_RE = re.compile(r"\b(\d+(\.\d+)?x|\d+[,\d]*\s?(sqm|sq m|square metre|square meter|m2|percent|%))\b")
+WAREHOUSE_LOGISTICS_TERMS = ("warehouse", "logistics", "intralogistics", "material handling")
+STRATEGIC_CONTEXT_TERMS = ("construction", "industrial", "manufacturing", "factory", "jobsite", "worksite", "assembly", "production")
 
 
 def load_ranking_rules(path: Path) -> dict:
     return load_yaml(path)
 
 
+def _term_pattern(term: str) -> re.Pattern[str]:
+    escaped = re.escape(term.lower()).replace(r"\ ", r"\s+")
+    return re.compile(rf"(?<![a-z0-9]){escaped}(?![a-z0-9])")
+
+
 def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
     lowered = text.lower()
-    return any(term in lowered for term in terms)
+    return any(_term_pattern(term).search(lowered) for term in terms)
 
 
 def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
@@ -35,6 +63,7 @@ def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
     timber_present = _contains_any(haystack, TIMBER_TERMS)
     quantified_scale = bool(QUANTIFIED_SCALE_RE.search(haystack))
     timber_strategic = timber_present and (_contains_any(haystack, TIMBER_STRATEGIC_TERMS) or quantified_scale)
+    adjacent_logistics_only = _contains_any(haystack, WAREHOUSE_LOGISTICS_TERMS) and not _contains_any(haystack, STRATEGIC_CONTEXT_TERMS)
     return {
         "funding_event": _contains_any(haystack, FUNDING_TERMS),
         "partnership_event": _contains_any(haystack, PARTNERSHIP_TERMS),
@@ -48,6 +77,7 @@ def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
         and _contains_any(haystack, SHOWCASE_TIMBER_TERMS)
         and not timber_strategic,
         "consumer_robotics_penalty": False,
+        "adjacent_logistics_only": adjacent_logistics_only,
     }
 
 

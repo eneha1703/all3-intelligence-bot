@@ -6,7 +6,7 @@ import re
 from pathlib import Path
 
 from all3_radar.config.loader import load_yaml
-from all3_radar.domain.models import RankedDecision, StoredNormalizedItem
+from all3_radar.domain.models import StoredNormalizedItem
 
 CONSUMER_ROBOT_TERMS = {
     "home robot",
@@ -21,19 +21,26 @@ CONSUMER_ROBOT_TERMS = {
 INDUSTRIAL_CONTEXT_TERMS = {
     "construction",
     "industrial",
-    "warehouse",
     "manufacturing",
-    "logistics",
     "jobsite",
+    "worksite",
     "factory",
     "prefab",
     "modular",
+    "assembly",
+    "production",
+    "timber",
+    "permitting",
+    "code",
 }
 TOPIC_TERMS = {
     "robot",
     "robotics",
+    "humanoid",
     "automation",
+    "automated",
     "autonomy",
+    "autonomous",
     "prefab",
     "prefabrication",
     "modular",
@@ -45,12 +52,116 @@ TOPIC_TERMS = {
     "timber",
     "mass timber",
     "factory",
-    "housing",
     "permitting",
     "code",
     "policy",
 }
+BROAD_FEED_SCOPE_TERMS = {
+    "jobsite",
+    "worksite",
+    "prefab",
+    "prefabrication",
+    "modular",
+    "off-site",
+    "offsite",
+    "industrialized",
+    "industrialized construction",
+    "construction robotics",
+    "jobsite robotics",
+    "industrial robot",
+    "industrial robotics",
+    "industrial automation",
+    "construction automation",
+    "construction equipment",
+    "heavy equipment",
+    "mass timber",
+    "clt",
+    "glulam",
+    "permitting",
+    "approval",
+    "building code",
+    "housing delivery",
+    "modular housing",
+    "factory-built housing",
+}
+HIGH_INTENT_BROAD_FEED_TERMS = {
+    "jobsite",
+    "worksite",
+    "prefab",
+    "prefabrication",
+    "modular",
+    "off-site",
+    "offsite",
+    "industrialized construction",
+    "construction robotics",
+    "jobsite robotics",
+    "industrial robot",
+    "industrial robotics",
+    "industrial automation",
+    "construction automation",
+    "construction equipment",
+    "heavy equipment",
+    "mass timber",
+    "clt",
+    "glulam",
+    "permitting",
+    "building code",
+    "housing delivery",
+    "modular housing",
+    "factory-built housing",
+}
+WAREHOUSE_LOGISTICS_TERMS = {
+    "warehouse",
+    "warehousing",
+    "logistics",
+    "intralogistics",
+    "material handling",
+}
+ROBOTICS_TERMS = {
+    "robot",
+    "robotics",
+    "humanoid",
+    "autonomy",
+    "autonomous",
+}
+AUTOMATION_TERMS = {
+    "automation",
+    "automated",
+}
+STRATEGIC_WORK_ENV_TERMS = {
+    "industrial",
+    "manufacturing",
+    "factory",
+    "jobsite",
+    "worksite",
+    "production",
+    "assembly",
+}
+BUILT_ENVIRONMENT_TERMS = {
+    "jobsite",
+    "worksite",
+    "prefab",
+    "prefabrication",
+    "modular",
+    "offsite",
+    "off-site",
+    "industrialized construction",
+    "housing delivery",
+    "factory-built",
+    "mass timber",
+    "timber",
+    "clt",
+    "glulam",
+    "permitting",
+    "building code",
+    "code approval",
+}
 WHITESPACE_RE = re.compile(r"\s+")
+
+
+def _term_pattern(term: str) -> re.Pattern[str]:
+    escaped = re.escape(term.lower()).replace(r"\ ", r"\s+")
+    return re.compile(rf"(?<![a-z0-9]){escaped}(?![a-z0-9])")
 
 
 def _normalize_text(text: str) -> str:
@@ -63,13 +174,50 @@ def load_topic_rules(path: Path) -> dict:
 
 def has_any_term(text: str, terms: set[str]) -> bool:
     normalized = _normalize_text(text)
-    return any(term in normalized for term in terms)
+    return any(_term_pattern(term).search(normalized) for term in terms)
 
 
 def is_obvious_off_scope(item: StoredNormalizedItem) -> bool:
     haystack = _normalize_text(f"{item.title} {item.text_preview or ''}")
     if has_any_term(haystack, CONSUMER_ROBOT_TERMS) and not has_any_term(haystack, INDUSTRIAL_CONTEXT_TERMS):
         return True
+    return False
+
+
+def _source_tags(item: StoredNormalizedItem) -> set[str]:
+    raw_tags = item.metadata.get("tags", [])
+    return {str(tag).lower() for tag in raw_tags}
+
+
+def is_broad_feed_source(item: StoredNormalizedItem) -> bool:
+    return bool(item.metadata.get("broad_feed"))
+
+
+def has_clear_all3_scope(item: StoredNormalizedItem, competitor_count: int, event_flags: dict[str, bool]) -> bool:
+    haystack = _normalize_text(f"{item.title} {item.text_preview or ''}")
+    if competitor_count > 0:
+        return True
+    if has_any_term(haystack, BROAD_FEED_SCOPE_TERMS):
+        return True
+    if event_flags.get("timber_strategic_signal"):
+        return True
+    if has_any_term(haystack, ROBOTICS_TERMS) and has_any_term(haystack, STRATEGIC_WORK_ENV_TERMS):
+        return True
+    if has_any_term(haystack, AUTOMATION_TERMS) and has_any_term(haystack, {"industrial", "manufacturing", "factory"}):
+        return True
+    if has_any_term(haystack, WAREHOUSE_LOGISTICS_TERMS):
+        return (
+            has_any_term(haystack, BUILT_ENVIRONMENT_TERMS)
+            or (
+                has_any_term(haystack, ROBOTICS_TERMS)
+                and has_any_term(haystack, {"industrial", "manufacturing", "factory"})
+                and (
+                    event_flags.get("deployment_event", False)
+                    or event_flags.get("funding_event", False)
+                    or event_flags.get("partnership_event", False)
+                )
+            )
+        )
     return False
 
 
@@ -88,6 +236,48 @@ def compute_relevance_status(
         return "drop", "freshness_failed"
     if is_obvious_off_scope(item):
         return "drop", "obvious_off_scope"
+    if not has_clear_all3_scope(item, competitor_count, event_flags):
+        return "drop", "no_clear_all3_scope"
+    if is_broad_feed_source(item):
+        haystack = f"{item.title} {item.text_preview or ''}"
+        high_intent_scope = has_any_term(haystack, HIGH_INTENT_BROAD_FEED_TERMS)
+        strong_broad_signal = (
+            competitor_count > 0
+            or (event_flags.get("permitting_or_code_signal") and high_intent_scope)
+            or event_flags.get("timber_strategic_signal")
+            or (
+                event_flags.get("quantified_scale_signal")
+                and high_intent_scope
+            )
+            or (
+                event_flags.get("funding_event")
+                and (
+                    high_intent_scope
+                    or (
+                        has_any_term(haystack, ROBOTICS_TERMS)
+                        and has_any_term(haystack, STRATEGIC_WORK_ENV_TERMS)
+                    )
+                    or (
+                        has_any_term(haystack, AUTOMATION_TERMS)
+                        and has_any_term(haystack, {"industrial", "manufacturing", "factory"})
+                    )
+                )
+            )
+            or (
+                event_flags.get("deployment_event")
+                and (
+                    has_any_term(haystack, ROBOTICS_TERMS)
+                    or has_any_term(haystack, AUTOMATION_TERMS)
+                )
+                and (
+                    high_intent_scope
+                    or has_any_term(haystack, {"industrial", "manufacturing", "factory"})
+                )
+            )
+            or (event_flags.get("factory_opening_or_expansion") and high_intent_scope)
+        )
+        if not strong_broad_signal:
+            return "drop", "broad_feed_without_strong_signal"
     if not has_topic_relevance(item, competitor_count, event_flags):
         return "drop", "no_clear_topic_signal"
     return "keep", None

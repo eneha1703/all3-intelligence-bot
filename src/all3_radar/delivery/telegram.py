@@ -10,13 +10,13 @@ import uuid
 from dataclasses import dataclass
 
 from all3_radar.domain.models import TelegramCard
-from all3_radar.summarization.fallback_summary import compress_to_two_sentences, remove_repeated_headline
+from all3_radar.summarization.fallback_summary import sanitize_summary_text
 
 
 def build_news_card(headline: str, summary_text: str | None, url: str) -> TelegramCard | None:
     if not headline.strip() or not summary_text or not url.strip():
         return None
-    cleaned_summary = compress_to_two_sentences(remove_repeated_headline(summary_text.strip(), headline))
+    cleaned_summary = sanitize_summary_text(headline, summary_text)
     if not cleaned_summary:
         return None
     text = "\n".join(

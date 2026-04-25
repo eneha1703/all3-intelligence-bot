@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from all3_radar.domain.models import RankedDecision, StoredNormalizedItem, SummaryResult
-from all3_radar.summarization.fallback_summary import compress_to_two_sentences, generate_fallback_summary, remove_repeated_headline
+from all3_radar.summarization.fallback_summary import generate_fallback_summary, sanitize_summary_text
 from all3_radar.summarization.gemini_client import GeminiClient, GeminiUnavailableError
 
 LOGGER = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ def summarize_candidate(
                 preview=item.text_preview,
                 borderline=decision.is_borderline,
             )
-            summary_text = compress_to_two_sentences(remove_repeated_headline(summary_text, item.title))
+            summary_text = sanitize_summary_text(item.title, summary_text)
             if summary_text:
                 return SummaryResult(
                     summary_text=summary_text,

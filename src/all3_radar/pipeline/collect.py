@@ -36,11 +36,13 @@ def collect_from_source(
 
 
 def log_source_inventory(sources: tuple[SourceDefinition, ...], selected: tuple[SourceDefinition, ...]) -> None:
+    disabled_direct_sources = [source for source in sources if source.is_direct_source and not source.enabled]
     LOGGER.info(
-        "Loaded source inventory: total=%s enabled_direct=%s selected_for_run=%s",
+        "Loaded source inventory: total=%s enabled_direct=%s selected_for_run=%s disabled_direct=%s",
         len(sources),
         sum(1 for source in sources if source.enabled and source.is_direct_source),
         len(selected),
+        len(disabled_direct_sources),
     )
     for source in selected:
         LOGGER.info(
@@ -50,4 +52,10 @@ def log_source_inventory(sources: tuple[SourceDefinition, ...], selected: tuple[
             source.kind.value,
             source.url,
             source.priority,
+        )
+    for source in disabled_direct_sources:
+        LOGGER.info(
+            "Disabled direct source: id=%s reason=%s",
+            source.id,
+            source.extra_config.get("disabled_reason", "disabled_in_config"),
         )

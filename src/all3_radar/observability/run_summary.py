@@ -18,5 +18,6 @@ def format_radar_run_summary(result: RadarRunResult) -> str:
         f"canonical_events={result.canonical_events} "
         f"shortlisted={result.shortlisted_items} "
         f"sent={result.sent_items} "
-        f"send_skips={result.skipped_send_items}"
+        f"send_skips={result.skipped_send_items} "
+        f"failed_sources={result.failed_sources}"
     )

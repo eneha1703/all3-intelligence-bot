@@ -39,7 +39,7 @@ def main() -> int:
             f"normalized={result.normalized_items} fresh={result.fresh_items} "
             f"stale={result.stale_items} missing_published_ts={result.missing_published_ts} "
             f"canonical_events={result.canonical_events} shortlisted={result.shortlisted_items} "
-            f"sent={result.sent_items}"
+            f"sent={result.sent_items} failed_sources={result.failed_sources}"
         )
         return 0
 

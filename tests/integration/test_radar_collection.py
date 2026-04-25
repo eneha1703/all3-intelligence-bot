@@ -53,6 +53,7 @@ def test_radar_collection_persists_direct_source_items(monkeypatch, tmp_path, ca
     assert result.fresh_items == 1
     assert result.stale_items == 1
     assert result.missing_published_ts == 1
+    assert result.failed_sources == 0
 
     with sqlite3.connect(db_path) as connection:
         raw_count = connection.execute("SELECT COUNT(*) FROM raw_items").fetchone()[0]
@@ -180,6 +181,7 @@ def test_radar_collection_dedupes_and_sends_with_mocks(monkeypatch, tmp_path, ca
     assert result.canonical_events == 1
     assert result.shortlisted_items == 1
     assert result.sent_items == 1
+    assert result.failed_sources == 0
     assert len(fake_sender.sent_cards) == 1
     assert "<b>Kewazo raises funding for construction robot rollout</b>" in fake_sender.sent_cards[0].text
 
@@ -198,3 +200,61 @@ def test_radar_collection_dedupes_and_sends_with_mocks(monkeypatch, tmp_path, ca
     assert "Competitor matches" in caplog.text
     assert "Dedupe decision" in caplog.text
     assert "Telegram delivery" in caplog.text
+
+
+def test_radar_collection_continues_when_one_source_fails(monkeypatch, tmp_path, caplog) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "radar_partial.db"
+    feed_path = repo_root / "tests" / "fixtures" / "sample_direct_feed.xml"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+
+    now = datetime.now(timezone.utc)
+    good_feed = (
+        feed_path.read_text(encoding="utf-8")
+        .replace("__FRESH_DATE__", format_datetime(now - timedelta(hours=2)))
+        .replace("__STALE_DATE__", format_datetime(now - timedelta(days=14)))
+    )
+
+    registry = SourceRegistry(
+        (
+            SourceDefinition(
+                id="broken_feed",
+                name="Broken Feed",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://broken.example/feed.xml",
+                priority=80,
+                tags=("tech",),
+            ),
+            SourceDefinition(
+                id="good_feed",
+                name="Good Feed",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://good.example/feed.xml",
+                priority=90,
+                tags=("robotics", "construction"),
+            ),
+        )
+    )
+
+    def fake_fetch_text(url: str) -> str:
+        if "broken" in url:
+            raise ValueError("malformed_feed")
+        return good_feed
+
+    caplog.set_level("INFO")
+    service = RadarService(repo_root=repo_root, registry=registry, fetch_text_fn=fake_fetch_text)
+    result = service.run(dry_run=True)
+
+    assert result.failed_sources == 1
+    assert result.collected_items == 3
+    assert "Source collection failed: id=broken_feed reason=malformed_feed" in caplog.text

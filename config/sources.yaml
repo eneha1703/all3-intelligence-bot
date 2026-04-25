@@ -9,6 +9,7 @@ sources:
     parser: generic_rss
     url: https://techcrunch.com/feed/
     priority: 90
+    broad_feed: true
     tags: [tech, funding, robotics]
 
   - id: tech_funding_news_rss
@@ -21,6 +22,7 @@ sources:
     parser: generic_rss
     url: https://techfundingnews.com/feed/
     priority: 85
+    broad_feed: true
     tags: [funding, startups]
 
   - id: robot_report_rss
@@ -69,6 +71,7 @@ sources:
     parser: generic_rss
     url: https://tech.eu/feed/
     priority: 80
+    broad_feed: true
     tags: [tech, funding]
 
   - id: ai_insider_rss
@@ -81,6 +84,7 @@ sources:
     parser: generic_rss
     url: https://theaiinsider.tech/feed/
     priority: 65
+    broad_feed: true
     tags: [ai, automation]
 
   - id: construction_briefing_rss
@@ -89,10 +93,11 @@ sources:
     layer: direct
     is_direct_source: true
     is_wrapper: false
-    enabled: true
+    enabled: false
     parser: generic_rss
     url: https://constructionbriefing.com/rss
     priority: 85
+    disabled_reason: malformed_live_feed_xml
     tags: [construction, industry]
 
   - id: ieee_spectrum_robotics_rss
@@ -101,10 +106,11 @@ sources:
     layer: direct
     is_direct_source: true
     is_wrapper: false
-    enabled: true
+    enabled: false
     parser: generic_rss
     url: https://spectrum.ieee.org/feeds/topic/robotics/fulltext
     priority: 80
+    disabled_reason: feed_url_returns_404
     tags: [robotics, engineering]
 
   - id: ieee_spectrum_ai_rss
@@ -113,10 +119,11 @@ sources:
     layer: direct
     is_direct_source: true
     is_wrapper: false
-    enabled: true
+    enabled: false
     parser: generic_rss
     url: https://spectrum.ieee.org/feeds/topic/artificial-intelligence/fulltext
     priority: 70
+    disabled_reason: feed_url_returns_404
     tags: [ai, engineering]
 
   - id: haufe_feed
@@ -125,10 +132,12 @@ sources:
     layer: direct
     is_direct_source: true
     is_wrapper: false
-    enabled: true
+    enabled: false
     parser: generic_rss
     url: https://www.haufe.de/rss
     priority: 60
+    disabled_reason: feed_url_returns_404
+    broad_feed: true
     tags: [construction, germany]
 
   - id: telegraph_feed
@@ -141,6 +150,7 @@ sources:
     parser: generic_rss
     url: https://www.telegraph.co.uk/rss.xml
     priority: 55
+    broad_feed: true
     tags: [news, industry]
 
   - id: business_insider_feed
@@ -153,6 +163,7 @@ sources:
     parser: generic_rss
     url: https://www.businessinsider.com/rss
     priority: 55
+    broad_feed: true
     tags: [business, startups]
 
   - id: destatis_press_listing
@@ -161,10 +172,11 @@ sources:
     layer: direct
     is_direct_source: true
     is_wrapper: false
-    enabled: true
+    enabled: false
     parser: destatis_press
     url: https://www.destatis.de/EN/Press/_node.html
     priority: 75
+    disabled_reason: listing_adapter_not_implemented_yet
     tags: [policy, statistics]
 
   - id: ifo_press_listing
@@ -173,10 +185,11 @@ sources:
     layer: direct
     is_direct_source: true
     is_wrapper: false
-    enabled: true
+    enabled: false
     parser: ifo_press
     url: https://www.ifo.de/en/press-release
     priority: 70
+    disabled_reason: listing_adapter_not_implemented_yet
     tags: [economy, germany]
 
   - id: ifo_home_listing
@@ -185,10 +198,11 @@ sources:
     layer: direct
     is_direct_source: true
     is_wrapper: false
-    enabled: true
+    enabled: false
     parser: ifo_home
     url: https://www.ifo.de/en
     priority: 60
+    disabled_reason: listing_adapter_not_implemented_yet
     tags: [economy, germany]
 
   - id: wcn_robotics_listing
@@ -197,10 +211,11 @@ sources:
     layer: direct
     is_direct_source: true
     is_wrapper: false
-    enabled: true
+    enabled: false
     parser: world_construction_network
     url: https://www.worldconstructionnetwork.com/category/news/robotics/
     priority: 95
+    disabled_reason: listing_adapter_not_implemented_yet
     tags: [construction, robotics]
 
   - id: wood_central_api
@@ -209,10 +224,11 @@ sources:
     layer: direct
     is_direct_source: true
     is_wrapper: false
-    enabled: true
+    enabled: false
     parser: wood_central_api
     url: https://woodcentral.com.au/
     priority: 100
+    disabled_reason: api_adapter_not_implemented_yet
     tags: [timber, direct]
 
   - id: google_news_competitors

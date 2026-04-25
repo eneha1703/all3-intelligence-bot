@@ -38,6 +38,7 @@ def normalize_collected_item(source: SourceDefinition, item: CollectedRawItem) -
     if not canonical_url or not domain:
         return None
 
+    source_metadata = dict(source.extra_config)
     return NormalizedItem(
         source_id=source.id,
         canonical_url=canonical_url,
@@ -55,5 +56,6 @@ def normalize_collected_item(source: SourceDefinition, item: CollectedRawItem) -
             "external_id": item.external_id,
             "parser": source.parser,
             "tags": list(source.tags),
+            **source_metadata,
         },
     )
