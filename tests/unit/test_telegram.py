@@ -91,3 +91,51 @@ def test_build_news_card_skips_low_information_commentary_summary() -> None:
     )
 
     assert card is None
+
+
+def test_build_news_card_keeps_three_short_factual_sentences_when_useful() -> None:
+    card = build_news_card(
+        headline="Robotics firm opens new automation plant",
+        summary_text=(
+            "The company opened a new automation plant in Ohio. "
+            "The facility adds production capacity for robot components. "
+            "It will supply industrial customers across North America."
+        ),
+        url="https://example.com/plant-story",
+    )
+
+    assert card is not None
+    assert "opened a new automation plant in Ohio." in card.text
+    assert "adds production capacity for robot components." in card.text
+    assert "industrial customers across North America." in card.text
+
+
+def test_build_news_card_trims_overlong_clause_heaviness() -> None:
+    card = build_news_card(
+        headline="Neura Robotics partners with Dassault Systèmes",
+        summary_text=(
+            "Neura Robotics is partnering with Dassault Systèmes to connect robot training in virtual environments with real-world deployment. "
+            "The agreement links Neura's robotics platform with Dassault's 3DEXPERIENCE virtual twin platform, creating a closed-loop system where robots learn in simulation, operate in physical environments, and continuously improve across both."
+        ),
+        url="https://example.com/neura-story",
+    )
+
+    assert card is not None
+    assert "creating a closed-loop system" not in card.text
+    assert "3DEXPERIENCE virtual twin platform." in card.text
+
+
+def test_build_news_card_removes_trailing_according_fragment() -> None:
+    card = build_news_card(
+        headline="Schaeffler and Hexagon Robotics partner for humanoid robots",
+        summary_text=(
+            "Schaeffler is deepening its push into humanoid robotics through a new partnership with Hexagon Robotics. "
+            "The agreement covers the development and supply of high-precision rotary actuators used in joints such as shoulders and elbows in humanoid robots, according to the companies."
+        ),
+        url="https://example.com/schaeffler-story",
+    )
+
+    assert card is not None
+    assert "according." not in card.text
+    assert "according to the companies" not in card.text
+    assert "used in joints such as shoulders and elbows in humanoid robots." in card.text
