@@ -3,14 +3,17 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
+
+from all3_radar.pipeline.radar_service import run_radar
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run the All3 News Radar Bot")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    run_parser = subparsers.add_parser("run", help="Run the full radar pipeline")
-    run_parser.add_argument("--dry-run", action="store_true", help="Collect and score without sending Telegram messages")
+    run_parser = subparsers.add_parser("run", help="Run the direct-source collection pipeline")
+    run_parser.add_argument("--dry-run", action="store_true", help="Collect and persist without any downstream sending")
     run_parser.add_argument("--source", help="Run a single source id for debugging")
 
     inspect_parser = subparsers.add_parser("inspect-run", help="Inspect a previous radar run")
@@ -27,13 +30,15 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
+    repo_root = Path(__file__).resolve().parents[3]
 
     if args.command == "run":
-        print("Radar pipeline skeleton: collection, filtering, ranking, summaries, and Telegram delivery.")
-        if args.dry_run:
-            print("Dry run enabled: Telegram sending is disabled.")
-        if args.source:
-            print(f"Source override: {args.source}")
+        result = run_radar(repo_root=repo_root, source_id=args.source, dry_run=args.dry_run)
+        print(
+            f"Radar run complete: run_id={result.run_id} collected={result.collected_items} "
+            f"normalized={result.normalized_items} fresh={result.fresh_items} "
+            f"stale={result.stale_items} missing_published_ts={result.missing_published_ts}"
+        )
         return 0
 
     if args.command == "inspect-run":

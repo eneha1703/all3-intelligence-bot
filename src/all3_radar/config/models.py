@@ -1,1 +1,45 @@
-"""Typed configuration models can live here as the project grows."""
+"""Typed configuration models for the All3 radar project."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+
+
+@dataclass(frozen=True)
+class AppConfig:
+    timezone: str
+    database_path: Path
+    log_level: str
+
+
+@dataclass(frozen=True)
+class RadarConfig:
+    lookback_hours: int
+    require_published_ts: bool
+    allow_collected_at_fallback: bool
+    max_cards_per_run: int
+    shortlist_size_before_gemini: int
+    google_competitor_check_enabled: bool
+    google_competitor_send_enabled: bool
+
+
+@dataclass(frozen=True)
+class DigestConfig:
+    stories_per_digest: int
+    shortlist_size_before_claude: int
+    require_canonical_events: bool
+
+
+@dataclass(frozen=True)
+class TelegramConfig:
+    parse_mode: str
+    disable_web_page_preview: bool
+
+
+@dataclass(frozen=True)
+class Settings:
+    app: AppConfig
+    radar: RadarConfig
+    digest: DigestConfig
+    telegram: TelegramConfig

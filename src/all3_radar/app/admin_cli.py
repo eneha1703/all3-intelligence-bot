@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from all3_radar.config.loader import load_yaml
+from all3_radar.config.loader import load_settings, load_yaml
 from all3_radar.sources.registry import load_source_registry
 from all3_radar.storage.db import initialize_database
 
@@ -36,18 +36,19 @@ def main() -> int:
     repo_root = Path(__file__).resolve().parents[3]
 
     if args.group == "db" and args.command == "init":
-        initialize_database(repo_root / "data" / "all3_radar.db", repo_root / "src" / "all3_radar" / "storage" / "schema.sql")
-        print("Database initialized.")
+        settings = load_settings(repo_root)
+        initialize_database(settings.app.database_path, repo_root / "src" / "all3_radar" / "storage" / "schema.sql")
+        print(f"Database initialized at {settings.app.database_path}.")
         return 0
 
     if args.group == "sources" and args.command == "list":
-        for source in load_source_registry(repo_root / "config" / "sources.yaml"):
-            print(f"{source['id']}: {source['name']} [{source['kind']}, {source['layer']}]")
+        for source in load_source_registry(repo_root / "config" / "sources.yaml").all():
+            print(f"{source.id}: {source.name} [{source.kind.value}, {source.layer.value}]")
         return 0
 
     if args.group == "sources" and args.command == "show":
-        for source in load_source_registry(repo_root / "config" / "sources.yaml"):
-            if source["id"] == args.source_id:
+        for source in load_source_registry(repo_root / "config" / "sources.yaml").all():
+            if source.id == args.source_id:
                 print(source)
                 return 0
         parser.error(f"Unknown source id: {args.source_id}")

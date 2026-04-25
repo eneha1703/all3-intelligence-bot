@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Sample Direct Feed</title>
+    <item>
+      <title>Recent robotics deployment wins major contract</title>
+      <link>https://example.com/recent-story?utm_source=test</link>
+      <description>Robotics deployment expands into industrial construction workflows.</description>
+      <pubDate>__FRESH_DATE__</pubDate>
+      <guid>recent-1</guid>
+    </item>
+    <item>
+      <title>Older automation pilot from last month</title>
+      <link>https://example.com/older-story</link>
+      <description>Older pilot story that should fail the freshness gate.</description>
+      <pubDate>__STALE_DATE__</pubDate>
+      <guid>older-1</guid>
+    </item>
+    <item>
+      <title>Story without published timestamp</title>
+      <link>https://example.com/missing-date</link>
+      <description>Useful item, but it should not pass freshness without published date.</description>
+      <guid>missing-1</guid>
+    </item>
+  </channel>
+</rss>

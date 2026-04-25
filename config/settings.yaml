@@ -9,7 +9,7 @@ radar:
   allow_collected_at_fallback: false
   max_cards_per_run: 20
   shortlist_size_before_gemini: 25
-  google_competitor_check_enabled: true
+  google_competitor_check_enabled: false
   google_competitor_send_enabled: false
 
 digest:
