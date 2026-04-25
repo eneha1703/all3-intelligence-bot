@@ -131,3 +131,39 @@ def test_focused_robot_programming_story_survives_scope_gate() -> None:
 
     assert status == "keep"
     assert reason is None
+
+
+def test_military_robotics_story_is_dropped_by_default() -> None:
+    item = _make_item(
+        "Ukrainian startup upgrades battlefield robots like smartphones",
+        "The company says its battlefield robots can receive regular defense software and combat hardware upgrades.",
+        broad_feed=False,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "drop"
+    assert reason == "obvious_off_scope"
+
+
+def test_general_business_profile_story_is_dropped() -> None:
+    item = _make_item(
+        "Goldman banker wants to trade his $4.8 million California estate for shares in Anthropic",
+        "The banker is offering his luxury estate in exchange for private-company shares in Anthropic.",
+        broad_feed=True,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "drop"
+    assert reason == "obvious_off_scope"

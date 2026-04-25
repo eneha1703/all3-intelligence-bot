@@ -18,6 +18,51 @@ CONSUMER_ROBOT_TERMS = {
     "toy robot",
     "consumer robot",
 }
+MILITARY_ROBOTICS_TERMS = {
+    "military robot",
+    "military robotics",
+    "battlefield robot",
+    "battlefield robots",
+    "battlefield robotics",
+    "combat robot",
+    "combat robots",
+    "combat robotics",
+    "combat drone",
+    "combat drones",
+    "defense robot",
+    "defence robot",
+    "defense robotics",
+    "defence robotics",
+    "war robot",
+    "warfare robot",
+    "battlefield",
+    "combat",
+    "defense",
+    "defence",
+    "frontline",
+    "weapon system",
+    "weapons system",
+    "armed forces",
+    "military drone",
+    "strike drone",
+    "lethal",
+    "munitions",
+    "missile",
+}
+GENERAL_BUSINESS_PROFILE_TERMS = {
+    "banker",
+    "billionaire",
+    "estate",
+    "mansion",
+    "luxury home",
+    "luxury estate",
+    "personal fortune",
+    "net worth",
+    "executive profile",
+    "wealth",
+    "private residence",
+    "villa",
+}
 INDUSTRIAL_CONTEXT_TERMS = {
     "construction",
     "industrial",
@@ -210,7 +255,14 @@ def has_any_term(text: str, terms: set[str]) -> bool:
 
 def is_obvious_off_scope(item: StoredNormalizedItem) -> bool:
     haystack = _normalize_text(f"{item.title} {item.text_preview or ''}")
+    if has_any_term(haystack, MILITARY_ROBOTICS_TERMS):
+        return True
     if has_any_term(haystack, CONSUMER_ROBOT_TERMS) and not has_any_term(haystack, INDUSTRIAL_CONTEXT_TERMS):
+        return True
+    if has_any_term(haystack, GENERAL_BUSINESS_PROFILE_TERMS) and not has_any_term(
+        haystack,
+        INDUSTRIAL_CONTEXT_TERMS | BUILT_ENVIRONMENT_TERMS,
+    ):
         return True
     return False
 
@@ -259,6 +311,21 @@ def has_topic_relevance(item: StoredNormalizedItem, competitor_count: int, event
     return competitor_count > 0 or has_any_term(haystack, TOPIC_TERMS) or any(event_flags.values())
 
 
+def is_general_business_profile_noise(item: StoredNormalizedItem, event_flags: dict[str, bool]) -> bool:
+    haystack = _normalize_text(f"{item.title} {item.text_preview or ''}")
+    if not has_any_term(haystack, GENERAL_BUSINESS_PROFILE_TERMS):
+        return False
+    return not any(
+        (
+            event_flags.get("industrial_robotics_signal", False),
+            event_flags.get("construction_innovation_signal", False),
+            event_flags.get("timber_strategic_signal", False),
+            event_flags.get("permitting_or_code_signal", False),
+            event_flags.get("factory_opening_or_expansion", False),
+        )
+    )
+
+
 def compute_relevance_status(
     item: StoredNormalizedItem,
     competitor_count: int,
@@ -269,6 +336,8 @@ def compute_relevance_status(
         return "drop", "freshness_failed"
     if is_obvious_off_scope(item):
         return "drop", "obvious_off_scope"
+    if is_general_business_profile_noise(item, event_flags):
+        return "drop", "general_business_profile_noise"
     if not has_clear_all3_scope(item, competitor_count, event_flags):
         return "drop", "no_clear_all3_scope"
     if is_broad_feed_source(item):

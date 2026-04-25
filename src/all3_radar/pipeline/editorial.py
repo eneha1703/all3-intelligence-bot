@@ -28,6 +28,33 @@ INTERVIEW_FORMAT_TERMS = (
     "interview",
     "q&a",
 )
+MILITARY_EXCLUDE_TERMS = (
+    "military",
+    "battlefield",
+    "combat",
+    "defense",
+    "defence",
+    "frontline",
+    "weapon",
+    "weapons",
+    "missile",
+    "munitions",
+    "armed forces",
+    "strike drone",
+)
+BUSINESS_PROFILE_EXCLUDE_TERMS = (
+    "banker",
+    "billionaire",
+    "estate",
+    "mansion",
+    "luxury home",
+    "luxury estate",
+    "personal fortune",
+    "net worth",
+    "executive profile",
+    "private residence",
+    "villa",
+)
 PRODUCT_LAUNCH_TERMS = (
     "launches",
     "launch",
@@ -105,6 +132,8 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
     haystack = _normalize_text(f"{item.title} {item.text_preview or ''}")
     event_flags = decision.signals.get("event_flags", {})
     competitor_count = int(decision.signals.get("competitor_count", 0) or 0)
+    military_excluded = _contains_any(haystack, MILITARY_EXCLUDE_TERMS)
+    business_profile_excluded = _contains_any(haystack, BUSINESS_PROFILE_EXCLUDE_TERMS)
 
     thought_leadership_format = _contains_any(haystack, THOUGHT_LEADERSHIP_TERMS) or _contains_any(
         haystack, INTERVIEW_FORMAT_TERMS
@@ -145,6 +174,8 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
     )
 
     flags = {
+        "military_excluded": military_excluded,
+        "business_profile_excluded": business_profile_excluded,
         "thought_leadership_format": thought_leadership_format,
         "product_launch": product_launch,
         "operational_detail": operational_detail,
@@ -156,6 +187,18 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         "telegram_worthy": telegram_worthy,
     }
 
+    if military_excluded:
+        return EditorialDecision(
+            allow_send=False,
+            reason="editorial_military_or_combat_out_of_scope",
+            flags=flags,
+        )
+    if business_profile_excluded and competitor_count == 0:
+        return EditorialDecision(
+            allow_send=False,
+            reason="editorial_business_profile_out_of_scope",
+            flags=flags,
+        )
     if thought_leadership_format and not hard_news_event:
         return EditorialDecision(
             allow_send=False,

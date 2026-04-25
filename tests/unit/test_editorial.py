@@ -73,3 +73,29 @@ def test_editorial_shaping_rejects_adjacent_logistics_without_all3_signal() -> N
 
     assert editorial.allow_send is False
     assert editorial.reason == "editorial_adjacent_logistics_without_all3_signal"
+
+
+def test_editorial_shaping_rejects_military_robotics() -> None:
+    item = _make_item(
+        "Defense startup deploys battlefield robots for frontline missions",
+        "The military robotics platform will support combat operations and defense logistics on the battlefield.",
+    )
+    decision = _make_decision(deployment_event=True, industrial_robotics_signal=True)
+
+    editorial = evaluate_send_stage_editorial(item, decision)
+
+    assert editorial.allow_send is False
+    assert editorial.reason == "editorial_military_or_combat_out_of_scope"
+
+
+def test_editorial_shaping_rejects_business_profile_noise() -> None:
+    item = _make_item(
+        "Billionaire banker lists luxury estate while seeking private AI shares",
+        "The banker is marketing a luxury estate as part of a personal wealth trade tied to private-company shares.",
+    )
+    decision = _make_decision()
+
+    editorial = evaluate_send_stage_editorial(item, decision)
+
+    assert editorial.allow_send is False
+    assert editorial.reason == "editorial_business_profile_out_of_scope"

@@ -27,9 +27,11 @@ class GeminiClient:
             raise GeminiUnavailableError("GEMINI_API_KEY is not configured.")
 
         prompt = (
-            "Write a short factual 1-2 sentence news summary. "
-            "Do not repeat the headline. Do not add hype, analysis, or why-it-matters framing. "
-            "Keep it concrete and professional."
+            "Write a short factual news summary for a Telegram card. "
+            "Use 2 short sentences when the source preview supports it; use 1 sentence only if that is still concrete and sufficient. "
+            "Sentence 1 should say what happened. Sentence 2, when present, should add a concrete operational detail such as partner, deployment, facility, capacity, funding amount, product capability, customer, or location. "
+            "Do not repeat the headline. Do not add hype, analysis, why-it-matters framing, vague filler, interview language, or commentary phrasing like 'discusses', 'explores', or 'future of'. "
+            "Keep it factual, specific, and professional."
         )
         if borderline:
             prompt += (

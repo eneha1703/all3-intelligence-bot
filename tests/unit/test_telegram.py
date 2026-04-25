@@ -78,3 +78,16 @@ def test_build_news_card_strips_insider_brief_prefix() -> None:
     assert card is not None
     assert "Insider Brief" not in card.text
     assert "industrial automation footprint" in card.text
+
+
+def test_build_news_card_skips_low_information_commentary_summary() -> None:
+    card = build_news_card(
+        headline="Physical AI panel highlights the future of robotics",
+        summary_text=(
+            "The panel discusses the future of robotics and shares insights on human-robot interactions. "
+            "It explores where the market may go next."
+        ),
+        url="https://example.com/commentary-story",
+    )
+
+    assert card is None
