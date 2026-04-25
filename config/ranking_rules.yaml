@@ -10,6 +10,8 @@ signals:
   permitting_or_code_signal: 18
   quantified_scale_signal: 15
   timber_strategic_signal: 15
+  industrial_robotics_signal: 8
+  construction_innovation_signal: 6
   consumer_robotics_penalty: -50
   showcase_only_architecture_penalty: -20
 

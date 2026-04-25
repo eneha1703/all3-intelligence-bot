@@ -35,6 +35,7 @@ INDUSTRIAL_CONTEXT_TERMS = {
 }
 TOPIC_TERMS = {
     "robot",
+    "robots",
     "robotics",
     "humanoid",
     "automation",
@@ -109,6 +110,18 @@ HIGH_INTENT_BROAD_FEED_TERMS = {
     "housing delivery",
     "modular housing",
     "factory-built housing",
+    "physical ai",
+    "virtual twin",
+    "virtual twins",
+    "robot cell",
+    "robot cells",
+    "scara",
+    "3d vision",
+    "machine vision",
+    "production facility",
+    "production facilities",
+    "factory floor",
+    "factories",
 }
 WAREHOUSE_LOGISTICS_TERMS = {
     "warehouse",
@@ -119,6 +132,7 @@ WAREHOUSE_LOGISTICS_TERMS = {
 }
 ROBOTICS_TERMS = {
     "robot",
+    "robots",
     "robotics",
     "humanoid",
     "autonomy",
@@ -132,10 +146,27 @@ STRATEGIC_WORK_ENV_TERMS = {
     "industrial",
     "manufacturing",
     "factory",
+    "factories",
     "jobsite",
     "worksite",
     "production",
     "assembly",
+}
+INDUSTRIAL_ROBOTICS_CONTEXT_TERMS = {
+    "physical ai",
+    "virtual twin",
+    "virtual twins",
+    "robot cell",
+    "robot cells",
+    "scara",
+    "3d vision",
+    "machine vision",
+    "robot programming",
+    "programming platform",
+    "production facility",
+    "production facilities",
+    "factory floor",
+    "factories",
 }
 BUILT_ENVIRONMENT_TERMS = {
     "jobsite",
@@ -203,6 +234,8 @@ def has_clear_all3_scope(item: StoredNormalizedItem, competitor_count: int, even
         return True
     if has_any_term(haystack, ROBOTICS_TERMS) and has_any_term(haystack, STRATEGIC_WORK_ENV_TERMS):
         return True
+    if has_any_term(haystack, ROBOTICS_TERMS) and has_any_term(haystack, INDUSTRIAL_ROBOTICS_CONTEXT_TERMS):
+        return True
     if has_any_term(haystack, AUTOMATION_TERMS) and has_any_term(haystack, {"industrial", "manufacturing", "factory"}):
         return True
     if has_any_term(haystack, WAREHOUSE_LOGISTICS_TERMS):
@@ -261,6 +294,14 @@ def compute_relevance_status(
                         has_any_term(haystack, AUTOMATION_TERMS)
                         and has_any_term(haystack, {"industrial", "manufacturing", "factory"})
                     )
+                )
+            )
+            or (
+                event_flags.get("partnership_event")
+                and high_intent_scope
+                and (
+                    has_any_term(haystack, ROBOTICS_TERMS)
+                    or has_any_term(haystack, AUTOMATION_TERMS)
                 )
             )
             or (

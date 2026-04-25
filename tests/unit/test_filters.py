@@ -95,3 +95,39 @@ def test_broad_feed_story_with_generic_automation_language_is_dropped() -> None:
 
     assert status == "drop"
     assert reason == "no_clear_all3_scope"
+
+
+def test_broad_feed_physical_ai_story_with_real_world_robotics_scope_survives() -> None:
+    item = _make_item(
+        "Neura Robotics and Dassault Systèmes partner to scale physical AI",
+        "The companies connect robot training in virtual twins with real-world deployment across physical robot environments.",
+        broad_feed=True,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "keep"
+    assert reason is None
+
+
+def test_focused_robot_programming_story_survives_scope_gate() -> None:
+    item = _make_item(
+        "Ency updates hybrid robot programming platform with multi-brand and 3D vision capabilities",
+        "The update adds support for mixed-brand robot cells and integrated 3D vision with physical robots.",
+        broad_feed=False,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "keep"
+    assert reason is None
