@@ -8,6 +8,7 @@ MAX_SUMMARY_SENTENCES = 3
 MAX_SENTENCE_WORDS = 28
 SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 WHITESPACE_RE = re.compile(r"\s+")
+TOKEN_RE = re.compile(r"[a-z0-9]+")
 ELLIPSIS_RE = re.compile(r"\s*(\.\.\.|\u2026|\[\s*\u2026\s*\]|\[\s*\.\.\.\s*\])\s*")
 LEADING_PREFIX_PATTERNS = [
     re.compile(r"^\s*insider brief\s*[:.\-]?\s*", re.IGNORECASE),
@@ -134,6 +135,32 @@ CAPTION_MARKERS = (
     "ap photo",
     "zillow",
 )
+SIMILARITY_STOPWORDS = {
+    "the",
+    "and",
+    "for",
+    "with",
+    "from",
+    "into",
+    "this",
+    "that",
+    "its",
+    "their",
+    "his",
+    "her",
+    "our",
+    "your",
+    "has",
+    "have",
+    "had",
+    "are",
+    "is",
+    "was",
+    "were",
+    "will",
+    "new",
+    "said",
+}
 
 
 def _clean_text(value: str | None) -> str | None:
@@ -141,6 +168,77 @@ def _clean_text(value: str | None) -> str | None:
         return None
     normalized = WHITESPACE_RE.sub(" ", value).strip()
     return normalized or None
+
+
+def _sentence_count(text: str | None) -> int:
+    if not text:
+        return 0
+    return len([sentence for sentence in SENTENCE_SPLIT_RE.split(text) if sentence.strip()])
+
+
+def _tokenize_for_similarity(text: str) -> set[str]:
+    return {
+        token
+        for token in TOKEN_RE.findall(text.lower())
+        if len(token) > 2 and token not in SIMILARITY_STOPWORDS
+    }
+
+
+def _is_similar_sentence(left: str, right: str) -> bool:
+    left_tokens = _tokenize_for_similarity(left)
+    right_tokens = _tokenize_for_similarity(right)
+    if not left_tokens or not right_tokens:
+        return False
+    overlap = left_tokens & right_tokens
+    return (len(overlap) / len(left_tokens) >= 0.75) or (len(overlap) / len(right_tokens) >= 0.75)
+
+
+def _subject_auxiliaries(subject: str) -> tuple[str, str, str]:
+    plural = " and " in subject.lower()
+    return (
+        "have" if plural else "has",
+        "are" if plural else "is",
+        "their" if plural else "its",
+    )
+
+
+def _compose_title_sentence(headline: str) -> str | None:
+    cleaned = _clean_text(headline)
+    if not cleaned:
+        return None
+
+    patterns = (
+        (re.compile(r"^(?P<subject>.+?) launches (?P<object>.+)$", re.IGNORECASE), "launches"),
+        (re.compile(r"^(?P<subject>.+?) breaks ground on (?P<object>.+)$", re.IGNORECASE), "breaks_ground"),
+        (re.compile(r"^(?P<subject>.+?) partner[s]? with (?P<object>.+)$", re.IGNORECASE), "partners_with"),
+        (re.compile(r"^(?P<subject>.+?) partner[s]? for (?P<object>.+)$", re.IGNORECASE), "partners_for"),
+        (re.compile(r"^(?P<subject>.+?) expand[s]? partnership to (?P<object>.+)$", re.IGNORECASE), "expands_partnership"),
+        (re.compile(r"^(?P<subject>.+?) raise[s]? (?P<object>.+)$", re.IGNORECASE), "raises"),
+        (re.compile(r"^(?P<subject>.+?) open[s]? (?P<object>.+)$", re.IGNORECASE), "opens"),
+    )
+
+    for pattern, kind in patterns:
+        match = pattern.match(cleaned)
+        if not match:
+            continue
+        subject = match.group("subject").strip()
+        obj = match.group("object").strip().rstrip(".")
+        have, be, possessive = _subject_auxiliaries(subject)
+        if kind == "launches":
+            return f"{subject} {have} launched {obj}."
+        if kind == "breaks_ground":
+            return f"{subject} {have} broken ground on {obj}."
+        if kind == "partners_with":
+            return f"{subject} {have} partnered with {obj}."
+        if kind == "partners_for":
+            return f"{subject} {have} partnered for {obj}."
+        if kind == "expands_partnership":
+            return f"{subject} {be} expanding {possessive} partnership to {obj}."
+        if kind == "raises":
+            return f"{subject} {have} raised {obj}."
+        if kind == "opens":
+            return f"{subject} {have} opened {obj}."
+    return None
 
 
 def _strip_boilerplate(text: str) -> str:
@@ -264,11 +362,25 @@ def sanitize_summary_text(headline: str, summary: str | None) -> str | None:
     if cleaned[-1] not in ".!?":
         return None
     if had_ellipsis:
-        sentence_count = len([sentence for sentence in SENTENCE_SPLIT_RE.split(cleaned) if sentence.strip()])
-        if sentence_count < 2:
+        if _sentence_count(cleaned) < 2:
             return None
     return cleaned
 
 
 def generate_fallback_summary(headline: str, preview: str | None) -> str | None:
-    return sanitize_summary_text(headline, preview)
+    preview_summary = sanitize_summary_text(headline, preview)
+    if preview_summary and _sentence_count(preview_summary) >= 2:
+        return preview_summary
+
+    title_sentence = _compose_title_sentence(headline)
+    if title_sentence and preview_summary:
+        preview_sentences = [sentence.strip() for sentence in SENTENCE_SPLIT_RE.split(preview_summary) if sentence.strip()]
+        if preview_sentences and not _is_similar_sentence(title_sentence, preview_sentences[0]):
+            composed = " ".join([title_sentence, *preview_sentences[:2]])
+            return sanitize_summary_text(headline, composed)
+
+    if preview_summary:
+        return preview_summary
+    if title_sentence:
+        return sanitize_summary_text(headline, title_sentence)
+    return None
