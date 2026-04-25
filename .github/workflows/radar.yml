@@ -1,0 +1,29 @@
+name: News Radar
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "15 */3 * * *"
+
+jobs:
+  radar:
+    runs-on: ubuntu-latest
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      TELEGRAM_ALERT_BOT_TOKEN: ${{ secrets.TELEGRAM_ALERT_BOT_TOKEN }}
+      TELEGRAM_ALERT_CHAT_IDS: ${{ vars.TELEGRAM_ALERT_CHAT_IDS }}
+      DATABASE_PATH: data/all3_radar.db
+      ALLOW_COLLECTED_AT_FALLBACK: "false"
+      GOOGLE_COMPETITOR_CHECK_ENABLED: "true"
+      GOOGLE_COMPETITOR_SEND_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -e .[dev]
+      - name: Initialize database
+        run: python -m all3_radar.app.admin_cli db init
+      - name: Run radar
+        run: python -m all3_radar.app.radar_cli run

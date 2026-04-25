@@ -1,0 +1,67 @@
+companies:
+  - canonical: Kewazo
+    aliases: [kewazo]
+  - canonical: Gropyus
+    aliases: [gropyus]
+  - canonical: Nokera
+    aliases: [nokera]
+  - canonical: "011h"
+    aliases: ["011h"]
+  - canonical: AUAR
+    aliases: [auar]
+  - canonical: Monumental
+    aliases: [monumental]
+  - canonical: Autovol
+    aliases: [autovol]
+  - canonical: Reframe Systems
+    aliases: [reframe, "reframe systems"]
+  - canonical: Assembly OSM
+    aliases: ["assembly osm", assemblyosm]
+  - canonical: Harbinger Homes
+    aliases: ["harbinger homes", harbinger]
+  - canonical: Factory_OS
+    aliases: ["factory_os", "factory os"]
+  - canonical: Intelligent City
+    aliases: ["intelligent city"]
+  - canonical: Modscape
+    aliases: [modscape]
+  - canonical: CREE Buildings
+    aliases: ["cree buildings"]
+  - canonical: Lindbacks
+    aliases: ["lindbäcks", lindbacks]
+  - canonical: RISE Modular
+    aliases: ["rise modular"]
+  - canonical: Module Housing
+    aliases: ["module housing"]
+  - canonical: Bouygues Construction
+    aliases: ["bouygues construction"]
+  - canonical: BAM Wood Concepts
+    aliases: ["bam wood concepts"]
+  - canonical: RCM Group
+    aliases: ["rcm group"]
+  - canonical: MODUS
+    aliases: [modus]
+  - canonical: Vestack
+    aliases: [vestack]
+  - canonical: Plant Prefab
+    aliases: ["plant prefab"]
+  - canonical: Ossabois
+    aliases: [ossabois]
+  - canonical: Marles
+    aliases: [marles]
+  - canonical: LIWOOD AG
+    aliases: ["liwood ag", liwood]
+  - canonical: IDCUBED
+    aliases: [idcubed]
+  - canonical: finch buildings
+    aliases: ["finch buildings"]
+  - canonical: ERNE AG Holzbau
+    aliases: ["erne ag holzbau", erne]
+  - canonical: De Groot Vroomshoop
+    aliases: ["de groot vroomshoop"]
+  - canonical: Adapteo
+    aliases: [adapteo]
+  - canonical: Wood Rocks
+    aliases: ["wood rocks"]
+  - canonical: Derome Group
+    aliases: ["derome group", derome]

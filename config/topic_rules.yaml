@@ -1,0 +1,69 @@
+priority_topics:
+  - construction robotics
+  - jobsite automation
+  - industrial robotics
+  - industrial automation
+  - humanoid robotics in real working environments
+  - heavy equipment autonomy
+  - prefab
+  - modular
+  - off-site construction
+  - industrialized construction
+  - contech
+  - digital construction
+  - construction manufacturing
+  - factory-built systems
+  - mass timber
+  - building materials with scaling relevance
+  - policy and permitting for built environment adoption
+  - housing delivery innovation
+  - supply-chain shifts affecting industrialized construction
+  - quantified adoption and floor-area growth
+
+priority_event_types:
+  - funding
+  - partnership
+  - acquisition
+  - commercial deployment
+  - pilot deployment
+  - contract win
+  - factory opening
+  - factory expansion
+  - production scaling
+  - permitting reform
+  - code approval change
+  - quantified demand signal
+
+exclude_topics:
+  - consumer robots
+  - home assistant robots
+  - domestic helper robots
+  - entertainment robots
+
+humanoid_policy:
+  allow_if_any:
+    - industrial deployment
+    - construction deployment
+    - logistics deployment
+    - warehouse deployment
+    - manufacturing deployment
+    - funding
+    - pilot
+    - launch for work environments
+
+timber_policy:
+  strategic_signals:
+    - major scale
+    - first-of-kind
+    - record significance
+    - delivery innovation
+    - assembly innovation
+    - factory scaling
+    - production scaling
+    - demand growth
+    - floor-area growth
+    - cost relevance
+    - margin relevance
+    - policy relevance
+    - permitting relevance
+    - competitive significance

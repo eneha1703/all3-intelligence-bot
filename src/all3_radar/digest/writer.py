@@ -1,0 +1,1 @@
+"""Editorial digest writer placeholder."""

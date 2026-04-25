@@ -1,0 +1,31 @@
+name: Weekly Digest
+
+on:
+  workflow_dispatch:
+    inputs:
+      week_key:
+        description: ISO week key, for example 2026-W17
+        required: false
+        type: string
+
+jobs:
+  digest:
+    runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      TELEGRAM_DIGEST_BOT_TOKEN: ${{ secrets.TELEGRAM_DIGEST_BOT_TOKEN }}
+      TELEGRAM_DIGEST_CHAT_IDS: ${{ vars.TELEGRAM_DIGEST_CHAT_IDS }}
+      DATABASE_PATH: data/all3_radar.db
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -e .[dev]
+      - name: Initialize database
+        run: python -m all3_radar.app.admin_cli db init
+      - name: Build digest
+        run: python -m all3_radar.app.digest_cli build --week "${{ github.event.inputs.week_key || 'latest' }}"
+      - name: Send digest
+        run: python -m all3_radar.app.digest_cli send --week "${{ github.event.inputs.week_key || 'latest' }}"

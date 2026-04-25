@@ -1,0 +1,1 @@
+"""Destatis press parser placeholder."""

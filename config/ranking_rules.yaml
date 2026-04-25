@@ -1,0 +1,19 @@
+signals:
+  competitor_mention: 35
+  direct_source: 25
+  google_competitor_wrapper: -30
+  funding_event: 18
+  partnership_event: 16
+  acquisition_event: 20
+  deployment_event: 20
+  factory_opening_or_expansion: 18
+  permitting_or_code_signal: 18
+  quantified_scale_signal: 15
+  timber_strategic_signal: 15
+  consumer_robotics_penalty: -50
+  showcase_only_architecture_penalty: -20
+
+thresholds:
+  store_min_score: 0
+  shortlist_min_score: 20
+  send_min_score: 28

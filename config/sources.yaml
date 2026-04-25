@@ -1,0 +1,231 @@
+sources:
+  - id: techcrunch_rss
+    name: TechCrunch
+    kind: rss
+    layer: direct
+    is_direct_source: true
+    is_wrapper: false
+    enabled: true
+    parser: generic_rss
+    url: https://techcrunch.com/feed/
+    priority: 90
+    tags: [tech, funding, robotics]
+
+  - id: tech_funding_news_rss
+    name: Tech Funding News
+    kind: rss
+    layer: direct
+    is_direct_source: true
+    is_wrapper: false
+    enabled: true
+    parser: generic_rss
+    url: https://techfundingnews.com/feed/
+    priority: 85
+    tags: [funding, startups]
+
+  - id: robot_report_rss
+    name: The Robot Report
+    kind: rss
+    layer: direct
+    is_direct_source: true
+    is_wrapper: false
+    enabled: true
+    parser: generic_rss
+    url: https://www.therobotreport.com/feed/
+    priority: 95
+    tags: [robotics, industrial]
+
+  - id: construction_dive_rss
+    name: Construction Dive
+    kind: rss
+    layer: direct
+    is_direct_source: true
+    is_wrapper: false
+    enabled: true
+    parser: generic_rss
+    url: https://www.constructiondive.com/feeds/news/
+    priority: 90
+    tags: [construction, policy]
+
+  - id: robotics_automation_news_rss
+    name: Robotics and Automation News
+    kind: rss
+    layer: direct
+    is_direct_source: true
+    is_wrapper: false
+    enabled: true
+    parser: generic_rss
+    url: https://roboticsandautomationnews.com/feed/
+    priority: 85
+    tags: [robotics, automation]
+
+  - id: tech_eu_rss
+    name: Tech.eu
+    kind: rss
+    layer: direct
+    is_direct_source: true
+    is_wrapper: false
+    enabled: true
+    parser: generic_rss
+    url: https://tech.eu/feed/
+    priority: 80
+    tags: [tech, funding]
+
+  - id: ai_insider_rss
+    name: The AI Insider
+    kind: rss
+    layer: direct
+    is_direct_source: true
+    is_wrapper: false
+    enabled: true
+    parser: generic_rss
+    url: https://theaiinsider.tech/feed/
+    priority: 65
+    tags: [ai, automation]
+
+  - id: construction_briefing_rss
+    name: Construction Briefing
+    kind: rss
+    layer: direct
+    is_direct_source: true
+    is_wrapper: false
+    enabled: true
+    parser: generic_rss
+    url: https://constructionbriefing.com/rss
+    priority: 85
+    tags: [construction, industry]
+
+  - id: ieee_spectrum_robotics_rss
+    name: IEEE Spectrum Robotics
+    kind: rss
+    layer: direct
+    is_direct_source: true
+    is_wrapper: false
+    enabled: true
+    parser: generic_rss
+    url: https://spectrum.ieee.org/feeds/topic/robotics/fulltext
+    priority: 80
+    tags: [robotics, engineering]
+
+  - id: ieee_spectrum_ai_rss
+    name: IEEE Spectrum AI
+    kind: rss
+    layer: direct
+    is_direct_source: true
+    is_wrapper: false
+    enabled: true
+    parser: generic_rss
+    url: https://spectrum.ieee.org/feeds/topic/artificial-intelligence/fulltext
+    priority: 70
+    tags: [ai, engineering]
+
+  - id: haufe_feed
+    name: Haufe
+    kind: rss
+    layer: direct
+    is_direct_source: true
+    is_wrapper: false
+    enabled: true
+    parser: generic_rss
+    url: https://www.haufe.de/rss
+    priority: 60
+    tags: [construction, germany]
+
+  - id: telegraph_feed
+    name: Telegraph
+    kind: rss
+    layer: direct
+    is_direct_source: true
+    is_wrapper: false
+    enabled: true
+    parser: generic_rss
+    url: https://www.telegraph.co.uk/rss.xml
+    priority: 55
+    tags: [news, industry]
+
+  - id: business_insider_feed
+    name: Business Insider
+    kind: rss
+    layer: direct
+    is_direct_source: true
+    is_wrapper: false
+    enabled: true
+    parser: generic_rss
+    url: https://www.businessinsider.com/rss
+    priority: 55
+    tags: [business, startups]
+
+  - id: destatis_press_listing
+    name: Destatis Press
+    kind: listing
+    layer: direct
+    is_direct_source: true
+    is_wrapper: false
+    enabled: true
+    parser: destatis_press
+    url: https://www.destatis.de/EN/Press/_node.html
+    priority: 75
+    tags: [policy, statistics]
+
+  - id: ifo_press_listing
+    name: ifo Press
+    kind: listing
+    layer: direct
+    is_direct_source: true
+    is_wrapper: false
+    enabled: true
+    parser: ifo_press
+    url: https://www.ifo.de/en/press-release
+    priority: 70
+    tags: [economy, germany]
+
+  - id: ifo_home_listing
+    name: ifo Home
+    kind: listing
+    layer: direct
+    is_direct_source: true
+    is_wrapper: false
+    enabled: true
+    parser: ifo_home
+    url: https://www.ifo.de/en
+    priority: 60
+    tags: [economy, germany]
+
+  - id: wcn_robotics_listing
+    name: World Construction Network Robotics
+    kind: listing
+    layer: direct
+    is_direct_source: true
+    is_wrapper: false
+    enabled: true
+    parser: world_construction_network
+    url: https://www.worldconstructionnetwork.com/category/news/robotics/
+    priority: 95
+    tags: [construction, robotics]
+
+  - id: wood_central_api
+    name: Wood Central
+    kind: api
+    layer: direct
+    is_direct_source: true
+    is_wrapper: false
+    enabled: true
+    parser: wood_central_api
+    url: https://woodcentral.com.au/
+    priority: 100
+    tags: [timber, direct]
+
+  - id: google_news_competitors
+    name: Google News Competitor Check
+    kind: google_competitor
+    layer: google_competitor
+    is_direct_source: false
+    is_wrapper: true
+    enabled: true
+    parser: google_competitor
+    url: https://news.google.com/
+    priority: 20
+    send_to_telegram: false
+    query_mode: competitor_only
+    competitors_from_file: true
+    tags: [competitors, wrapper]

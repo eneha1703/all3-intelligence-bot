@@ -1,0 +1,22 @@
+app:
+  timezone: Europe/Belgrade
+  database_path: data/all3_radar.db
+  log_level: INFO
+
+radar:
+  lookback_hours: 30
+  require_published_ts: true
+  allow_collected_at_fallback: false
+  max_cards_per_run: 20
+  shortlist_size_before_gemini: 25
+  google_competitor_check_enabled: true
+  google_competitor_send_enabled: false
+
+digest:
+  stories_per_digest: 5
+  shortlist_size_before_claude: 20
+  require_canonical_events: true
+
+telegram:
+  parse_mode: HTML
+  disable_web_page_preview: false

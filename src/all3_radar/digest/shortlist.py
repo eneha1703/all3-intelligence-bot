@@ -1,0 +1,1 @@
+"""Deterministic shortlist logic placeholder."""
