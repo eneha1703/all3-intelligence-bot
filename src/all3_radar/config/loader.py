@@ -8,7 +8,7 @@ from typing import Any, Mapping
 
 import yaml
 
-from all3_radar.config.models import AppConfig, DigestConfig, RadarConfig, Settings, TelegramConfig
+from all3_radar.config.models import AppConfig, DigestConfig, IntegrationsConfig, RadarConfig, Settings, TelegramConfig
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -46,6 +46,12 @@ def _parse_int(value: Any, field_name: str) -> int:
 
 def _apply_env_override(section: Mapping[str, Any], field_name: str, env: Mapping[str, str], env_name: str) -> Any:
     return env.get(env_name, section[field_name])
+
+
+def _parse_chat_ids(value: str | None) -> tuple[str, ...]:
+    if not value:
+        return ()
+    return tuple(part.strip() for part in value.split(",") if part.strip())
 
 
 def load_settings(repo_root: Path, env: Mapping[str, str] | None = None) -> Settings:
@@ -97,5 +103,11 @@ def load_settings(repo_root: Path, env: Mapping[str, str] | None = None) -> Sett
         telegram=TelegramConfig(
             parse_mode=str(telegram["parse_mode"]),
             disable_web_page_preview=_parse_bool(telegram["disable_web_page_preview"]),
+        ),
+        integrations=IntegrationsConfig(
+            gemini_api_key=env.get("GEMINI_API_KEY") or None,
+            gemini_model=env.get("GEMINI_MODEL", "gemini-2.0-flash-lite"),
+            telegram_alert_bot_token=env.get("TELEGRAM_ALERT_BOT_TOKEN") or None,
+            telegram_alert_chat_ids=_parse_chat_ids(env.get("TELEGRAM_ALERT_CHAT_IDS")),
         ),
     )

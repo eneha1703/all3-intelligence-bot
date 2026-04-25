@@ -9,7 +9,16 @@ from pathlib import Path
 from typing import Any
 
 from all3_radar.domain.enums import PipelineName, PipelineStatus
-from all3_radar.domain.models import CollectedRawItem, FreshnessEvaluation, NormalizedItem, SourceDefinition
+from all3_radar.domain.enums import SourceLayer
+from all3_radar.domain.models import (
+    ClusterAssignment,
+    CollectedRawItem,
+    CompetitorMatch,
+    FreshnessEvaluation,
+    NormalizedItem,
+    SourceDefinition,
+    StoredNormalizedItem,
+)
 from all3_radar.storage.db import connect
 
 
@@ -167,11 +176,15 @@ class RadarRepository:
     def upsert_radar_decision(
         self,
         normalized_item_id: str,
+        canonical_event_id: str | None,
         freshness: FreshnessEvaluation,
         relevance_status: str,
         send_status: str,
         skip_reason: str | None,
+        score: int = 0,
         signals: dict[str, Any] | None = None,
+        summary_text: str | None = None,
+        used_gemini: bool = False,
     ) -> None:
         with connect(self.database_path) as connection:
             connection.execute(
@@ -180,25 +193,180 @@ class RadarRepository:
                   normalized_item_id, canonical_event_id, freshness_status, relevance_status, send_status,
                   skip_reason, score, signals_json, summary_text, used_gemini, created_at
                 )
-                VALUES (?, NULL, ?, ?, ?, ?, 0, ?, NULL, 0, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(normalized_item_id) DO UPDATE SET
+                  canonical_event_id=excluded.canonical_event_id,
                   freshness_status=excluded.freshness_status,
                   relevance_status=excluded.relevance_status,
                   send_status=excluded.send_status,
                   skip_reason=excluded.skip_reason,
-                  signals_json=excluded.signals_json
+                  score=excluded.score,
+                  signals_json=excluded.signals_json,
+                  summary_text=excluded.summary_text,
+                  used_gemini=excluded.used_gemini
                 """,
                 (
                     normalized_item_id,
+                    canonical_event_id,
                     freshness.status.value,
                     relevance_status,
                     send_status,
                     skip_reason,
+                    score,
                     json.dumps(signals or {"freshness_reason": freshness.reason}, sort_keys=True),
+                    summary_text,
+                    int(used_gemini),
                     _utc_now_iso(),
                 ),
             )
             connection.commit()
+
+    def insert_competitor_matches(self, normalized_item_id: str, matches: list[CompetitorMatch]) -> None:
+        if not matches:
+            return
+        with connect(self.database_path) as connection:
+            connection.executemany(
+                """
+                INSERT OR IGNORE INTO competitor_matches (normalized_item_id, competitor_name, alias_matched, match_field)
+                VALUES (?, ?, ?, ?)
+                """,
+                [
+                    (normalized_item_id, match.competitor_name, match.alias_matched, match.match_field)
+                    for match in matches
+                ],
+            )
+            connection.commit()
+
+    def load_recent_items_for_dedupe(self, limit_hours: int = 240) -> list[StoredNormalizedItem]:
+        with connect(self.database_path) as connection:
+            rows = connection.execute(
+                """
+                SELECT ni.id, ni.raw_item_id, ni.source_id, ni.canonical_url, ni.domain, ni.title, ni.text_preview,
+                       ni.published_ts, ni.collected_ts, ni.layer, ni.is_wrapper, ni.directness_rank, ni.metadata_json
+                FROM normalized_items ni
+                WHERE julianday(ni.collected_ts) >= julianday('now', ?)
+                """,
+                (f"-{limit_hours} hours",),
+            ).fetchall()
+        return [self._row_to_stored_item(row) for row in rows]
+
+    def upsert_canonical_event(self, assignment: ClusterAssignment, members: list[str], published_values: list[datetime | None]) -> None:
+        first_published = min((value for value in published_values if value is not None), default=None)
+        last_published = max((value for value in published_values if value is not None), default=None)
+        with connect(self.database_path) as connection:
+            connection.execute(
+                """
+                INSERT INTO canonical_events (
+                  id, representative_item_id, event_key, cluster_title, first_published_ts, last_published_ts, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                  representative_item_id=excluded.representative_item_id,
+                  event_key=excluded.event_key,
+                  cluster_title=excluded.cluster_title,
+                  first_published_ts=excluded.first_published_ts,
+                  last_published_ts=excluded.last_published_ts,
+                  updated_at=excluded.updated_at
+                """,
+                (
+                    assignment.canonical_event_id,
+                    assignment.representative_item_id,
+                    assignment.event_key,
+                    assignment.cluster_title,
+                    _dt_to_iso(first_published),
+                    _dt_to_iso(last_published),
+                    _utc_now_iso(),
+                    _utc_now_iso(),
+                ),
+            )
+            connection.executemany(
+                """
+                INSERT OR REPLACE INTO event_members (canonical_event_id, normalized_item_id, is_representative)
+                VALUES (?, ?, ?)
+                """,
+                [
+                    (
+                        assignment.canonical_event_id,
+                        member_id,
+                        int(member_id == assignment.representative_item_id),
+                    )
+                    for member_id in members
+                ],
+            )
+            connection.commit()
+
+    def has_sent_alert_for_event(self, canonical_event_id: str) -> bool:
+        with connect(self.database_path) as connection:
+            row = connection.execute(
+                """
+                SELECT 1
+                FROM telegram_deliveries
+                WHERE canonical_event_id = ? AND bot_kind = 'alert' AND status = 'sent'
+                LIMIT 1
+                """,
+                (canonical_event_id,),
+            ).fetchone()
+        return bool(row)
+
+    def record_telegram_delivery(
+        self,
+        run_id: str,
+        normalized_item_id: str,
+        canonical_event_id: str,
+        chat_id: str,
+        status: str,
+        payload_text: str,
+        telegram_message_id: str | None,
+        error_text: str | None,
+    ) -> None:
+        with connect(self.database_path) as connection:
+            connection.execute(
+                """
+                INSERT INTO telegram_deliveries (
+                  id, bot_kind, run_id, normalized_item_id, canonical_event_id, chat_id, telegram_message_id,
+                  status, payload_text, error_text, created_at
+                )
+                VALUES (?, 'alert', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    uuid.uuid4().hex,
+                    run_id,
+                    normalized_item_id,
+                    canonical_event_id,
+                    chat_id,
+                    telegram_message_id,
+                    status,
+                    payload_text,
+                    error_text,
+                    _utc_now_iso(),
+                ),
+            )
+            connection.commit()
+
+    def load_competitor_match_count(self, normalized_item_id: str) -> int:
+        with connect(self.database_path) as connection:
+            row = connection.execute(
+                "SELECT COUNT(DISTINCT competitor_name) FROM competitor_matches WHERE normalized_item_id = ?",
+                (normalized_item_id,),
+            ).fetchone()
+        return int(row[0]) if row else 0
+
+    def _row_to_stored_item(self, row: Any) -> StoredNormalizedItem:
+        return StoredNormalizedItem(
+            normalized_item_id=row["id"],
+            raw_item_id=row["raw_item_id"],
+            source_id=row["source_id"],
+            canonical_url=row["canonical_url"],
+            domain=row["domain"],
+            title=row["title"],
+            text_preview=row["text_preview"],
+            published_ts=datetime.fromisoformat(row["published_ts"]) if row["published_ts"] else None,
+            collected_ts=datetime.fromisoformat(row["collected_ts"]),
+            layer=SourceLayer(row["layer"]),
+            is_wrapper=bool(row["is_wrapper"]),
+            directness_rank=int(row["directness_rank"]),
+            metadata=json.loads(row["metadata_json"] or "{}"),
+        )
 
     def fetch_counts_for_run(self, run_id: str) -> dict[str, int]:
         with connect(self.database_path) as connection:

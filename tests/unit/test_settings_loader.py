@@ -12,6 +12,7 @@ def test_load_settings_applies_env_overrides() -> None:
             "LOG_LEVEL": "debug",
             "ALLOW_COLLECTED_AT_FALLBACK": "true",
             "GOOGLE_COMPETITOR_CHECK_ENABLED": "false",
+            "TELEGRAM_ALERT_CHAT_IDS": "1,2, 3",
         },
     )
 
@@ -19,3 +20,4 @@ def test_load_settings_applies_env_overrides() -> None:
     assert settings.app.log_level == "DEBUG"
     assert settings.radar.allow_collected_at_fallback is True
     assert settings.radar.google_competitor_check_enabled is False
+    assert settings.integrations.telegram_alert_chat_ids == ("1", "2", "3")

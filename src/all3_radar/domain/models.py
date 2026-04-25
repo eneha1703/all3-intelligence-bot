@@ -47,6 +47,13 @@ class CollectedRawItem:
 
 
 @dataclass(frozen=True)
+class CompetitorMatch:
+    competitor_name: str
+    alias_matched: str
+    match_field: str
+
+
+@dataclass(frozen=True)
 class NormalizedItem:
     source_id: str
     canonical_url: str
@@ -71,6 +78,60 @@ class FreshnessEvaluation:
 
 
 @dataclass(frozen=True)
+class StoredNormalizedItem:
+    normalized_item_id: str
+    raw_item_id: str
+    source_id: str
+    canonical_url: str
+    domain: str
+    title: str
+    text_preview: str | None
+    published_ts: datetime | None
+    collected_ts: datetime
+    layer: SourceLayer
+    is_wrapper: bool
+    directness_rank: int
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class ClusterAssignment:
+    canonical_event_id: str
+    event_key: str
+    cluster_title: str
+    is_cluster_representative: bool
+    is_current_run_representative: bool
+    duplicate_reason: str | None
+    representative_item_id: str
+
+
+@dataclass(frozen=True)
+class RankedDecision:
+    relevance_status: str
+    send_status: str
+    skip_reason: str | None
+    score: int
+    signals: dict[str, Any]
+    is_shortlisted: bool
+    is_borderline: bool
+
+
+@dataclass(frozen=True)
+class SummaryResult:
+    summary_text: str | None
+    used_gemini: bool
+    gemini_decision_override: str | None = None
+
+
+@dataclass(frozen=True)
+class TelegramCard:
+    text: str
+    headline: str
+    summary_text: str
+    url: str
+
+
+@dataclass(frozen=True)
 class RadarRunResult:
     run_id: str
     selected_sources: int
@@ -80,3 +141,7 @@ class RadarRunResult:
     stale_items: int
     missing_published_ts: int
     unsupported_sources: int
+    canonical_events: int
+    shortlisted_items: int
+    sent_items: int
+    skipped_send_items: int

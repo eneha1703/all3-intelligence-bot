@@ -37,7 +37,9 @@ def main() -> int:
         print(
             f"Radar run complete: run_id={result.run_id} collected={result.collected_items} "
             f"normalized={result.normalized_items} fresh={result.fresh_items} "
-            f"stale={result.stale_items} missing_published_ts={result.missing_published_ts}"
+            f"stale={result.stale_items} missing_published_ts={result.missing_published_ts} "
+            f"canonical_events={result.canonical_events} shortlisted={result.shortlisted_items} "
+            f"sent={result.sent_items}"
         )
         return 0
 

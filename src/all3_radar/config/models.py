@@ -38,8 +38,17 @@ class TelegramConfig:
 
 
 @dataclass(frozen=True)
+class IntegrationsConfig:
+    gemini_api_key: str | None
+    gemini_model: str
+    telegram_alert_bot_token: str | None
+    telegram_alert_chat_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class Settings:
     app: AppConfig
     radar: RadarConfig
     digest: DigestConfig
     telegram: TelegramConfig
+    integrations: IntegrationsConfig
