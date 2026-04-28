@@ -30,7 +30,14 @@ class SourceDefinition:
 
     @property
     def supports_first_slice(self) -> bool:
-        return self.enabled and self.is_direct_source and self.kind == SourceKind.RSS
+        return self.enabled and self.is_direct_source and (
+            self.kind == SourceKind.RSS
+            or (
+                self.kind == SourceKind.LISTING
+                and self.parser in {"destatis_press", "humanoid_robotics_technology"}
+            )
+            or (self.kind == SourceKind.API and self.parser == "wood_central_api")
+        )
 
 
 @dataclass(frozen=True)

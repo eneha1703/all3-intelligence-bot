@@ -202,12 +202,13 @@ def _subject_auxiliaries(subject: str) -> tuple[str, str, str]:
     )
 
 
-def _compose_title_sentence(headline: str) -> str | None:
+def _match_title_pattern(headline: str) -> tuple[str, str, str] | None:
     cleaned = _clean_text(headline)
     if not cleaned:
         return None
 
     patterns = (
+        (re.compile(r"^(?P<subject>.+?) announces (?P<object>.+)$", re.IGNORECASE), "announces"),
         (re.compile(r"^(?P<subject>.+?) launches (?P<object>.+)$", re.IGNORECASE), "launches"),
         (re.compile(r"^(?P<subject>.+?) breaks ground on (?P<object>.+)$", re.IGNORECASE), "breaks_ground"),
         (re.compile(r"^(?P<subject>.+?) partner[s]? with (?P<object>.+)$", re.IGNORECASE), "partners_with"),
@@ -221,24 +222,45 @@ def _compose_title_sentence(headline: str) -> str | None:
         match = pattern.match(cleaned)
         if not match:
             continue
-        subject = match.group("subject").strip()
-        obj = match.group("object").strip().rstrip(".")
-        have, be, possessive = _subject_auxiliaries(subject)
-        if kind == "launches":
-            return f"{subject} {have} launched {obj}."
-        if kind == "breaks_ground":
-            return f"{subject} {have} broken ground on {obj}."
-        if kind == "partners_with":
-            return f"{subject} {have} partnered with {obj}."
-        if kind == "partners_for":
-            return f"{subject} {have} partnered for {obj}."
-        if kind == "expands_partnership":
-            return f"{subject} {be} expanding {possessive} partnership to {obj}."
-        if kind == "raises":
-            return f"{subject} {have} raised {obj}."
-        if kind == "opens":
-            return f"{subject} {have} opened {obj}."
+        return match.group("subject").strip(), match.group("object").strip().rstrip("."), kind
     return None
+
+
+def _compose_title_sentence(headline: str) -> str | None:
+    matched = _match_title_pattern(headline)
+    if not matched:
+        return None
+
+    subject, obj, kind = matched
+    have, be, possessive = _subject_auxiliaries(subject)
+    if kind == "announces":
+        return f"{subject} {have} announced {obj}."
+    if kind == "launches":
+        return f"{subject} {have} launched {obj}."
+    if kind == "breaks_ground":
+        return f"{subject} {have} broken ground on {obj}."
+    if kind == "partners_with":
+        return f"{subject} {have} partnered with {obj}."
+    if kind == "partners_for":
+        return f"{subject} {have} partnered for {obj}."
+    if kind == "expands_partnership":
+        return f"{subject} {be} expanding {possessive} partnership to {obj}."
+    if kind == "raises":
+        return f"{subject} {have} raised {obj}."
+    if kind == "opens":
+        return f"{subject} {have} opened {obj}."
+    return None
+
+
+def _single_sentence_preview_duplicates_announce_headline(headline: str, preview_sentence: str) -> bool:
+    matched = _match_title_pattern(headline)
+    if not matched:
+        return False
+    subject, _, kind = matched
+    if kind != "announces":
+        return False
+    lowered_preview = preview_sentence.lower().strip()
+    return lowered_preview.startswith(subject.lower())
 
 
 def _strip_boilerplate(text: str) -> str:
@@ -375,6 +397,11 @@ def generate_fallback_summary(headline: str, preview: str | None) -> str | None:
     title_sentence = _compose_title_sentence(headline)
     if title_sentence and preview_summary:
         preview_sentences = [sentence.strip() for sentence in SENTENCE_SPLIT_RE.split(preview_summary) if sentence.strip()]
+        if (
+            len(preview_sentences) == 1
+            and _single_sentence_preview_duplicates_announce_headline(headline, preview_sentences[0])
+        ):
+            return sanitize_summary_text(headline, title_sentence)
         if preview_sentences and not _is_similar_sentence(title_sentence, preview_sentences[0]):
             composed = " ".join([title_sentence, *preview_sentences[:2]])
             return sanitize_summary_text(headline, composed)

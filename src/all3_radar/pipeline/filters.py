@@ -232,6 +232,82 @@ BUILT_ENVIRONMENT_TERMS = {
     "building code",
     "code approval",
 }
+DESTATIS_CONSTRUCTION_STATISTICS_TERMS = {
+    "bauhauptgewerbe",
+    "baugenehmigungen",
+    "auftragseingang",
+    "construction orders",
+    "building permits",
+    "housing approvals",
+    "wohnungen",
+}
+STATISTICAL_SIGNAL_TERMS = {
+    "%",
+    "increase",
+    "decrease",
+    "higher",
+    "lower",
+    "month",
+    "year",
+    "vomormonat",
+    "vorjahresmonat",
+    "gestiegen",
+    "gesunken",
+}
+WOOD_CENTRAL_TIMBER_POLICY_TERMS = {
+    "cap",
+    "code",
+    "approval",
+    "approvals",
+    "approval pathway",
+    "permitting",
+    "insurance",
+    "insurers",
+    "standard",
+    "standards",
+    "regulation",
+    "regulatory",
+    "policy",
+    "height",
+    "fire",
+}
+WOOD_CENTRAL_TIMBER_ECONOMICS_TERMS = {
+    "premium",
+    "premiums",
+    "cost",
+    "costs",
+    "price",
+    "prices",
+    "pricing",
+    "economics",
+    "economically",
+}
+WOOD_CENTRAL_TIMBER_QUANTIFIED_TERMS = {
+    "%",
+    "times higher",
+    "times lower",
+    "six to ten times",
+    "higher than",
+    "lower than",
+}
+WOOD_CENTRAL_TIMBER_COMMERCIAL_BARRIER_TERMS = {
+    "commercial viability",
+    "viability",
+    "adoption barrier",
+    "adoption barriers",
+    "competitive",
+    "competitiveness",
+    "affordability",
+    "commercial",
+    "scaling",
+    "scale-up",
+    "cost comparison",
+    "times higher",
+    "times lower",
+    "six to ten times",
+    "higher than",
+    "lower than",
+}
 WHITESPACE_RE = re.compile(r"\s+")
 
 
@@ -276,9 +352,48 @@ def is_broad_feed_source(item: StoredNormalizedItem) -> bool:
     return bool(item.metadata.get("broad_feed"))
 
 
+def is_destatis_construction_statistics_signal(item: StoredNormalizedItem) -> bool:
+    if item.source_id != "destatis_press_listing":
+        return False
+    haystack = _normalize_text(f"{item.title} {item.text_preview or ''}")
+    return has_any_term(haystack, DESTATIS_CONSTRUCTION_STATISTICS_TERMS) and has_any_term(
+        haystack, STATISTICAL_SIGNAL_TERMS
+    )
+
+
+def is_wood_central_timber_policy_signal(item: StoredNormalizedItem) -> bool:
+    if item.source_id != "wood_central_api":
+        return False
+    haystack = _normalize_text(f"{item.title} {item.text_preview or ''}")
+    return has_any_term(haystack, TIMBER_TERMS := {"timber", "mass timber", "clt", "glulam"}) and has_any_term(
+        haystack, WOOD_CENTRAL_TIMBER_POLICY_TERMS
+    )
+
+
+def is_wood_central_timber_economics_signal(item: StoredNormalizedItem) -> bool:
+    if item.source_id != "wood_central_api":
+        return False
+    haystack = _normalize_text(f"{item.title} {item.text_preview or ''}")
+    timber_terms = {"timber", "mass timber", "clt", "glulam"}
+    return (
+        has_any_term(haystack, timber_terms)
+        and has_any_term(haystack, WOOD_CENTRAL_TIMBER_ECONOMICS_TERMS)
+        and has_any_term(haystack, WOOD_CENTRAL_TIMBER_QUANTIFIED_TERMS)
+        and has_any_term(haystack, WOOD_CENTRAL_TIMBER_COMMERCIAL_BARRIER_TERMS)
+    )
+
+
 def has_clear_all3_scope(item: StoredNormalizedItem, competitor_count: int, event_flags: dict[str, bool]) -> bool:
     haystack = _normalize_text(f"{item.title} {item.text_preview or ''}")
     if competitor_count > 0:
+        return True
+    if event_flags.get("strategic_ai_major_deal_signal"):
+        return True
+    if event_flags.get("construction_statistics_signal"):
+        return True
+    if event_flags.get("timber_policy_signal"):
+        return True
+    if event_flags.get("timber_economics_signal"):
         return True
     if has_any_term(haystack, BROAD_FEED_SCOPE_TERMS):
         return True
@@ -345,6 +460,7 @@ def compute_relevance_status(
         high_intent_scope = has_any_term(haystack, HIGH_INTENT_BROAD_FEED_TERMS)
         strong_broad_signal = (
             competitor_count > 0
+            or event_flags.get("strategic_ai_major_deal_signal")
             or (event_flags.get("permitting_or_code_signal") and high_intent_scope)
             or event_flags.get("timber_strategic_signal")
             or (

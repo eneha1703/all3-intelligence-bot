@@ -7,11 +7,28 @@ from pathlib import Path
 
 from all3_radar.config.loader import load_yaml
 from all3_radar.domain.models import RankedDecision, StoredNormalizedItem
-from all3_radar.pipeline.filters import compute_relevance_status
+from all3_radar.pipeline.filters import (
+    compute_relevance_status,
+    is_destatis_construction_statistics_signal,
+    is_wood_central_timber_economics_signal,
+    is_wood_central_timber_policy_signal,
+)
 
-FUNDING_TERMS = ("funding", "raises", "raised", "series a", "series b", "seed round", "investment", "pre-seed", "ipo")
+FUNDING_TERMS = (
+    "raises",
+    "raised",
+    "series a",
+    "series b",
+    "series c",
+    "series d",
+    "seed round",
+    "pre-seed",
+    "funding round",
+    "investment",
+    "financing",
+)
 PARTNERSHIP_TERMS = ("partnership", "partners with", "partnered with", "partnering", "collaboration")
-ACQUISITION_TERMS = ("acquires", "acquisition", "acquired")
+ACQUISITION_TERMS = ("acquires", "acquisition", "acquired", "merger", "merge", "merged")
 DEPLOYMENT_TERMS = ("deployment", "deployed", "pilot", "rollout", "contract", "framework agreement")
 FACTORY_TERMS = (
     "factory opening",
@@ -56,6 +73,12 @@ INDUSTRIAL_ROBOTICS_TERMS = (
     "factory floor",
     "factories",
 )
+NON_FUNDING_RAISED_PHRASES = (
+    "raised concerns",
+    "raised fresh concerns",
+    "raised questions",
+    "raised alarms",
+)
 QUANTIFIED_SCALE_RE = re.compile(
     r"\b("
     r"\d+(\.\d+)?x|"
@@ -65,6 +88,44 @@ QUANTIFIED_SCALE_RE = re.compile(
 )
 WAREHOUSE_LOGISTICS_TERMS = ("warehouse", "logistics", "intralogistics", "material handling")
 STRATEGIC_CONTEXT_TERMS = ("construction", "industrial", "manufacturing", "factory", "factories", "jobsite", "worksite", "assembly", "production")
+AI_CORE_TERMS = (
+    "ai",
+    "artificial intelligence",
+    "foundation model",
+    "vision-language-action",
+    "vla model",
+    "physical ai",
+    "physics ai",
+)
+STRATEGIC_AI_PHYSICAL_TERMS = (
+    "engineering",
+    "engineering software",
+    "manufacturing",
+    "manufacturing workflow",
+    "manufacturing workflows",
+    "factory",
+    "factories",
+    "factory floor",
+    "industrial automation",
+    "robotics",
+    "robot",
+    "robots",
+    "physical ai",
+    "physics ai",
+    "virtual twin",
+    "virtual twins",
+    "digital twin",
+    "digital twins",
+    "simulation",
+    "industrial software",
+    "robot programming",
+)
+MAJOR_DEAL_TERMS = (
+    "valuation",
+    "valued at",
+    "strategic deal",
+    "strategic merger",
+)
 
 
 def load_ranking_rules(path: Path) -> dict:
@@ -92,10 +153,26 @@ def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
         or (_contains_any(haystack, ("robot", "robots", "robotics", "humanoid")) and _contains_any(haystack, STRATEGIC_CONTEXT_TERMS))
     )
     construction_innovation_signal = quantified_scale and _contains_any(haystack, CONSTRUCTION_INNOVATION_TERMS)
+    construction_statistics_signal = is_destatis_construction_statistics_signal(item)
+    timber_policy_signal = is_wood_central_timber_policy_signal(item)
+    timber_economics_signal = is_wood_central_timber_economics_signal(item)
+    funding_event = _contains_any(haystack, FUNDING_TERMS) and not _contains_any(haystack, NON_FUNDING_RAISED_PHRASES)
+    acquisition_event = _contains_any(haystack, ACQUISITION_TERMS)
+    partnership_event = _contains_any(haystack, PARTNERSHIP_TERMS)
+    strategic_ai_major_deal_signal = (
+        bool(item.metadata.get("broad_feed"))
+        and _contains_any(haystack, AI_CORE_TERMS)
+        and _contains_any(haystack, STRATEGIC_AI_PHYSICAL_TERMS)
+        and (
+            (funding_event and (quantified_scale or _contains_any(haystack, MAJOR_DEAL_TERMS)))
+            or (acquisition_event and (quantified_scale or _contains_any(haystack, MAJOR_DEAL_TERMS)))
+            or (partnership_event and quantified_scale and _contains_any(haystack, ("strategic",)))
+        )
+    )
     return {
-        "funding_event": _contains_any(haystack, FUNDING_TERMS),
-        "partnership_event": _contains_any(haystack, PARTNERSHIP_TERMS),
-        "acquisition_event": _contains_any(haystack, ACQUISITION_TERMS),
+        "funding_event": funding_event,
+        "partnership_event": partnership_event,
+        "acquisition_event": acquisition_event,
         "deployment_event": _contains_any(haystack, DEPLOYMENT_TERMS),
         "factory_opening_or_expansion": _contains_any(haystack, FACTORY_TERMS),
         "permitting_or_code_signal": _contains_any(haystack, POLICY_TERMS),
@@ -103,6 +180,10 @@ def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
         "timber_strategic_signal": timber_strategic,
         "industrial_robotics_signal": industrial_robotics_signal,
         "construction_innovation_signal": construction_innovation_signal,
+        "construction_statistics_signal": construction_statistics_signal,
+        "timber_policy_signal": timber_policy_signal,
+        "timber_economics_signal": timber_economics_signal,
+        "strategic_ai_major_deal_signal": strategic_ai_major_deal_signal,
         "showcase_only_architecture_penalty": timber_present
         and _contains_any(haystack, SHOWCASE_TIMBER_TERMS)
         and not timber_strategic,
@@ -128,6 +209,12 @@ def rank_item(
     if item.layer.value == "direct":
         score += signals["direct_source"]
         applied_signals["direct_source"] = signals["direct_source"]
+    if item.source_id == "destatis_press_listing":
+        score += signals["official_statistics_source"]
+        applied_signals["official_statistics_source"] = signals["official_statistics_source"]
+    if item.source_id == "wood_central_api":
+        score += signals["direct_wood_central_source"]
+        applied_signals["direct_wood_central_source"] = signals["direct_wood_central_source"]
     if item.is_wrapper and item.layer.value == "google_competitor":
         score += signals["google_competitor_wrapper"]
         applied_signals["google_competitor_wrapper"] = signals["google_competitor_wrapper"]

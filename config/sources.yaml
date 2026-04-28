@@ -172,11 +172,10 @@ sources:
     layer: direct
     is_direct_source: true
     is_wrapper: false
-    enabled: false
+    enabled: true
     parser: destatis_press
     url: https://www.destatis.de/EN/Press/_node.html
     priority: 75
-    disabled_reason: listing_adapter_not_implemented_yet
     tags: [policy, statistics]
 
   - id: ifo_press_listing
@@ -224,12 +223,25 @@ sources:
     layer: direct
     is_direct_source: true
     is_wrapper: false
-    enabled: false
+    enabled: true
     parser: wood_central_api
     url: https://woodcentral.com.au/
     priority: 100
-    disabled_reason: api_adapter_not_implemented_yet
+    api_path: /wp-json/wp/v2/posts?per_page=20
     tags: [timber, direct]
+
+  - id: humanoid_robotics_technology_listing
+    name: Humanoid Robotics Technology
+    kind: listing
+    layer: direct
+    is_direct_source: true
+    is_wrapper: false
+    enabled: true
+    parser: humanoid_robotics_technology
+    url: https://humanoidroboticstechnology.com/industry-news/
+    priority: 88
+    article_limit: 20
+    tags: [robotics, humanoid, industrial]
 
   - id: google_news_competitors
     name: Google News Competitor Check

@@ -18,8 +18,8 @@ LOGGER = logging.getLogger(__name__)
 def build_adapters(fetch_text_fn: FetchText | None = None) -> dict[SourceKind, SourceAdapter]:
     return {
         SourceKind.RSS: RssSourceAdapter(fetch_text_fn=fetch_text_fn),
-        SourceKind.LISTING: ListingSourceAdapter(),
-        SourceKind.API: WoodCentralApiAdapter(),
+        SourceKind.LISTING: ListingSourceAdapter(fetch_text_fn=fetch_text_fn),
+        SourceKind.API: WoodCentralApiAdapter(fetch_text_fn=fetch_text_fn),
     }
 
 

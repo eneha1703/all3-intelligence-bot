@@ -1,6 +1,8 @@
 signals:
   competitor_mention: 35
   direct_source: 25
+  official_statistics_source: 8
+  direct_wood_central_source: 8
   google_competitor_wrapper: -30
   funding_event: 18
   partnership_event: 16
@@ -12,6 +14,9 @@ signals:
   timber_strategic_signal: 15
   industrial_robotics_signal: 8
   construction_innovation_signal: 6
+  construction_statistics_signal: 18
+  timber_policy_signal: 18
+  timber_economics_signal: 18
   consumer_robotics_penalty: -50
   showcase_only_architecture_penalty: -20
 

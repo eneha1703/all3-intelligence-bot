@@ -104,6 +104,117 @@ CONSTRUCTION_EXECUTION_TERMS = (
     "building",
     "component",
 )
+STRATEGIC_AI_REAL_WORLD_TERMS = (
+    "physical ai",
+    "physics ai",
+    "robotics",
+    "robot",
+    "robots",
+    "virtual twin",
+    "virtual twins",
+    "digital twin",
+    "digital twins",
+    "manufacturing workflow",
+    "manufacturing workflows",
+    "production workflow",
+    "production workflows",
+    "engineering workflow",
+    "engineering workflows",
+    "physical industries",
+    "factory floor",
+)
+DESTATIS_CONSTRUCTION_MARKET_TERMS = (
+    "bauhauptgewerbe",
+    "auftragseingang",
+    "baugenehmigungen",
+    "construction orders",
+    "building permits",
+    "housing approvals",
+    "construction output",
+    "orders",
+    "permits",
+    "approvals",
+    "output",
+)
+WOOD_CENTRAL_HARD_CONSTRAINT_TERMS = (
+    "cap",
+    "height cap",
+    "height limit",
+    "approval",
+    "approvals",
+    "approval pathway",
+    "permitting",
+    "permit",
+    "insurance",
+    "insurers",
+    "fire",
+    "restriction",
+    "restrictions",
+    "barrier",
+    "barriers",
+)
+WOOD_CENTRAL_POLICY_CONTEXT_TERMS = (
+    "code",
+    "codes",
+    "standard",
+    "standards",
+    "regulation",
+    "regulations",
+    "regulatory",
+    "policy",
+    "policies",
+)
+WOOD_CENTRAL_ECONOMICS_CONTEXT_TERMS = (
+    "premium",
+    "premiums",
+    "cost",
+    "costs",
+    "price",
+    "prices",
+    "pricing",
+    "economics",
+    "economic",
+    "viability",
+    "commercial viability",
+    "competitiveness",
+    "affordability",
+)
+WOOD_CENTRAL_QUANTIFIED_ECONOMICS_TERMS = (
+    "%",
+    "times higher",
+    "times lower",
+    "six to ten times",
+    "higher than",
+    "lower than",
+)
+WOOD_CENTRAL_FRICTION_TERMS = (
+    "concern",
+    "concerns",
+    "challenge",
+    "challenges",
+    "conflict",
+    "friction",
+    "restrict",
+    "restricted",
+    "restriction",
+    "restriction",
+    "limit",
+    "limits",
+    "cap",
+    "caps",
+    "open new front",
+)
+WOOD_CENTRAL_COMMERCIAL_BARRIER_TERMS = (
+    "barrier",
+    "barriers",
+    "adoption",
+    "commercial",
+    "competitive",
+    "scaling",
+    "scale-up",
+    "viable",
+    "viability",
+)
 WHITESPACE_RE = re.compile(r"\s+")
 
 
@@ -163,6 +274,35 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         )
     )
     adjacent_logistics_only = bool(event_flags.get("adjacent_logistics_only", False))
+    official_construction_market_signal = (
+        item.source_id == "destatis_press_listing"
+        and event_flags.get("construction_statistics_signal", False)
+        and _contains_any(haystack, DESTATIS_CONSTRUCTION_MARKET_TERMS)
+    )
+    timber_adoption_barrier_signal = (
+        item.source_id == "wood_central_api"
+        and event_flags.get("timber_policy_signal", False)
+        and (
+            _contains_any(haystack, WOOD_CENTRAL_HARD_CONSTRAINT_TERMS)
+            or (
+                _contains_any(haystack, WOOD_CENTRAL_POLICY_CONTEXT_TERMS)
+                and _contains_any(haystack, WOOD_CENTRAL_FRICTION_TERMS)
+            )
+        )
+    )
+    timber_economics_alert_signal = (
+        item.source_id == "wood_central_api"
+        and event_flags.get("timber_economics_signal", False)
+        and _contains_any(haystack, WOOD_CENTRAL_ECONOMICS_CONTEXT_TERMS)
+        and _contains_any(haystack, WOOD_CENTRAL_QUANTIFIED_ECONOMICS_TERMS)
+        and _contains_any(haystack, WOOD_CENTRAL_COMMERCIAL_BARRIER_TERMS)
+    )
+    strategic_industrial_ai_alert_signal = (
+        bool(item.metadata.get("broad_feed"))
+        and event_flags.get("strategic_ai_major_deal_signal", False)
+        and event_flags.get("funding_event", False)
+        and _contains_any(haystack, STRATEGIC_AI_REAL_WORLD_TERMS)
+    )
     tangible_operational_signal = operational_detail or construction_execution or industrial_relevance
     product_or_platform_news = product_launch and tangible_operational_signal and (
         industrial_relevance or construction_execution or competitor_count > 0
@@ -171,6 +311,10 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         (hard_news_event and tangible_operational_signal and not adjacent_logistics_only)
         or product_or_platform_news
         or (construction_execution and event_flags.get("quantified_scale_signal", False))
+        or official_construction_market_signal
+        or timber_adoption_barrier_signal
+        or timber_economics_alert_signal
+        or strategic_industrial_ai_alert_signal
     )
 
     flags = {
@@ -183,6 +327,10 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         "hard_news_event": hard_news_event,
         "industrial_relevance": industrial_relevance,
         "adjacent_logistics_only": adjacent_logistics_only,
+        "official_construction_market_signal": official_construction_market_signal,
+        "timber_adoption_barrier_signal": timber_adoption_barrier_signal,
+        "timber_economics_alert_signal": timber_economics_alert_signal,
+        "strategic_industrial_ai_alert_signal": strategic_industrial_ai_alert_signal,
         "tangible_operational_signal": tangible_operational_signal,
         "telegram_worthy": telegram_worthy,
     }
@@ -209,6 +357,12 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         return EditorialDecision(
             allow_send=False,
             reason="editorial_commentary_without_tangible_detail",
+            flags=flags,
+        )
+    if event_flags.get("strategic_ai_major_deal_signal", False) and not strategic_industrial_ai_alert_signal:
+        return EditorialDecision(
+            allow_send=False,
+            reason="editorial_strategic_ai_deal_stored_only",
             flags=flags,
         )
     if adjacent_logistics_only and not (construction_execution or competitor_count > 0):
