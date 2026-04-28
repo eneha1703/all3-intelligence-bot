@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from all3_radar.domain.enums import SourceLayer
 from all3_radar.domain.models import StoredNormalizedItem
-from all3_radar.pipeline.ranking import rank_item
+from all3_radar.pipeline.ranking import derive_event_flags, rank_item
 
 
 def _make_item(title: str, preview: str, broad_feed: bool) -> StoredNormalizedItem:
@@ -28,6 +28,8 @@ RANKING_RULES = {
     "signals": {
         "competitor_mention": 35,
         "direct_source": 25,
+        "official_statistics_source": 8,
+        "direct_wood_central_source": 8,
         "google_competitor_wrapper": -30,
         "funding_event": 18,
         "partnership_event": 16,
@@ -39,6 +41,9 @@ RANKING_RULES = {
         "timber_strategic_signal": 15,
         "industrial_robotics_signal": 8,
         "construction_innovation_signal": 6,
+        "construction_statistics_signal": 18,
+        "timber_policy_signal": 18,
+        "timber_economics_signal": 18,
         "consumer_robotics_penalty": -50,
         "showcase_only_architecture_penalty": -20,
     },
@@ -74,3 +79,87 @@ def test_modular_quantified_construction_story_reaches_send_threshold() -> None:
 
     assert decision.relevance_status == "keep"
     assert decision.score >= 28
+
+
+def test_destatis_statistics_story_now_survives() -> None:
+    item = _make_item(
+        "Auftragseingang im Bauhauptgewerbe im Februar 2026: +7,3 % zum Vormonat",
+        "Der reale Auftragseingang im Bauhauptgewerbe ist im Februar 2026 gegenüber Januar 2026 gestiegen.",
+        broad_feed=False,
+    )
+    item = StoredNormalizedItem(**{**item.__dict__, "source_id": "destatis_press_listing"})
+
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert decision.relevance_status == "keep"
+    assert decision.send_status == "stored_only"
+    assert decision.score == 51
+
+
+def test_wood_central_timber_policy_story_now_survives_without_funding_flag() -> None:
+    item = _make_item(
+        "Architects, insurers open new front on English timber cap",
+        "Architects and insurers have raised fresh concerns over England's timber height cap as pressure grows around standards, approvals and insurance treatment.",
+        broad_feed=False,
+    )
+    item = StoredNormalizedItem(**{**item.__dict__, "source_id": "wood_central_api"})
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["funding_event"] is False
+    assert flags["timber_policy_signal"] is True
+    assert decision.relevance_status == "keep"
+    assert decision.send_status == "stored_only"
+    assert decision.score == 51
+
+
+def test_wood_central_timber_economics_story_now_survives() -> None:
+    item = _make_item(
+        "Mass timber premiums run six to ten times higher than concrete and steel",
+        "A quantified cost comparison suggests mass timber premiums remain a major adoption barrier for commercial viability and timber scaling.",
+        broad_feed=False,
+    )
+    item = StoredNormalizedItem(**{**item.__dict__, "source_id": "wood_central_api"})
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["timber_economics_signal"] is True
+    assert flags["timber_strategic_signal"] is True
+    assert decision.relevance_status == "keep"
+    assert decision.send_status == "stored_only"
+    assert decision.score == 66
+
+
+def test_major_industrial_ai_funding_story_from_broad_feed_reaches_send_path() -> None:
+    item = _make_item(
+        "Project Prometheus raises funding at $38B valuation for physics AI",
+        "The company says the round will expand AI systems for engineering, manufacturing and production workflows across physical industries.",
+        broad_feed=True,
+    )
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["strategic_ai_major_deal_signal"] is True
+    assert decision.relevance_status == "keep"
+    assert decision.send_status == "stored_only"
+    assert decision.score == 43
+
+
+def test_major_industrial_ai_merger_story_from_broad_feed_reaches_send_path() -> None:
+    item = _make_item(
+        "Cohere and Aleph Alpha explore merger with Schwarz Group backing",
+        "The proposed $20B merger with $600M backing would combine enterprise AI with engineering, industrial automation and manufacturing workflow software for European production environments.",
+        broad_feed=True,
+    )
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["strategic_ai_major_deal_signal"] is True
+    assert flags["acquisition_event"] is True
+    assert decision.relevance_status == "keep"
+    assert decision.send_status == "stored_only"
+    assert decision.score == 60

@@ -324,6 +324,24 @@ class RadarRepository:
             ).fetchone()
         return bool(row)
 
+    def load_items_for_published_window(self, start_date: str, end_date: str) -> list[StoredNormalizedItem]:
+        with connect(self.database_path) as connection:
+            rows = connection.execute(
+                """
+                SELECT ni.id, ni.raw_item_id, ni.source_id, ni.canonical_url, ni.domain, ni.title, ni.text_preview,
+                       ni.published_ts, ni.collected_ts, ni.layer, ni.is_wrapper, ni.directness_rank, ni.metadata_json,
+                       rd.canonical_event_id
+                FROM normalized_items ni
+                LEFT JOIN radar_decisions rd ON rd.normalized_item_id = ni.id
+                WHERE ni.published_ts IS NOT NULL
+                  AND date(ni.published_ts) >= date(?)
+                  AND date(ni.published_ts) <= date(?)
+                ORDER BY ni.published_ts ASC, ni.id ASC
+                """,
+                (start_date, end_date),
+            ).fetchall()
+        return [self._row_to_stored_item(row) for row in rows]
+
     def record_telegram_delivery(
         self,
         run_id: str,
@@ -334,6 +352,7 @@ class RadarRepository:
         payload_text: str,
         telegram_message_id: str | None,
         error_text: str | None,
+        bot_kind: str = "alert",
     ) -> None:
         with connect(self.database_path) as connection:
             connection.execute(
@@ -342,10 +361,11 @@ class RadarRepository:
                   id, bot_kind, run_id, normalized_item_id, canonical_event_id, chat_id, telegram_message_id,
                   status, payload_text, error_text, created_at
                 )
-                VALUES (?, 'alert', ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     uuid.uuid4().hex,
+                    bot_kind,
                     run_id,
                     normalized_item_id,
                     canonical_event_id,

@@ -1,4 +1,4 @@
-from all3_radar.delivery.telegram import build_news_card
+from all3_radar.delivery.telegram import build_news_card, build_replay_card
 
 
 def test_build_news_card_formats_clean_message() -> None:
@@ -139,3 +139,19 @@ def test_build_news_card_removes_trailing_according_fragment() -> None:
     assert "according." not in card.text
     assert "according to the companies" not in card.text
     assert "used in joints such as shoulders and elbows in humanoid robots." in card.text
+
+
+def test_build_replay_card_prepends_clear_replay_label() -> None:
+    card = build_news_card(
+        headline="Mass timber premiums run six to ten times higher than concrete and steel",
+        summary_text=(
+            "A quantified cost comparison suggests mass timber premiums remain a major adoption barrier for commercial viability and timber scaling."
+        ),
+        url="https://example.com/timber-story",
+    )
+
+    assert card is not None
+    replay_card = build_replay_card(card, "[REPLAY / MANUAL VALIDATION 2026-04-24..2026-04-28]")
+
+    assert replay_card.text.startswith("<i>[REPLAY / MANUAL VALIDATION 2026-04-24..2026-04-28]</i>")
+    assert "<b>Mass timber premiums run six to ten times higher than concrete and steel</b>" in replay_card.text

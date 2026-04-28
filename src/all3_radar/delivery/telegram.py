@@ -38,6 +38,16 @@ class TelegramDelivery:
     payload_text: str
 
 
+def build_replay_card(card: TelegramCard, replay_label: str) -> TelegramCard:
+    replay_prefix = f"<i>{html.escape(replay_label)}</i>"
+    return TelegramCard(
+        text=f"{replay_prefix}\n\n{card.text}",
+        headline=card.headline,
+        summary_text=card.summary_text,
+        url=card.url,
+    )
+
+
 class TelegramSender:
     def __init__(self, bot_token: str | None, chat_ids: tuple[str, ...]) -> None:
         self.bot_token = bot_token

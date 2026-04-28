@@ -3,7 +3,12 @@ from datetime import datetime, timezone
 from all3_radar.domain.enums import SourceLayer
 from all3_radar.domain.models import StoredNormalizedItem
 from all3_radar.pipeline.ranking import derive_event_flags
-from all3_radar.pipeline.filters import compute_relevance_status
+from all3_radar.pipeline.filters import (
+    compute_relevance_status,
+    is_destatis_construction_statistics_signal,
+    is_wood_central_timber_economics_signal,
+    is_wood_central_timber_policy_signal,
+)
 
 
 def _make_item(title: str, preview: str, broad_feed: bool) -> StoredNormalizedItem:
@@ -167,3 +172,137 @@ def test_general_business_profile_story_is_dropped() -> None:
 
     assert status == "drop"
     assert reason == "obvious_off_scope"
+
+
+def test_destatis_construction_statistics_signal_is_detected() -> None:
+    item = _make_item(
+        "Auftragseingang im Bauhauptgewerbe im Februar 2026: +7,3 % zum Vormonat",
+        "Der reale Auftragseingang im Bauhauptgewerbe ist im Februar 2026 gegenüber Januar 2026 gestiegen.",
+        broad_feed=False,
+    )
+    item = StoredNormalizedItem(**{**item.__dict__, "source_id": "destatis_press_listing"})
+
+    assert is_destatis_construction_statistics_signal(item) is True
+
+
+def test_wood_central_timber_policy_signal_is_detected() -> None:
+    item = _make_item(
+        "Architects, insurers open new front on English timber cap",
+        "Architects and insurers have raised fresh concerns over England's timber height cap and standards.",
+        broad_feed=False,
+    )
+    item = StoredNormalizedItem(**{**item.__dict__, "source_id": "wood_central_api"})
+
+    assert is_wood_central_timber_policy_signal(item) is True
+
+
+def test_wood_central_timber_economics_signal_is_detected() -> None:
+    item = _make_item(
+        "Mass timber premiums run six to ten times higher than concrete and steel",
+        "A quantified cost comparison suggests mass timber premiums remain a major adoption barrier for commercial viability and timber scaling.",
+        broad_feed=False,
+    )
+    item = StoredNormalizedItem(**{**item.__dict__, "source_id": "wood_central_api"})
+
+    assert is_wood_central_timber_economics_signal(item) is True
+
+
+def test_soft_wood_central_timber_economics_commentary_does_not_trigger_signal() -> None:
+    item = _make_item(
+        "Why mass timber economics deserve a broader conversation",
+        "A commentary on long-term timber costs and market positioning without a quantified comparison or clear adoption-barrier signal.",
+        broad_feed=False,
+    )
+    item = StoredNormalizedItem(**{**item.__dict__, "source_id": "wood_central_api"})
+
+    assert is_wood_central_timber_economics_signal(item) is False
+
+
+def test_broad_feed_major_industrial_ai_funding_story_survives_scope_gate() -> None:
+    item = _make_item(
+        "Project Prometheus raises funding at $38B valuation for physics AI",
+        "The company says the round will expand AI systems for engineering, manufacturing and production workflows across physical industries.",
+        broad_feed=True,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "keep"
+    assert reason is None
+
+
+def test_broad_feed_major_industrial_ai_merger_story_survives_scope_gate() -> None:
+    item = _make_item(
+        "Cohere and Aleph Alpha explore merger with Schwarz Group backing",
+        "The proposed $20B merger with $600M backing would combine enterprise AI with engineering, industrial automation and manufacturing workflow software for European production environments.",
+        broad_feed=True,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "keep"
+    assert reason is None
+
+
+def test_generic_broad_feed_ai_merger_without_physical_industry_scope_stays_dropped() -> None:
+    item = _make_item(
+        "Cohere and Aleph Alpha explore merger for enterprise AI expansion",
+        "The companies are discussing a strategic AI merger to expand enterprise chat and office productivity tools.",
+        broad_feed=True,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "drop"
+    assert reason == "no_clear_all3_scope"
+
+
+def test_mrbeast_ai_entertainment_story_no_longer_survives_strategic_ai_scope_gate() -> None:
+    item = _make_item(
+        "MrBeast is plotting a move into AI-native entertainment",
+        "The company wants to build a production team around AI automation for content workflows.",
+        broad_feed=True,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "drop"
+    assert reason == "no_clear_all3_scope"
+
+
+def test_hollywood_ai_funding_story_no_longer_survives_strategic_ai_scope_gate() -> None:
+    item = _make_item(
+        "AI startups are raising millions to disrupt Hollywood",
+        "Studios adopt AI for production, marketing, and visual effects as founders raise money to change film and TV workflows.",
+        broad_feed=True,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "drop"
+    assert reason == "no_clear_all3_scope"

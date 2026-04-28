@@ -21,3 +21,13 @@ def test_generate_fallback_summary_builds_two_sentence_industrial_card() -> None
     assert summary is not None
     assert "ABB Robotics has launched PoWa cobot family targeting industrial tasks." in summary
     assert "addresses a long-standing gap in the market between traditional cobots." in summary
+
+
+def test_generate_fallback_summary_prefers_title_sentence_for_single_sentence_announce_preview() -> None:
+    summary = generate_fallback_summary(
+        "Sereact announces €110M Series B round",
+        "Sereact has raised €110 million in Series B financing to expand its AI robotics stack for warehouse and industrial automation.",
+    )
+
+    assert summary is not None
+    assert summary == "Sereact has announced €110M Series B round."
