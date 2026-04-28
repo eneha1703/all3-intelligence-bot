@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import json
+import re
 import urllib.error
 import urllib.request
 import uuid
@@ -12,11 +13,31 @@ from dataclasses import dataclass
 from all3_radar.domain.models import TelegramCard
 from all3_radar.summarization.fallback_summary import sanitize_summary_text
 
+WHITESPACE_RE = re.compile(r"\s+")
+
+
+def _normalize_card_summary(headline: str, summary_text: str) -> str | None:
+    sanitized = sanitize_summary_text(headline, summary_text)
+    if sanitized:
+        return sanitized
+
+    normalized = WHITESPACE_RE.sub(" ", summary_text).strip()
+    if not normalized:
+        return None
+    if normalized.lower().startswith(headline.strip().lower()):
+        normalized = normalized[len(headline.strip()) :].lstrip(" .:-")
+    normalized = WHITESPACE_RE.sub(" ", normalized).strip()
+    if len(normalized.split()) < 6:
+        return None
+    if normalized[-1] not in ".!?":
+        normalized = f"{normalized}."
+    return normalized or None
+
 
 def build_news_card(headline: str, summary_text: str | None, url: str) -> TelegramCard | None:
     if not headline.strip() or not summary_text or not url.strip():
         return None
-    cleaned_summary = sanitize_summary_text(headline, summary_text)
+    cleaned_summary = _normalize_card_summary(headline, summary_text)
     if not cleaned_summary:
         return None
     text = "\n\n".join(
