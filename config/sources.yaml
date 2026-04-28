@@ -238,7 +238,7 @@ sources:
     is_wrapper: false
     enabled: true
     parser: humanoid_robotics_technology
-    url: https://humanoidroboticstechnology.com/industry-news/
+    url: https://humanoidroboticstechnology.com/category/industry-news/
     priority: 88
     article_limit: 20
     tags: [robotics, humanoid, industrial]
