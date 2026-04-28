@@ -63,6 +63,29 @@ GENERAL_BUSINESS_PROFILE_TERMS = {
     "private residence",
     "villa",
 }
+MEDICAL_CONTEXT_TERMS = {
+    "medical",
+    "clinical",
+    "diagnostic",
+    "diagnostics",
+    "healthcare",
+    "hospital",
+    "hospitals",
+    "patient",
+    "patients",
+    "therapy",
+    "therapeutic",
+    "surgical",
+    "surgeon",
+    "surgeons",
+    "physician",
+    "physicians",
+    "dermatology",
+    "dermatologist",
+    "dermatologists",
+    "medtech",
+    "skin cancer",
+}
 INDUSTRIAL_CONTEXT_TERMS = {
     "construction",
     "industrial",
@@ -332,6 +355,12 @@ def has_any_term(text: str, terms: set[str]) -> bool:
 def is_obvious_off_scope(item: StoredNormalizedItem) -> bool:
     haystack = _normalize_text(f"{item.title} {item.text_preview or ''}")
     if has_any_term(haystack, MILITARY_ROBOTICS_TERMS):
+        return True
+    if (
+        has_any_term(haystack, MEDICAL_CONTEXT_TERMS)
+        and has_any_term(haystack, ROBOTICS_TERMS | AUTOMATION_TERMS)
+        and not has_any_term(haystack, INDUSTRIAL_CONTEXT_TERMS | BUILT_ENVIRONMENT_TERMS)
+    ):
         return True
     if has_any_term(haystack, CONSUMER_ROBOT_TERMS) and not has_any_term(haystack, INDUSTRIAL_CONTEXT_TERMS):
         return True
