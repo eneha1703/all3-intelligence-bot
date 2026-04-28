@@ -300,6 +300,14 @@ def _ensure_terminal_punctuation(sentence: str) -> str:
     return f"{stripped}."
 
 
+def _is_usable_truncated_single_sentence(summary: str) -> bool:
+    if _sentence_count(summary) != 1:
+        return False
+    if len(summary.split()) < 12:
+        return False
+    return _has_strong_concrete_signal(summary) and not _is_low_information_sentence(summary)
+
+
 def _cleanup_trailing_fragment(sentence: str) -> str:
     cleaned = sentence.strip()
     for pattern in TRAILING_FRAGMENT_PATTERNS:
@@ -384,7 +392,7 @@ def sanitize_summary_text(headline: str, summary: str | None) -> str | None:
     if cleaned[-1] not in ".!?":
         return None
     if had_ellipsis:
-        if _sentence_count(cleaned) < 2:
+        if not _is_usable_truncated_single_sentence(cleaned) and _sentence_count(cleaned) < 2:
             return None
     return cleaned
 
