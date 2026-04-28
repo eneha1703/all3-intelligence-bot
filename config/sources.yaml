@@ -174,7 +174,7 @@ sources:
     is_wrapper: false
     enabled: true
     parser: destatis_press
-    url: https://www.destatis.de/EN/Press/_node.html
+    url: https://www.destatis.de/DE/Presse/Pressemitteilungen/_inhalt_2.html
     priority: 75
     tags: [policy, statistics]
 

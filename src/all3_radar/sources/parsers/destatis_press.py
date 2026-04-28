@@ -34,7 +34,7 @@ MONTHS = {
     "dezember": 12,
 }
 PRESS_META_PREFIX_RE = re.compile(
-    r"^Pressemitteilung\s+Nr\.\s*\d+\s+vom\s+.+?(?=(Der|Die|Im|In|Mit|Für|Fuer)\b)",
+    r"^Pressemitteilung\s+Nr\.?\s*\S+\s+vom\s+.+?(?=(Der|Die|Im|In|Mit|Für|Fuer)\b)",
     re.IGNORECASE,
 )
 
@@ -75,10 +75,21 @@ def parse_destatis_published_ts(value: str) -> datetime | None:
     return None
 
 
+def _looks_like_date_container(tag: str, attrs: dict[str, str]) -> bool:
+    if tag == "time":
+        return True
+    for key in ("class", "id", "data-testid"):
+        value = attrs.get(key, "")
+        if "date" in value.lower():
+            return True
+    return False
+
+
 @dataclass
 class _PendingEntry:
     url: str
     title_parts: list[str]
+    date_parts: list[str]
     context_parts: list[str]
 
 
@@ -90,16 +101,21 @@ class _DestatisPressHTMLParser(HTMLParser):
         self.current_entry: _PendingEntry | None = None
         self.current_link: str | None = None
         self._inside_ignored_tag = False
+        self._date_container_depth = 0
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag in {"script", "style"}:
             self._inside_ignored_tag = True
             return
 
+        attr_map = {key: value or "" for key, value in attrs}
+        if self.current_entry is not None and _looks_like_date_container(tag, attr_map):
+            self._date_container_depth += 1
+
         if tag != "a":
             return
 
-        href = dict(attrs).get("href")
+        href = attr_map.get("href")
         if not href:
             return
         absolute_url = urljoin(self.base_url, href)
@@ -110,12 +126,20 @@ class _DestatisPressHTMLParser(HTMLParser):
             self.pending_entries.append(self.current_entry)
 
         self.current_link = absolute_url
-        self.current_entry = _PendingEntry(url=absolute_url, title_parts=[], context_parts=[])
+        self.current_entry = _PendingEntry(
+            url=absolute_url,
+            title_parts=[],
+            date_parts=[],
+            context_parts=[],
+        )
 
     def handle_endtag(self, tag: str) -> None:
         if tag in {"script", "style"}:
             self._inside_ignored_tag = False
             return
+
+        if self._date_container_depth and tag in {"time", "span", "div", "p"}:
+            self._date_container_depth -= 1
 
         if tag == "a":
             self.current_link = None
@@ -128,7 +152,9 @@ class _DestatisPressHTMLParser(HTMLParser):
         if not text or self.current_entry is None:
             return
 
-        if self.current_link is not None:
+        if self._date_container_depth:
+            self.current_entry.date_parts.append(text)
+        elif self.current_link is not None:
             self.current_entry.title_parts.append(text)
         else:
             self.current_entry.context_parts.append(text)
@@ -152,8 +178,9 @@ def parse_destatis_press_listing(feed_text: str, source: SourceDefinition, colle
         if not title:
             continue
 
+        date_text = _clean_text(" ".join(entry.date_parts))
         context = _clean_text(" ".join(entry.context_parts))
-        published_ts = parse_destatis_published_ts(" ".join(part for part in (title, context) if part))
+        published_ts = parse_destatis_published_ts(" ".join(part for part in (date_text, title, context) if part))
         if published_ts is None:
             skipped_missing_date += 1
             continue
@@ -180,6 +207,7 @@ def parse_destatis_press_listing(feed_text: str, source: SourceDefinition, colle
                     "title": title,
                     "url": entry.url,
                     "context_text": context,
+                    "date_text": date_text,
                     "source_url": source.url,
                 },
             )
