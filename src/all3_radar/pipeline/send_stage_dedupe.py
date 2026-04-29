@@ -12,6 +12,30 @@ from all3_radar.domain.models import RankedDecision, StoredNormalizedItem
 FUNDING_VERB_RE = re.compile(r"\b(raises?|raised|lands?|landed|secures?|secured|bags?|bagged)\b", re.IGNORECASE)
 ENTITY_RE = r"[A-Z][A-Za-z0-9&.\-]*(?:\s+[A-Z][A-Za-z0-9&.\-]*){0,3}"
 PARTNERSHIP_ENTITY_RE = r"[A-Z][A-Za-z0-9&\-]*(?:\s+[A-Z][A-Za-z0-9&\-]*){0,3}"
+PRODUCT_COMPANY_RE = re.compile(
+    rf"^(?P<entity>{ENTITY_RE})\s+"
+    r"(?P<verb>(?i:launches|launched|unveils|unveiled|introduces|introduced|releases|released|updates|updated|rolls out|rolled out|debuts|debuted))\b"
+)
+PRODUCT_VERB_PATTERN = (
+    r"launches|launched|unveils|unveiled|introduces|introduced|releases|released|updates|updated|rolls out|rolled out|debuts|debuted"
+)
+TITLE_PRODUCT_RE = re.compile(
+    rf"^(?P<entity>{ENTITY_RE})\s+(?P<verb>(?i:{PRODUCT_VERB_PATTERN}))\s+"
+    r"(?P<product>[^.,;:]{0,120}?)\s+"
+    r"(?=(?:to|for|with|across|on|into|targeting)\b|$)",
+)
+ITS_PRODUCT_RE = re.compile(
+    r"\bits\s+(?:(?i:new|latest)\s+)?"
+    r"(?P<product>[A-Z0-9][A-Za-z0-9&/\-]*(?:\s+[A-Z0-9][A-Za-z0-9&/\-]*){0,4})\s+"
+    r"(?P<noun>(?i:platform|tool|software|system|assistant|controller|family|cobot(?:\s+family)?|robot))\b",
+)
+CALLED_PRODUCT_RE = re.compile(
+    r"\b(?i:called)\s+(?:the\s+)?(?P<product>[A-Z0-9][A-Za-z0-9&/\-]*(?:\s+[A-Z0-9][A-Za-z0-9&/\-]*){0,4})\b",
+)
+PRODUCT_NOUN_RE = re.compile(
+    r"\b(platform|tool|software|system|assistant|controller|family|cobot|robot)\b",
+    re.IGNORECASE,
+)
 DIRECT_FUNDING_HEADLINE_RE = re.compile(
     rf"^(?P<entity>{ENTITY_RE})\s+"
     r"(?:has\s+)?(?:just\s+)?(?:raises?|raised|lands?|landed|secures?|secured|bags?|bagged)\b"
@@ -137,6 +161,12 @@ def suppress_same_event_funding_duplicates(
                     right.normalized_item_id,
                     "duplicate_same_partnership_event_shortlist",
                 )
+            elif _is_same_product_launch_event(left, right):
+                union(
+                    left.normalized_item_id,
+                    right.normalized_item_id,
+                    "duplicate_same_product_launch_event_shortlist",
+                )
 
     grouped: dict[str, list[SendStageCandidate]] = {}
     for candidate in candidate_list:
@@ -234,6 +264,8 @@ def _compare_candidates(left: SendStageCandidate, right: SendStageCandidate, sco
 def _evidence_tuple(candidate: SendStageCandidate) -> tuple[int, int, int, int, int, int]:
     if candidate.event_flags.get("partnership_event"):
         return _partnership_evidence_tuple(candidate)
+    if candidate.event_flags.get("product_launch_event"):
+        return _product_evidence_tuple(candidate)
     text = _candidate_text(candidate)
     return (
         int(_extract_primary_entity(text) is not None),
@@ -253,6 +285,19 @@ def _partnership_evidence_tuple(candidate: SendStageCandidate) -> tuple[int, int
         _direct_partnership_framing_score(candidate.title),
         int(bool(candidate.text_preview)),
         0,
+        0,
+    )
+
+
+def _product_evidence_tuple(candidate: SendStageCandidate) -> tuple[int, int, int, int, int, int]:
+    text = _candidate_text(candidate)
+    product_key = _extract_product_launch_key(candidate)
+    return (
+        int(product_key is not None),
+        int(product_key is not None and bool(product_key.product)),
+        int(_has_industrial_relevance(text)),
+        _direct_product_framing_score(candidate.title),
+        int(bool(candidate.text_preview)),
         0,
     )
 
@@ -279,6 +324,24 @@ def _is_same_partnership_event(left: SendStageCandidate, right: SendStageCandida
     if left_pair is None or right_pair is None:
         return False
     return left_pair == right_pair
+
+
+def _is_same_product_launch_event(left: SendStageCandidate, right: SendStageCandidate) -> bool:
+    if not (left.event_flags.get("product_launch_event") and right.event_flags.get("product_launch_event")):
+        return False
+
+    left_date = left.published_ts.date() if left.published_ts else None
+    right_date = right.published_ts.date() if right.published_ts else None
+    if left_date is None or right_date is None:
+        return False
+    if abs((left_date - right_date).days) > 3:
+        return False
+
+    left_key = _extract_product_launch_key(left)
+    right_key = _extract_product_launch_key(right)
+    if left_key is None or right_key is None:
+        return False
+    return left_key == right_key
 
 
 def _extract_primary_entity(text: str) -> str | None:
@@ -310,6 +373,78 @@ def _extract_partnership_entities(text: str) -> tuple[str, str] | None:
     if len(pairs) != 1:
         return None
     return next(iter(pairs))
+
+
+@dataclass(frozen=True)
+class ProductLaunchKey:
+    company: str
+    product: str
+
+
+def _extract_product_launch_key(candidate: SendStageCandidate) -> ProductLaunchKey | None:
+    title = candidate.title.strip()
+    preview = (candidate.text_preview or "").strip()
+    company = _extract_product_company(title)
+    if company is None:
+        return None
+
+    preview_product = _extract_product_from_preview(preview)
+    if preview_product is not None:
+        return ProductLaunchKey(company=company, product=preview_product)
+
+    title_product = _extract_product_from_title(title)
+    if title_product is None:
+        return None
+    return ProductLaunchKey(company=company, product=title_product)
+
+
+def _extract_product_company(title: str) -> str | None:
+    match = PRODUCT_COMPANY_RE.search(title)
+    if not match:
+        return None
+    return _normalize_entity(match.group("entity"))
+
+
+def _extract_product_from_preview(preview: str) -> str | None:
+    if not preview:
+        return None
+
+    products: set[str] = set()
+    for match in ITS_PRODUCT_RE.finditer(preview):
+        noun = match.group("noun").lower()
+        candidate = _normalize_product_phrase(f"{match.group('product')} {noun}")
+        if candidate:
+            products.add(candidate)
+    for match in CALLED_PRODUCT_RE.finditer(preview):
+        candidate = _normalize_product_phrase(match.group("product"))
+        if candidate:
+            products.add(candidate)
+
+    if len(products) != 1:
+        return None
+    return next(iter(products))
+
+
+def _extract_product_from_title(title: str) -> str | None:
+    match = TITLE_PRODUCT_RE.search(title)
+    if not match:
+        return None
+    return _normalize_product_phrase(match.group("product"))
+
+
+def _normalize_product_phrase(raw: str) -> str | None:
+    lowered = re.sub(r"[\u2010-\u2015]", "-", raw).strip().lower()
+    lowered = re.sub(r"[^a-z0-9&/\-\s]+", " ", lowered)
+    lowered = re.sub(r"\s+", " ", lowered).strip(" -/")
+    if not lowered:
+        return None
+    if not PRODUCT_NOUN_RE.search(lowered):
+        return None
+    if lowered in {"platform", "tool", "software", "system", "assistant", "controller", "family", "robot", "cobot"}:
+        return None
+    if len(lowered.split()) == 1 and lowered in {"platforms", "tools", "systems", "robots", "cobots"}:
+        return None
+    return lowered
 
 
 def _extract_amount(text: str) -> tuple[str, str, str] | None:
@@ -374,6 +509,18 @@ def _direct_partnership_framing_score(title: str) -> int:
     if PAIR_PARTNERSHIP_RE.search(title) or WITH_PARTNERSHIP_RE.search(title):
         score += 2
     elif any(term in lowered for term in ("partnership", "partners with", "partnered with", "collaboration")):
+        score += 1
+    if any(phrase in lowered for phrase in CLICKBAIT_PHRASES):
+        score -= 1
+    return score
+
+
+def _direct_product_framing_score(title: str) -> int:
+    lowered = title.lower()
+    score = 0
+    if TITLE_PRODUCT_RE.search(title):
+        score += 2
+    elif any(term in lowered for term in ("launches", "launched", "updates", "updated", "introduces", "released")):
         score += 1
     if any(phrase in lowered for phrase in CLICKBAIT_PHRASES):
         score -= 1

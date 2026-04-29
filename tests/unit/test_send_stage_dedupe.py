@@ -263,3 +263,179 @@ def test_higher_score_wins_for_same_partnership_event() -> None:
 
     assert suppressed[0].suppressed_item_id == "low"
     assert suppressed[0].representative_item_id == "high"
+
+
+def _product_candidate(
+    item_id: str,
+    title: str,
+    preview: str,
+    score: int = 80,
+    published_hours_ago: int = 1,
+    product_launch_event: bool = True,
+) -> SendStageCandidate:
+    return SendStageCandidate(
+        normalized_item_id=item_id,
+        canonical_url=f"https://example.com/{item_id}",
+        title=title,
+        text_preview=preview,
+        published_ts=datetime.now(timezone.utc) - timedelta(hours=published_hours_ago),
+        score=score,
+        event_flags={"product_launch_event": product_launch_event},
+    )
+
+
+def test_product_launch_duplicates_collapse_to_one_representative() -> None:
+    left = _product_candidate(
+        "a",
+        "ABB Robotics launches PoWa cobot family targeting industrial tasks",
+        "ABB Robotics said its new PoWa cobot family addresses a long-standing gap in the industrial market.",
+        score=86,
+    )
+    right = _product_candidate(
+        "b",
+        "ABB Robotics unveils PoWa cobot family for industrial automation",
+        "The company said the PoWa cobot family expands industrial automation options for production environments.",
+        score=91,
+    )
+
+    suppressed = suppress_same_event_funding_duplicates([left, right])
+
+    assert suppressed == [
+        SuppressedDuplicate(
+            suppressed_item_id="a",
+            representative_item_id="b",
+            reason="duplicate_same_product_launch_event_shortlist",
+        )
+    ]
+
+
+def test_platform_update_duplicates_collapse_to_one_representative() -> None:
+    left = _product_candidate(
+        "a",
+        "Ency updates hybrid robot programming platform with multi-brand and 3D vision capabilities",
+        "Ency Software has released a major update to its Ency Hyper platform for mixed-brand robot cells and physical robots.",
+        score=84,
+    )
+    right = _product_candidate(
+        "b",
+        "Ency releases major update for Ency Hyper platform",
+        "The company said its Ency Hyper platform now supports mixed-brand robot cells and integrated 3D vision on physical robots.",
+        score=89,
+    )
+
+    suppressed = suppress_same_event_funding_duplicates([left, right])
+
+    assert suppressed == [
+        SuppressedDuplicate(
+            suppressed_item_id="a",
+            representative_item_id="b",
+            reason="duplicate_same_product_launch_event_shortlist",
+        )
+    ]
+
+
+def test_tool_launch_duplicates_collapse_to_one_representative() -> None:
+    left = _product_candidate(
+        "a",
+        "Kollmorgen launches layout analysis tool to improve mobile robot performance",
+        "Kollmorgen has introduced a new software tool called the NDC Layout Assistant for automated guided vehicles and autonomous mobile robots.",
+        score=84,
+    )
+    right = _product_candidate(
+        "b",
+        "Kollmorgen introduces NDC Layout Assistant for mobile robot fleets",
+        "Called the NDC Layout Assistant, the tool improves route design for autonomous mobile robots and AGV deployments.",
+        score=90,
+    )
+
+    suppressed = suppress_same_event_funding_duplicates([left, right])
+
+    assert suppressed == [
+        SuppressedDuplicate(
+            suppressed_item_id="a",
+            representative_item_id="b",
+            reason="duplicate_same_product_launch_event_shortlist",
+        )
+    ]
+
+
+def test_same_company_different_product_does_not_collapse_for_product_launches() -> None:
+    left = _product_candidate(
+        "a",
+        "ABB Robotics launches PoWa cobot family targeting industrial tasks",
+        "ABB Robotics said its new PoWa cobot family expands industrial automation coverage.",
+    )
+    right = _product_candidate(
+        "b",
+        "ABB Robotics launches OmniCore controller for robot cells",
+        "ABB Robotics said its OmniCore controller improves coordination in robot cells.",
+    )
+
+    assert suppress_same_event_funding_duplicates([left, right]) == []
+
+
+def test_same_product_word_different_company_does_not_collapse() -> None:
+    left = _product_candidate(
+        "a",
+        "ABB Robotics launches Layout Assistant for robot cells",
+        "ABB Robotics said its Layout Assistant helps optimize industrial robot cell planning.",
+    )
+    right = _product_candidate(
+        "b",
+        "Kollmorgen launches Layout Assistant for mobile robots",
+        "Kollmorgen said its Layout Assistant improves autonomous mobile robot route planning.",
+    )
+
+    assert suppress_same_event_funding_duplicates([left, right]) == []
+
+
+def test_product_candidates_without_flag_do_not_collapse() -> None:
+    left = _product_candidate(
+        "a",
+        "ABB Robotics launches PoWa cobot family targeting industrial tasks",
+        "ABB Robotics said its new PoWa cobot family expands industrial automation coverage.",
+        product_launch_event=False,
+    )
+    right = _product_candidate(
+        "b",
+        "ABB Robotics unveils PoWa cobot family for industrial automation",
+        "The company said the PoWa cobot family expands industrial automation options.",
+        product_launch_event=False,
+    )
+
+    assert suppress_same_event_funding_duplicates([left, right]) == []
+
+
+def test_generic_ai_platform_commentary_does_not_collapse() -> None:
+    left = _product_candidate(
+        "a",
+        "Why industrial AI platforms matter for the next decade",
+        "A commentary on how manufacturers should think about software strategy and adoption choices.",
+    )
+    right = _product_candidate(
+        "b",
+        "How AI platforms could reshape manufacturing software stacks",
+        "A thought leadership piece about software strategy for factories.",
+    )
+
+    assert suppress_same_event_funding_duplicates([left, right]) == []
+
+
+def test_higher_score_wins_for_same_product_launch_event() -> None:
+    lower = _product_candidate(
+        "low",
+        "ABB Robotics launches PoWa cobot family targeting industrial tasks",
+        "ABB Robotics said its new PoWa cobot family addresses a gap in the industrial market.",
+        score=84,
+    )
+    higher = _product_candidate(
+        "high",
+        "ABB Robotics unveils PoWa cobot family for industrial automation",
+        "The company said the PoWa cobot family expands industrial automation options for production environments.",
+        score=93,
+    )
+
+    suppressed = suppress_same_event_funding_duplicates([lower, higher])
+
+    assert suppressed[0].suppressed_item_id == "low"
+    assert suppressed[0].representative_item_id == "high"
