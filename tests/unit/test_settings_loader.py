@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from all3_radar.config.loader import load_settings
 
 
@@ -31,3 +33,52 @@ def test_load_settings_applies_env_overrides() -> None:
     assert settings.integrations.claude_digest_timeout_seconds == 17
     assert settings.integrations.claude_digest_max_tokens == 999
     assert settings.integrations.telegram_alert_chat_ids == ("1", "2", "3")
+
+
+def test_empty_claude_digest_integer_envs_use_defaults() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    settings = load_settings(
+        repo_root,
+        env={
+            "CLAUDE_DIGEST_MAX_INPUT_ITEMS": "",
+            "CLAUDE_DIGEST_TIMEOUT_SECONDS": "",
+            "CLAUDE_DIGEST_MAX_TOKENS": "",
+        },
+    )
+
+    assert settings.digest.claude_digest_max_input_items == 12
+    assert settings.integrations.claude_digest_timeout_seconds == 20
+    assert settings.integrations.claude_digest_max_tokens == 1200
+
+
+def test_whitespace_claude_digest_integer_envs_use_defaults() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    settings = load_settings(
+        repo_root,
+        env={
+            "CLAUDE_DIGEST_MAX_INPUT_ITEMS": "   ",
+            "CLAUDE_DIGEST_TIMEOUT_SECONDS": " \t ",
+            "CLAUDE_DIGEST_MAX_TOKENS": "  ",
+        },
+    )
+
+    assert settings.digest.claude_digest_max_input_items == 12
+    assert settings.integrations.claude_digest_timeout_seconds == 20
+    assert settings.integrations.claude_digest_max_tokens == 1200
+
+
+@pytest.mark.parametrize(
+    ("env_name", "value", "expected_field"),
+    (
+        ("CLAUDE_DIGEST_MAX_INPUT_ITEMS", "abc", "digest.claude_digest_max_input_items"),
+        ("CLAUDE_DIGEST_TIMEOUT_SECONDS", "abc", "integrations.claude_digest_timeout_seconds"),
+        ("CLAUDE_DIGEST_MAX_TOKENS", "abc", "integrations.claude_digest_max_tokens"),
+    ),
+)
+def test_invalid_non_empty_claude_digest_integer_envs_still_raise(
+    env_name: str, value: str, expected_field: str
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+
+    with pytest.raises(ValueError, match=expected_field):
+        load_settings(repo_root, env={env_name: value})

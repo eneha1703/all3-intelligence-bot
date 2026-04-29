@@ -34,7 +34,18 @@ def _parse_bool(value: Any) -> bool:
     raise ValueError(f"Expected boolean value, got: {value!r}")
 
 
-def _parse_int(value: Any, field_name: str) -> int:
+def _parse_int(value: Any, field_name: str, default: int | None = None) -> int:
+    if value is None:
+        if default is not None:
+            return default
+        raise ValueError(f"Expected integer for {field_name}, got: {value!r}")
+    if isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            if default is not None:
+                return default
+            raise ValueError(f"Expected integer for {field_name}, got: {value!r}")
+        value = normalized
     try:
         parsed = int(value)
     except (TypeError, ValueError) as exc:
@@ -105,6 +116,7 @@ def load_settings(repo_root: Path, env: Mapping[str, str] | None = None) -> Sett
             claude_digest_max_input_items=_parse_int(
                 _apply_env_override(digest, "claude_digest_max_input_items", env, "CLAUDE_DIGEST_MAX_INPUT_ITEMS"),
                 "digest.claude_digest_max_input_items",
+                default=_parse_int(digest["claude_digest_max_input_items"], "digest.claude_digest_max_input_items"),
             ),
         ),
         telegram=TelegramConfig(
@@ -119,10 +131,12 @@ def load_settings(repo_root: Path, env: Mapping[str, str] | None = None) -> Sett
             claude_digest_timeout_seconds=_parse_int(
                 env.get("CLAUDE_DIGEST_TIMEOUT_SECONDS", "20"),
                 "integrations.claude_digest_timeout_seconds",
+                default=20,
             ),
             claude_digest_max_tokens=_parse_int(
                 env.get("CLAUDE_DIGEST_MAX_TOKENS", "1200"),
                 "integrations.claude_digest_max_tokens",
+                default=1200,
             ),
             telegram_alert_bot_token=env.get("TELEGRAM_ALERT_BOT_TOKEN") or None,
             telegram_alert_chat_ids=_parse_chat_ids(env.get("TELEGRAM_ALERT_CHAT_IDS")),
