@@ -99,6 +99,13 @@ def load_settings(repo_root: Path, env: Mapping[str, str] | None = None) -> Sett
                 digest["shortlist_size_before_claude"], "digest.shortlist_size_before_claude"
             ),
             require_canonical_events=_parse_bool(digest["require_canonical_events"]),
+            claude_digest_enabled=_parse_bool(
+                _apply_env_override(digest, "claude_digest_enabled", env, "CLAUDE_DIGEST_ENABLED")
+            ),
+            claude_digest_max_input_items=_parse_int(
+                _apply_env_override(digest, "claude_digest_max_input_items", env, "CLAUDE_DIGEST_MAX_INPUT_ITEMS"),
+                "digest.claude_digest_max_input_items",
+            ),
         ),
         telegram=TelegramConfig(
             parse_mode=str(telegram["parse_mode"]),
@@ -107,6 +114,16 @@ def load_settings(repo_root: Path, env: Mapping[str, str] | None = None) -> Sett
         integrations=IntegrationsConfig(
             gemini_api_key=env.get("GEMINI_API_KEY") or None,
             gemini_model=env.get("GEMINI_MODEL", "gemini-2.0-flash-lite"),
+            anthropic_api_key=env.get("ANTHROPIC_API_KEY") or None,
+            claude_digest_model=env.get("CLAUDE_DIGEST_MODEL") or None,
+            claude_digest_timeout_seconds=_parse_int(
+                env.get("CLAUDE_DIGEST_TIMEOUT_SECONDS", "20"),
+                "integrations.claude_digest_timeout_seconds",
+            ),
+            claude_digest_max_tokens=_parse_int(
+                env.get("CLAUDE_DIGEST_MAX_TOKENS", "1200"),
+                "integrations.claude_digest_max_tokens",
+            ),
             telegram_alert_bot_token=env.get("TELEGRAM_ALERT_BOT_TOKEN") or None,
             telegram_alert_chat_ids=_parse_chat_ids(env.get("TELEGRAM_ALERT_CHAT_IDS")),
         ),

@@ -7,17 +7,43 @@ on:
         description: ISO week key, for example 2026-W17
         required: false
         type: string
+      claude_digest_enabled:
+        description: Enable optional Claude synthesis for this build
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   digest:
     runs-on: ubuntu-latest
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      TELEGRAM_DIGEST_BOT_TOKEN: ${{ secrets.TELEGRAM_DIGEST_BOT_TOKEN }}
-      TELEGRAM_DIGEST_CHAT_IDS: ${{ vars.TELEGRAM_DIGEST_CHAT_IDS }}
+      CLAUDE_DIGEST_ENABLED: ${{ github.event.inputs.claude_digest_enabled == 'true' && 'true' || 'false' }}
+      CLAUDE_DIGEST_MODEL: ${{ vars.CLAUDE_DIGEST_MODEL }}
+      CLAUDE_DIGEST_TIMEOUT_SECONDS: ${{ vars.CLAUDE_DIGEST_TIMEOUT_SECONDS }}
+      CLAUDE_DIGEST_MAX_INPUT_ITEMS: ${{ vars.CLAUDE_DIGEST_MAX_INPUT_ITEMS }}
+      CLAUDE_DIGEST_MAX_TOKENS: ${{ vars.CLAUDE_DIGEST_MAX_TOKENS }}
       DATABASE_PATH: data/all3_radar.db
     steps:
       - uses: actions/checkout@v4
+      - name: Ensure data directory exists
+        run: mkdir -p data
+      - name: Restore Bot 1 state
+        id: restore-radar-db
+        uses: actions/cache/restore@v4
+        with:
+          path: data/all3_radar.db
+          key: radar-db-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            radar-db-${{ github.ref_name }}-
+      - name: Log DB restore status
+        run: |
+          if [ -f data/all3_radar.db ]; then
+            echo "Bot 1 DB file is present before digest build."
+            ls -lh data/all3_radar.db
+          else
+            echo "Bot 1 DB file is not present before digest build."
+          fi
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -27,5 +53,10 @@ jobs:
         run: python -m all3_radar.app.admin_cli db init
       - name: Build digest
         run: python -m all3_radar.app.digest_cli build --week "${{ github.event.inputs.week_key || 'latest' }}"
-      - name: Send digest
-        run: python -m all3_radar.app.digest_cli send --week "${{ github.event.inputs.week_key || 'latest' }}"
+      - name: Upload digest artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: weekly-digest-${{ github.event.inputs.week_key || 'latest' }}
+          path: data/weekly_digest_*.md
+          if-no-files-found: error
+          retention-days: 7

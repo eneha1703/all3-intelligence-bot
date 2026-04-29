@@ -16,6 +16,8 @@ digest:
   stories_per_digest: 5
   shortlist_size_before_claude: 20
   require_canonical_events: true
+  claude_digest_enabled: false
+  claude_digest_max_input_items: 12
 
 telegram:
   parse_mode: HTML

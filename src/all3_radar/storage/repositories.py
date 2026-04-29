@@ -252,6 +252,65 @@ class RadarRepository:
             ).fetchall()
         return [self._row_to_stored_item(row) for row in rows]
 
+    def load_digest_candidates_for_week(
+        self,
+        start_date: str,
+        end_date: str,
+        limit: int,
+        require_canonical_events: bool,
+    ) -> list[dict[str, Any]]:
+        with connect(self.database_path) as connection:
+            if require_canonical_events:
+                rows = connection.execute(
+                    """
+                    SELECT ce.id AS canonical_event_id,
+                           ni.id AS normalized_item_id,
+                           ni.source_id,
+                           ni.title,
+                           ni.canonical_url,
+                           ni.published_ts,
+                           rd.score,
+                           rd.summary_text,
+                           rd.signals_json
+                    FROM canonical_events ce
+                    JOIN normalized_items ni ON ni.id = ce.representative_item_id
+                    JOIN radar_decisions rd ON rd.normalized_item_id = ni.id
+                    WHERE ce.representative_item_id IS NOT NULL
+                      AND rd.relevance_status = 'keep'
+                      AND rd.send_status IN ('sent', 'stored_only')
+                      AND date(COALESCE(ce.last_published_ts, ni.published_ts)) >= date(?)
+                      AND date(COALESCE(ce.last_published_ts, ni.published_ts)) <= date(?)
+                    ORDER BY rd.score DESC, COALESCE(ce.last_published_ts, ni.published_ts) DESC, ce.id ASC
+                    LIMIT ?
+                    """,
+                    (start_date, end_date, limit),
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    """
+                    SELECT COALESCE(rd.canonical_event_id, ni.id) AS canonical_event_id,
+                           ni.id AS normalized_item_id,
+                           ni.source_id,
+                           ni.title,
+                           ni.canonical_url,
+                           ni.published_ts,
+                           rd.score,
+                           rd.summary_text,
+                           rd.signals_json
+                    FROM normalized_items ni
+                    JOIN radar_decisions rd ON rd.normalized_item_id = ni.id
+                    WHERE rd.relevance_status = 'keep'
+                      AND rd.send_status IN ('sent', 'stored_only')
+                      AND ni.published_ts IS NOT NULL
+                      AND date(ni.published_ts) >= date(?)
+                      AND date(ni.published_ts) <= date(?)
+                    ORDER BY rd.score DESC, ni.published_ts DESC, ni.id ASC
+                    LIMIT ?
+                    """,
+                    (start_date, end_date, limit),
+                ).fetchall()
+        return [dict(row) for row in rows]
+
     def upsert_canonical_event(self, assignment: ClusterAssignment, members: list[str], published_values: list[datetime | None]) -> None:
         first_published = min((value for value in published_values if value is not None), default=None)
         last_published = max((value for value in published_values if value is not None), default=None)
@@ -294,6 +353,80 @@ class RadarRepository:
                     )
                     for member_id in members
                 ],
+            )
+            connection.commit()
+
+    def create_weekly_digest_run(self, pipeline_run_id: str, week_key: str) -> str:
+        digest_run_id = uuid.uuid4().hex
+        with connect(self.database_path) as connection:
+            connection.execute(
+                """
+                INSERT INTO weekly_digest_runs (id, pipeline_run_id, week_key, started_at, status, shortlist_json, final_digest_markdown, final_digest_html)
+                VALUES (?, ?, ?, ?, ?, NULL, NULL, NULL)
+                """,
+                (
+                    digest_run_id,
+                    pipeline_run_id,
+                    week_key,
+                    _utc_now_iso(),
+                    PipelineStatus.STARTED.value,
+                ),
+            )
+            connection.commit()
+        return digest_run_id
+
+    def replace_weekly_digest_candidates(self, digest_run_id: str, candidates: list[dict[str, Any]]) -> None:
+        with connect(self.database_path) as connection:
+            connection.execute(
+                "DELETE FROM weekly_digest_candidates WHERE digest_run_id = ?",
+                (digest_run_id,),
+            )
+            connection.executemany(
+                """
+                INSERT INTO weekly_digest_candidates (digest_run_id, canonical_event_id, score, rationale_json)
+                VALUES (?, ?, ?, ?)
+                """,
+                [
+                    (
+                        digest_run_id,
+                        str(candidate["canonical_event_id"]),
+                        int(candidate["score"]),
+                        json.dumps(
+                            {
+                                "title": candidate["title"],
+                                "source_id": candidate["source_id"],
+                                "canonical_url": candidate["canonical_url"],
+                                "published_ts": candidate["published_ts"],
+                            },
+                            sort_keys=True,
+                        ),
+                    )
+                    for candidate in candidates
+                ],
+            )
+            connection.commit()
+
+    def finish_weekly_digest_run(
+        self,
+        digest_run_id: str,
+        status: PipelineStatus,
+        shortlist_json: str | None,
+        final_digest_markdown: str | None,
+    ) -> None:
+        with connect(self.database_path) as connection:
+            connection.execute(
+                """
+                UPDATE weekly_digest_runs
+                SET finished_at = ?, status = ?, shortlist_json = ?, final_digest_markdown = ?, final_digest_html = NULL
+                WHERE id = ?
+                """,
+                (
+                    _utc_now_iso(),
+                    status.value,
+                    shortlist_json,
+                    final_digest_markdown,
+                    digest_run_id,
+                ),
             )
             connection.commit()
 

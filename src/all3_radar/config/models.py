@@ -29,6 +29,8 @@ class DigestConfig:
     stories_per_digest: int
     shortlist_size_before_claude: int
     require_canonical_events: bool
+    claude_digest_enabled: bool
+    claude_digest_max_input_items: int
 
 
 @dataclass(frozen=True)
@@ -41,6 +43,10 @@ class TelegramConfig:
 class IntegrationsConfig:
     gemini_api_key: str | None
     gemini_model: str
+    anthropic_api_key: str | None
+    claude_digest_model: str | None
+    claude_digest_timeout_seconds: int
+    claude_digest_max_tokens: int
     telegram_alert_bot_token: str | None
     telegram_alert_chat_ids: tuple[str, ...]
 

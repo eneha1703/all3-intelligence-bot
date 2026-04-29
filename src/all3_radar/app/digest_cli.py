@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
+
+from all3_radar.digest.digest_service import DigestService
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -12,8 +15,9 @@ def build_parser() -> argparse.ArgumentParser:
     shortlist_parser = subparsers.add_parser("shortlist", help="Create a deterministic weekly shortlist")
     shortlist_parser.add_argument("--week", required=True, help="ISO week key, for example 2026-W17")
 
-    build_parser_cmd = subparsers.add_parser("build", help="Build the digest text with Claude")
+    build_parser_cmd = subparsers.add_parser("build", help="Build weekly digest markdown with optional Claude synthesis")
     build_parser_cmd.add_argument("--week", required=True, help="ISO week key, for example 2026-W17")
+    build_parser_cmd.add_argument("--output", required=False, help="Optional markdown output path")
 
     send_parser = subparsers.add_parser("send", help="Send a previously built weekly digest")
     send_parser.add_argument("--week", required=True, help="ISO week key, for example 2026-W17")
@@ -32,7 +36,16 @@ def main() -> int:
         return 0
 
     if args.command == "build":
-        print(f"Digest build skeleton for week={args.week}")
+        repo_root = Path(__file__).resolve().parents[3]
+        service = DigestService(repo_root=repo_root)
+        result = service.build_digest(
+            week_key=args.week,
+            output_path=Path(args.output) if args.output else None,
+        )
+        print(
+            f"Digest build complete: week={result.week_key} candidates={result.candidate_count} "
+            f"claude_used={result.claude_used} output={result.output_path}"
+        )
         return 0
 
     if args.command == "send":
