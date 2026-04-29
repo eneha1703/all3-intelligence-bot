@@ -12,6 +12,7 @@ from all3_radar.domain.models import RadarRunResult
 
 _DUPLICATE_SKIP_REASONS = (
     "already_sent_same_funding_event",
+    "already_sent_same_deployment_event",
     "duplicate_same_event_shortlist",
     "duplicate_same_partnership_event_shortlist",
     "duplicate_same_product_launch_event_shortlist",
@@ -27,6 +28,7 @@ def render_run_audit_markdown(
     result: RadarRunResult,
     decision_rows: list[dict[str, Any]],
     source_audit_rows: list[dict[str, Any]] | None = None,
+    total_duration_seconds: float | None = None,
 ) -> str:
     skip_reason_counts = Counter(
         row["skip_reason"] for row in decision_rows if row.get("skip_reason")
@@ -55,6 +57,7 @@ def render_run_audit_markdown(
         f"- sent: `{result.sent_items}`",
         f"- send_skips: `{result.skipped_send_items}`",
         f"- failed_sources: `{result.failed_sources}`",
+        f"- duration_seconds: `{_sanitize_cell(total_duration_seconds) or 'not available'}`",
         "",
         "## Skip Reason Counts",
         "",
@@ -109,8 +112,8 @@ def render_run_audit_markdown(
             "",
             "## Source Failures",
             "",
-            "| Source ID | Source Name | Status/Error | Items Collected |",
-            "| --- | --- | --- | --- |",
+            "| Source ID | Source Name | Status/Error | Items Collected | Duration Seconds |",
+            "| --- | --- | --- | --- | --- |",
             "",
         ]
     )
@@ -120,26 +123,28 @@ def render_run_audit_markdown(
             source_name = _sanitize_cell(row.get("source_name"))
             status = _sanitize_cell(row.get("status"))
             items_collected = _sanitize_cell(row.get("items_collected"))
-            lines.append(f"| {source_id} | {source_name} | {status} | {items_collected} |")
+            duration_seconds = _sanitize_cell(row.get("duration_seconds"))
+            lines.append(f"| {source_id} | {source_name} | {status} | {items_collected} | {duration_seconds} |")
     else:
-        lines.append("| none | none | none | none |")
+        lines.append("| none | none | none | none | none |")
 
     lines.extend(
         [
             "",
             "## Source Collection Counts",
             "",
-            "| Source ID | Collected Items |",
-            "| --- | --- |",
+            "| Source ID | Collected Items | Duration Seconds |",
+            "| --- | --- | --- |",
         ]
     )
     if source_audit_rows:
         for row in source_audit_rows:
             source_id = _sanitize_cell(row.get("source_id"))
             items_collected = _sanitize_cell(row.get("items_collected"))
-            lines.append(f"| {source_id} | {items_collected} |")
+            duration_seconds = _sanitize_cell(row.get("duration_seconds"))
+            lines.append(f"| {source_id} | {items_collected} | {duration_seconds} |")
     else:
-        lines.append("| none | none |")
+        lines.append("| none | none | none |")
 
     return "\n".join(lines)
 
@@ -149,10 +154,14 @@ def write_run_audit_report(
     result: RadarRunResult,
     decision_rows: list[dict[str, Any]],
     source_audit_rows: list[dict[str, Any]] | None = None,
+    total_duration_seconds: float | None = None,
 ) -> Path:
     report_path = repo_root / "data" / f"radar-run-audit-{result.run_id}.md"
     report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(render_run_audit_markdown(result, decision_rows, source_audit_rows), encoding="utf-8")
+    report_path.write_text(
+        render_run_audit_markdown(result, decision_rows, source_audit_rows, total_duration_seconds),
+        encoding="utf-8",
+    )
     return report_path
 
 

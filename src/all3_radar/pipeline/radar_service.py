@@ -6,6 +6,7 @@ import logging
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+from time import perf_counter
 
 from all3_radar.config.loader import load_settings
 from all3_radar.delivery.telegram import TelegramSender, build_news_card
@@ -119,6 +120,7 @@ class RadarService:
         run_id = self.repository.create_pipeline_run(PipelineName.RADAR, _settings_snapshot(self.settings))
         adapters = build_adapters(fetch_text_fn=self.fetch_text_fn)
         now = datetime.now(timezone.utc)
+        run_started = perf_counter()
 
         contexts: list[CurrentRunContext] = []
         collected_count = 0
@@ -141,20 +143,24 @@ class RadarService:
                     )
                     continue
 
+                source_started = perf_counter()
                 try:
                     items = collect_from_source(source=source, adapters=adapters, collected_at=now)
                 except Exception as exc:
                     failed_sources += 1
+                    duration_seconds = round(perf_counter() - source_started, 3)
                     source_audit_rows.append(
                         {
                             "source_id": source.id,
                             "source_name": source.name,
                             "status": f"failed: {exc}",
                             "items_collected": 0,
+                            "duration_seconds": duration_seconds,
                         }
                     )
                     LOGGER.warning("Source collection failed: id=%s reason=%s", source.id, exc)
                     continue
+                duration_seconds = round(perf_counter() - source_started, 3)
                 LOGGER.info("Collected items from source: id=%s count=%s", source.id, len(items))
                 source_audit_rows.append(
                     {
@@ -162,6 +168,7 @@ class RadarService:
                         "source_name": source.name,
                         "status": "ok",
                         "items_collected": len(items),
+                        "duration_seconds": duration_seconds,
                     }
                 )
 
@@ -614,7 +621,13 @@ class RadarService:
             )
             try:
                 decision_rows = self.repository.list_radar_decision_details_for_run(run_id)
-                report_path = write_run_audit_report(self.repo_root, result, decision_rows, source_audit_rows)
+                report_path = write_run_audit_report(
+                    self.repo_root,
+                    result,
+                    decision_rows,
+                    source_audit_rows,
+                    round(perf_counter() - run_started, 3),
+                )
                 LOGGER.info("Radar run audit report written: %s", report_path)
             except Exception:
                 LOGGER.exception("Failed to write radar run audit report for run_id=%s", run_id)
