@@ -637,3 +637,33 @@ class RadarRepository:
                 (run_id,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def list_radar_decision_details_for_run(self, run_id: str) -> list[dict[str, Any]]:
+        with connect(self.database_path) as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                  ni.id AS normalized_item_id,
+                  ni.title,
+                  ni.source_id,
+                  ni.canonical_url,
+                  ri.url AS raw_url,
+                  ni.published_ts,
+                  rd.score,
+                  rd.freshness_status,
+                  rd.relevance_status,
+                  rd.send_status,
+                  rd.skip_reason,
+                  rd.created_at
+                FROM radar_decisions rd
+                JOIN normalized_items ni ON ni.id = rd.normalized_item_id
+                JOIN raw_items ri ON ri.id = ni.raw_item_id
+                WHERE ri.run_id = ?
+                ORDER BY
+                  CASE WHEN rd.send_status = 'sent' THEN 0 ELSE 1 END,
+                  COALESCE(rd.score, 0) DESC,
+                  ni.title
+                """,
+                (run_id,),
+            ).fetchall()
+        return [dict(row) for row in rows]

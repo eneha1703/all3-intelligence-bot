@@ -31,6 +31,7 @@ from all3_radar.pipeline.freshness import evaluate_freshness
 from all3_radar.pipeline.funding_sent_history import funding_key_from_candidate
 from all3_radar.pipeline.normalize import normalize_collected_item
 from all3_radar.pipeline.ranking import load_ranking_rules, rank_item
+from all3_radar.pipeline.run_audit_report import write_run_audit_report
 from all3_radar.pipeline.send_stage_dedupe import candidate_from_item, suppress_same_event_funding_duplicates
 from all3_radar.sources.base import FetchText
 from all3_radar.sources.registry import SourceRegistry, load_source_registry
@@ -558,6 +559,12 @@ class RadarService:
                     "dry_run": dry_run,
                 },
             )
+            try:
+                decision_rows = self.repository.list_radar_decision_details_for_run(run_id)
+                report_path = write_run_audit_report(self.repo_root, result, decision_rows)
+                LOGGER.info("Radar run audit report written: %s", report_path)
+            except Exception:
+                LOGGER.exception("Failed to write radar run audit report for run_id=%s", run_id)
             LOGGER.info("Radar run complete: %s", format_radar_run_summary(result))
             return result
         except Exception:

@@ -99,6 +99,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: radar-db-${{ github.run_id }}
-          path: data/all3_radar.db
+          path: |
+            data/all3_radar.db
+            data/radar-run-audit-*.md
           if-no-files-found: ignore
           retention-days: 7
