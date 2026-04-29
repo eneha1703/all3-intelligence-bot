@@ -15,6 +15,8 @@ from all3_radar.sources.base import FetchText
 from all3_radar.sources.rss import _clean_text, parse_published_timestamp
 
 ARTICLE_PATH_RE = re.compile(r"/industry-news/[^\"'#?]+/?$")
+ARTICLE_HREF_RE = re.compile(r'href=["\']([^"\']+)["\']', re.IGNORECASE)
+PAGINATION_PATH_RE = re.compile(r"/industry-news/page/\d+/?$")
 META_TAG_RE = re.compile(r'<meta\s+[^>]*(?:property|name)=["\']([^"\']+)["\'][^>]*content=["\']([^"\']+)["\']', re.IGNORECASE)
 TIME_TAG_RE = re.compile(r'<time[^>]*datetime=["\']([^"\']+)["\']', re.IGNORECASE)
 JSON_LD_RE = re.compile(r'<script[^>]*type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', re.IGNORECASE | re.DOTALL)
@@ -39,9 +41,30 @@ class _HrtListingParser(HTMLParser):
         href = dict(attrs).get("href")
         if not href:
             return
-        absolute = urljoin(self.base_url, href)
-        if ARTICLE_PATH_RE.search(urlparse(absolute).path) and absolute not in self.article_urls:
-            self.article_urls.append(absolute)
+        _append_article_url(self.article_urls, self.base_url, href)
+
+
+def _append_article_url(article_urls: list[str], base_url: str, href: str) -> None:
+    absolute = urljoin(base_url, href)
+    path = urlparse(absolute).path
+    if PAGINATION_PATH_RE.search(path):
+        return
+    if ARTICLE_PATH_RE.search(path) and absolute not in article_urls:
+        article_urls.append(absolute)
+
+
+def _extract_article_urls_from_listing_html(listing_html: str, base_url: str) -> list[str]:
+    parser = _HrtListingParser(base_url=base_url)
+    parser.feed(listing_html)
+    parser.close()
+    article_urls = list(parser.article_urls)
+    if article_urls:
+        return article_urls
+
+    # Fallback for malformed listing markup where HTMLParser misses usable anchors.
+    for href in ARTICLE_HREF_RE.findall(listing_html):
+        _append_article_url(article_urls, base_url, href)
+    return article_urls
 
 
 @dataclass
@@ -127,15 +150,13 @@ def parse_humanoid_robotics_listing(
     collected_at: datetime,
     fetch_text_fn: FetchText,
 ) -> list[CollectedRawItem]:
-    parser = _HrtListingParser(base_url=source.url)
-    parser.feed(listing_html)
-    parser.close()
+    article_urls = _extract_article_urls_from_listing_html(listing_html, source.url)
 
     article_limit = int(source.extra_config.get("article_limit", 20))
     items: list[CollectedRawItem] = []
     skipped_missing_dates = 0
 
-    for article_url in parser.article_urls[:article_limit]:
+    for article_url in article_urls[:article_limit]:
         article_html = fetch_text_fn(article_url)
         parsed = parse_humanoid_robotics_article(article_html)
         if parsed.published_ts is None:

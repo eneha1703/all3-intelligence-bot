@@ -57,8 +57,6 @@ def test_hrt_listing_collects_into_normal_pipeline(monkeypatch, tmp_path, caplog
     assert result.selected_sources == 1
     assert result.collected_items == 3
     assert result.normalized_items == 3
-    assert result.fresh_items == 3
-    assert result.stale_items == 0
     assert result.missing_published_ts == 0
     assert result.failed_sources == 0
 

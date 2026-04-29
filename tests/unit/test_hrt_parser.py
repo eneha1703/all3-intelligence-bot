@@ -75,6 +75,41 @@ def test_parse_hrt_listing_collects_article_pages() -> None:
     assert any("Sereact" in item.title for item in items)
 
 
+def test_parse_hrt_listing_collects_from_live_like_absolute_links_and_skips_pagination() -> None:
+    fixtures = Path(__file__).resolve().parents[1] / "fixtures"
+    listing_html = (fixtures / "hrt_listing_live_like.html").read_text(encoding="utf-8")
+    page_map = {
+        "https://humanoidroboticstechnology.com/industry-news/sereact-announces-110m-series-b-round/": (
+            fixtures / "hrt_sereact_article.html"
+        ).read_text(encoding="utf-8"),
+        "https://humanoidroboticstechnology.com/industry-news/generative-bionics-and-italdesign-enter-a-strategic-partnership/": (
+            fixtures / "hrt_generative_bionics_article.html"
+        ).read_text(encoding="utf-8"),
+    }
+
+    source = SourceDefinition(
+        **{
+            **_hrt_source().__dict__,
+            "url": "https://humanoidroboticstechnology.com/category/industry-news/",
+            "extra_config": {"article_limit": 2},
+        }
+    )
+
+    def fake_fetch(url: str) -> str:
+        return page_map[url]
+
+    items = parse_humanoid_robotics_listing(
+        listing_html=listing_html,
+        source=source,
+        collected_at=datetime(2026, 4, 27, tzinfo=timezone.utc),
+        fetch_text_fn=fake_fetch,
+    )
+
+    assert len(items) == 2
+    assert all("/industry-news/" in item.url for item in items)
+    assert all("/page/" not in item.url for item in items)
+
+
 def test_parse_hrt_listing_fails_without_trustworthy_article_dates() -> None:
     listing_html = """
     <html><body><a href="/industry-news/example-story/">Example story</a></body></html>
