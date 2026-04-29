@@ -53,6 +53,13 @@ class ClusterResult:
     published_by_event_id: dict[str, list[datetime | None]]
 
 
+@dataclass(frozen=True)
+class HistoricalCluster:
+    records: tuple[ClusterableRecord, ...]
+    order: int
+    canonical_event_id: str | None = None
+
+
 def _tokenize(text: str) -> list[str]:
     return [token for token in TOKEN_RE.findall(text.lower()) if token not in STOPWORDS and len(token) > 2]
 
@@ -119,13 +126,9 @@ def choose_current_run_representative(records: list[ClusterableRecord]) -> Clust
     return choose_cluster_representative(current_records)
 
 
-def cluster_records(
-    current_records: list[ClusterableRecord],
-    historical_records: list[ClusterableRecord],
-) -> ClusterResult:
+def _cluster_current_records(records: list[ClusterableRecord]) -> list[list[ClusterableRecord]]:
     clusters: list[list[ClusterableRecord]] = []
-
-    for record in [*historical_records, *current_records]:
+    for record in records:
         matched_cluster = None
         for cluster in clusters:
             if any(is_same_event(record, existing) for existing in cluster):
@@ -135,6 +138,72 @@ def cluster_records(
             clusters.append([record])
         else:
             matched_cluster.append(record)
+    return clusters
+
+
+def _group_historical_records(records: list[ClusterableRecord]) -> list[HistoricalCluster]:
+    grouped_records: dict[str, list[ClusterableRecord]] = {}
+    grouped_order: dict[str, int] = {}
+    ungrouped_clusters: list[HistoricalCluster] = []
+
+    for order, record in enumerate(records):
+        if record.canonical_event_id:
+            grouped_records.setdefault(record.canonical_event_id, []).append(record)
+            grouped_order.setdefault(record.canonical_event_id, order)
+            continue
+        ungrouped_clusters.append(
+            HistoricalCluster(records=(record,), order=order, canonical_event_id=None)
+        )
+
+    grouped_clusters = [
+        HistoricalCluster(
+            records=tuple(grouped_records[event_id]),
+            order=grouped_order[event_id],
+            canonical_event_id=event_id,
+        )
+        for event_id in grouped_records
+    ]
+    return sorted([*grouped_clusters, *ungrouped_clusters], key=lambda cluster: cluster.order)
+
+
+def _matches_historical_cluster(
+    current_cluster: list[ClusterableRecord],
+    historical_cluster: HistoricalCluster,
+) -> bool:
+    return any(
+        is_same_event(current_record, historical_record)
+        for current_record in current_cluster
+        for historical_record in historical_cluster.records
+    )
+
+
+def cluster_records(
+    current_records: list[ClusterableRecord],
+    historical_records: list[ClusterableRecord],
+) -> ClusterResult:
+    current_clusters = _cluster_current_records(current_records)
+    historical_clusters = _group_historical_records(historical_records)
+    matched_current_by_historical_order: dict[int, list[ClusterableRecord]] = defaultdict(list)
+    unmatched_current_clusters: list[list[ClusterableRecord]] = []
+
+    for current_cluster in current_clusters:
+        matched_historical_order = None
+        for historical_cluster in historical_clusters:
+            if _matches_historical_cluster(current_cluster, historical_cluster):
+                matched_historical_order = historical_cluster.order
+                break
+        if matched_historical_order is None:
+            unmatched_current_clusters.append(current_cluster)
+        else:
+            matched_current_by_historical_order[matched_historical_order].extend(current_cluster)
+
+    clusters: list[list[ClusterableRecord]] = []
+    for historical_cluster in historical_clusters:
+        matched_current_records = matched_current_by_historical_order.get(historical_cluster.order, [])
+        if not matched_current_records:
+            continue
+        clusters.append([*historical_cluster.records, *matched_current_records])
+    clusters.extend(unmatched_current_clusters)
 
     assignments: dict[str, ClusterAssignment] = {}
     members_by_event_id: dict[str, list[str]] = defaultdict(list)
@@ -142,9 +211,14 @@ def cluster_records(
     for cluster in clusters:
         cluster_representative = choose_cluster_representative(cluster)
         current_representative = choose_current_run_representative(cluster)
+        existing_canonical_event_id = next(
+            (record.canonical_event_id for record in cluster if record.canonical_event_id),
+            None,
+        )
         cluster_event_id = (
-            cluster_representative.canonical_event_id
-            or current_representative.canonical_event_id if current_representative else None
+            existing_canonical_event_id
+            or cluster_representative.canonical_event_id
+            or (current_representative.canonical_event_id if current_representative else None)
         )
         cluster_event_id = cluster_event_id or uuid.uuid4().hex
         cluster_title = cluster_representative.item.title
