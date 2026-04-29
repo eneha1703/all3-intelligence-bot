@@ -10,6 +10,7 @@ build/
 .venv/
 .env
 data/*.db
+data/*.db-journal
 data/*.sqlite
 data/*.sqlite3
 data/runtime/
