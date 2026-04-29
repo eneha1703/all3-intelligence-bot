@@ -31,6 +31,10 @@ on:
           - "true"
           - "false"
 
+permissions:
+  contents: read
+  actions: read
+
 jobs:
   replay:
     runs-on: ubuntu-latest
@@ -53,7 +57,7 @@ jobs:
         run: pip install -e .[dev]
 
       - name: Ensure replay directories exist
-        run: mkdir -p data replay-source-artifact
+        run: mkdir -p data/source-artifact
 
       - name: Download source DB snapshot artifact
         uses: actions/download-artifact@v4
@@ -62,16 +66,16 @@ jobs:
           repository: ${{ github.repository }}
           run-id: ${{ inputs.source_run_id }}
           name: radar-db-${{ inputs.source_run_id }}
-          path: replay-source-artifact
+          path: data/source-artifact
 
       - name: Prepare isolated replay DB
         run: |
-          if [ ! -f replay-source-artifact/all3_radar.db ]; then
-            echo "Expected replay-source-artifact/all3_radar.db from radar-db-${{ inputs.source_run_id }}"
-            ls -R replay-source-artifact || true
+          if [ ! -f data/source-artifact/all3_radar.db ]; then
+            echo "Expected data/source-artifact/all3_radar.db from radar-db-${{ inputs.source_run_id }}"
+            ls -R data/source-artifact || true
             exit 1
           fi
-          cp replay-source-artifact/all3_radar.db data/radar_replay.db
+          cp data/source-artifact/all3_radar.db data/radar_replay.db
           ls -lh data/radar_replay.db
 
       - name: Run replay window
