@@ -152,3 +152,114 @@ def test_richer_direct_event_framing_wins_when_scores_are_close() -> None:
 
     assert suppressed[0].suppressed_item_id == "clickbait"
     assert suppressed[0].representative_item_id == "direct"
+
+
+def _partnership_candidate(
+    item_id: str,
+    title: str,
+    preview: str,
+    score: int = 80,
+    published_hours_ago: int = 1,
+    partnership_event: bool = True,
+) -> SendStageCandidate:
+    return SendStageCandidate(
+        normalized_item_id=item_id,
+        canonical_url=f"https://example.com/{item_id}",
+        title=title,
+        text_preview=preview,
+        published_ts=datetime.now(timezone.utc) - timedelta(hours=published_hours_ago),
+        score=score,
+        event_flags={"partnership_event": partnership_event},
+    )
+
+
+def test_partnership_duplicates_collapse_to_one_representative() -> None:
+    left = _partnership_candidate(
+        "a",
+        "Flex and Teradyne Robotics expand partnership to scale intelligent automation across global manufacturing",
+        "Flex and Teradyne Robotics are expanding their collaboration across global manufacturing automation.",
+        score=86,
+    )
+    right = _partnership_candidate(
+        "b",
+        "Teradyne Robotics partners with Flex to scale intelligent automation across global manufacturing",
+        "Teradyne Robotics and Flex are expanding a strategic partnership for manufacturing automation.",
+        score=91,
+    )
+
+    suppressed = suppress_same_event_funding_duplicates([left, right])
+
+    assert suppressed == [
+        SuppressedDuplicate(
+            suppressed_item_id="a",
+            representative_item_id="b",
+            reason="duplicate_same_partnership_event_shortlist",
+        )
+    ]
+
+
+def test_same_company_different_partner_does_not_collapse_for_partnerships() -> None:
+    left = _partnership_candidate(
+        "a",
+        "NEURA Robotics partners with Dassault Systemes on virtual twins",
+        "NEURA Robotics and Dassault Systemes are partnering on virtual twins.",
+    )
+    right = _partnership_candidate(
+        "b",
+        "NEURA Robotics partners with AWS on physical AI tooling",
+        "NEURA Robotics and AWS are partnering on physical AI tooling.",
+    )
+
+    assert suppress_same_event_funding_duplicates([left, right]) == []
+
+
+def test_same_entities_without_partnership_flag_do_not_collapse() -> None:
+    left = _partnership_candidate(
+        "a",
+        "Flex and Teradyne Robotics expand partnership to scale intelligent automation",
+        "Flex and Teradyne Robotics are expanding their collaboration.",
+        partnership_event=False,
+    )
+    right = _partnership_candidate(
+        "b",
+        "Teradyne Robotics partners with Flex to scale intelligent automation",
+        "Teradyne Robotics and Flex are expanding a strategic partnership.",
+        partnership_event=False,
+    )
+
+    assert suppress_same_event_funding_duplicates([left, right]) == []
+
+
+def test_ambiguous_partnership_headline_without_two_entities_does_not_collapse() -> None:
+    left = _partnership_candidate(
+        "a",
+        "Strategic partnership expands intelligent automation efforts",
+        "A strategic partnership expands automation efforts across manufacturing.",
+    )
+    right = _partnership_candidate(
+        "b",
+        "Partnership supports broader manufacturing automation rollout",
+        "The collaboration supports automation rollout across manufacturing.",
+    )
+
+    assert suppress_same_event_funding_duplicates([left, right]) == []
+
+
+def test_higher_score_wins_for_same_partnership_event() -> None:
+    lower = _partnership_candidate(
+        "low",
+        "Flex and Teradyne Robotics expand partnership across manufacturing",
+        "Flex and Teradyne Robotics are expanding their collaboration.",
+        score=84,
+    )
+    higher = _partnership_candidate(
+        "high",
+        "Teradyne Robotics partners with Flex to scale intelligent automation across global manufacturing",
+        "Teradyne Robotics and Flex are expanding a strategic partnership for manufacturing automation.",
+        score=93,
+    )
+
+    suppressed = suppress_same_event_funding_duplicates([lower, higher])
+
+    assert suppressed[0].suppressed_item_id == "low"
+    assert suppressed[0].representative_item_id == "high"

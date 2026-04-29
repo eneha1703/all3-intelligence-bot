@@ -602,6 +602,129 @@ def test_radar_late_send_stage_dedupes_same_funding_event_without_base_cluster_m
     assert "Late send-stage duplicate suppression" in caplog.text
 
 
+def test_radar_late_send_stage_dedupes_same_partnership_event_without_base_cluster_merge(
+    monkeypatch, tmp_path, caplog
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "radar_late_send_stage_partnership_dedupe.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+
+    now = datetime.now(timezone.utc)
+    feed_a = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Manufacturing supplier Flex broadens factory automation tie-up with Teradyne Robotics</title>
+    <link>https://direct-a.example/flex-direct</link>
+    <description>Flex and Teradyne Robotics are expanding their collaboration to scale intelligent automation across global manufacturing.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=1))}</pubDate>
+    <guid>a1</guid>
+  </item>
+</channel></rss>"""
+    feed_b = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Teradyne Robotics partners with Flex to scale intelligent automation across global manufacturing</title>
+    <link>https://direct-b.example/flex-partnered</link>
+    <description>Teradyne Robotics and Flex are expanding a strategic partnership for intelligent automation in manufacturing.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=2))}</pubDate>
+    <guid>b1</guid>
+  </item>
+</channel></rss>"""
+
+    registry = SourceRegistry(
+        (
+            SourceDefinition(
+                id="direct_a",
+                name="Direct A",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://direct-a.example/feed.xml",
+                priority=80,
+                tags=("industrial", "robotics"),
+            ),
+            SourceDefinition(
+                id="direct_b",
+                name="Direct B",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://direct-b.example/feed.xml",
+                priority=80,
+                tags=("industrial", "robotics"),
+            ),
+        )
+    )
+
+    class FakeGeminiClient:
+        is_available = True
+
+        def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
+            return ("The partnership expands intelligent automation across manufacturing workflows.", None)
+
+    class FakeTelegramSender:
+        def __init__(self) -> None:
+            self.sent_cards = []
+
+        def send_card(self, card):
+            self.sent_cards.append(card)
+            return [
+                TelegramDelivery(
+                    chat_id="123",
+                    status="sent",
+                    telegram_message_id="msg-1",
+                    error_text=None,
+                    payload_text=card.text,
+                )
+            ]
+
+    feeds = {
+        "https://direct-a.example/feed.xml": feed_a,
+        "https://direct-b.example/feed.xml": feed_b,
+    }
+
+    def fake_fetch_text(url: str) -> str:
+        return feeds[url]
+
+    fake_sender = FakeTelegramSender()
+    caplog.set_level("INFO")
+    service = RadarService(
+        repo_root=repo_root,
+        registry=registry,
+        fetch_text_fn=fake_fetch_text,
+        gemini_client=FakeGeminiClient(),
+        telegram_sender=fake_sender,
+    )
+    result = service.run(dry_run=False)
+
+    assert result.collected_items == 2
+    assert result.canonical_events == 2
+    assert result.shortlisted_items == 2
+    assert result.sent_items == 1
+    assert result.skipped_send_items == 1
+    assert len(fake_sender.sent_cards) == 1
+
+    with sqlite3.connect(db_path) as connection:
+        suppressed_row = connection.execute(
+            """
+            SELECT rd.send_status, rd.skip_reason
+            FROM radar_decisions rd
+            JOIN normalized_items ni ON ni.id = rd.normalized_item_id
+            WHERE ni.title = ?
+            """,
+            ("Manufacturing supplier Flex broadens factory automation tie-up with Teradyne Robotics",),
+        ).fetchone()
+
+    assert suppressed_row == ("skip", "duplicate_same_partnership_event_shortlist")
+    assert "Late send-stage duplicate suppression" in caplog.text
+
+
 def test_radar_does_not_resend_same_funding_event_across_runs_with_different_url_and_event_id(
     monkeypatch, tmp_path, caplog
 ) -> None:

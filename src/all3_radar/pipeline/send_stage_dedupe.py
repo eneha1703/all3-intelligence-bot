@@ -10,17 +10,31 @@ from typing import Mapping, Sequence
 from all3_radar.domain.models import RankedDecision, StoredNormalizedItem
 
 FUNDING_VERB_RE = re.compile(r"\b(raises?|raised|lands?|landed|secures?|secured|bags?|bagged)\b", re.IGNORECASE)
+ENTITY_RE = r"[A-Z][A-Za-z0-9&.\-]*(?:\s+[A-Z][A-Za-z0-9&.\-]*){0,3}"
+PARTNERSHIP_ENTITY_RE = r"[A-Z][A-Za-z0-9&\-]*(?:\s+[A-Z][A-Za-z0-9&\-]*){0,3}"
 DIRECT_FUNDING_HEADLINE_RE = re.compile(
-    r"^(?P<entity>[A-Z][A-Za-z0-9&.\-]*(?:\s+[A-Z][A-Za-z0-9&.\-]*){0,3})\s+"
+    rf"^(?P<entity>{ENTITY_RE})\s+"
     r"(?:has\s+)?(?:just\s+)?(?:raises?|raised|lands?|landed|secures?|secured|bags?|bagged)\b"
 )
 APPOSITIVE_FUNDING_RE = re.compile(
-    r"(?P<entity>[A-Z][A-Za-z0-9&.\-]*(?:\s+[A-Z][A-Za-z0-9&.\-]*){0,3}),\s+"
+    rf"(?P<entity>{ENTITY_RE}),\s+"
     r"(?:an?|the)\s+[^.]{0,120}?\s+(?:has\s+)?(?:just\s+)?"
     r"(?:raises?|raised|lands?|landed|secures?|secured|bags?|bagged)\b"
 )
 STARTUP_ENTITY_RE = re.compile(
-    r"\b(?:startup|company|firm)\s+(?P<entity>[A-Z][A-Za-z0-9&.\-]*(?:\s+[A-Z][A-Za-z0-9&.\-]*){0,3})\b"
+    rf"\b(?:startup|company|firm)\s+(?P<entity>{ENTITY_RE})\b"
+)
+PAIR_PARTNERSHIP_RE = re.compile(
+    rf"(?P<left>{PARTNERSHIP_ENTITY_RE})\s+and\s+(?P<right>{PARTNERSHIP_ENTITY_RE})\s+"
+    r"(?:(?i:is|are)\s+)?"
+    r"(?:(?i:enter|enters|entered|expand|expands|expanded|expanding)\s+(?:their\s+|a\s+)?)?"
+    r"(?:(?i:strategic|global|broader)\s+)?"
+    r"(?P<event>(?i:partnership|collaboration|partner|partners|partnered|partnering))\b",
+)
+WITH_PARTNERSHIP_RE = re.compile(
+    rf"(?P<left>{PARTNERSHIP_ENTITY_RE})\s+"
+    r"(?P<event>(?i:partners with|partnered with|partnering with|collaborates with|collaborated with|collaborating with))\s+"
+    rf"(?P<right>{PARTNERSHIP_ENTITY_RE})",
 )
 AMOUNT_RE = re.compile(
     r"(?P<currency>[$€£])\s?(?P<value>\d+(?:\.\d+)?)\s?(?P<scale>m|mn|mm|million|b|bn|billion)?\b",
@@ -96,7 +110,7 @@ def suppress_same_event_funding_duplicates(
         return []
 
     parent = {candidate.normalized_item_id: candidate.normalized_item_id for candidate in candidate_list}
-    by_id = {candidate.normalized_item_id: candidate for candidate in candidate_list}
+    group_reasons = {candidate.normalized_item_id: None for candidate in candidate_list}
 
     def find(item_id: str) -> str:
         while parent[item_id] != item_id:
@@ -104,16 +118,25 @@ def suppress_same_event_funding_duplicates(
             item_id = parent[item_id]
         return item_id
 
-    def union(left_id: str, right_id: str) -> None:
+    def union(left_id: str, right_id: str, reason: str) -> None:
         left_root = find(left_id)
         right_root = find(right_id)
         if left_root != right_root:
             parent[right_root] = left_root
+            group_reasons[left_root] = group_reasons[left_root] or group_reasons[right_root] or reason
+        else:
+            group_reasons[left_root] = group_reasons[left_root] or reason
 
     for index, left in enumerate(candidate_list):
         for right in candidate_list[index + 1 :]:
             if _is_same_funding_event(left, right):
-                union(left.normalized_item_id, right.normalized_item_id)
+                union(left.normalized_item_id, right.normalized_item_id, "duplicate_same_event_shortlist")
+            elif _is_same_partnership_event(left, right):
+                union(
+                    left.normalized_item_id,
+                    right.normalized_item_id,
+                    "duplicate_same_partnership_event_shortlist",
+                )
 
     grouped: dict[str, list[SendStageCandidate]] = {}
     for candidate in candidate_list:
@@ -124,6 +147,7 @@ def suppress_same_event_funding_duplicates(
         if len(group) < 2:
             continue
         representative = _choose_representative(group, score_tie_window=score_tie_window)
+        reason = group_reasons.get(find(representative.normalized_item_id)) or "duplicate_same_event_shortlist"
         for candidate in group:
             if candidate.normalized_item_id == representative.normalized_item_id:
                 continue
@@ -131,7 +155,7 @@ def suppress_same_event_funding_duplicates(
                 SuppressedDuplicate(
                     suppressed_item_id=candidate.normalized_item_id,
                     representative_item_id=representative.normalized_item_id,
-                    reason="duplicate_same_event_shortlist",
+                    reason=reason,
                 )
             )
     return sorted(suppressed, key=lambda item: item.suppressed_item_id)
@@ -208,6 +232,8 @@ def _compare_candidates(left: SendStageCandidate, right: SendStageCandidate, sco
 
 
 def _evidence_tuple(candidate: SendStageCandidate) -> tuple[int, int, int, int, int, int]:
+    if candidate.event_flags.get("partnership_event"):
+        return _partnership_evidence_tuple(candidate)
     text = _candidate_text(candidate)
     return (
         int(_extract_primary_entity(text) is not None),
@@ -219,8 +245,40 @@ def _evidence_tuple(candidate: SendStageCandidate) -> tuple[int, int, int, int, 
     )
 
 
+def _partnership_evidence_tuple(candidate: SendStageCandidate) -> tuple[int, int, int, int, int, int]:
+    text = _candidate_text(candidate)
+    return (
+        int(_extract_partnership_entities(text) is not None),
+        int(_has_industrial_relevance(text)),
+        _direct_partnership_framing_score(candidate.title),
+        int(bool(candidate.text_preview)),
+        0,
+        0,
+    )
+
+
 def _candidate_text(candidate: SendStageCandidate) -> str:
-    return f"{candidate.title} {candidate.text_preview or ''}".strip()
+    if candidate.text_preview:
+        return f"{candidate.title}. {candidate.text_preview}".strip()
+    return candidate.title.strip()
+
+
+def _is_same_partnership_event(left: SendStageCandidate, right: SendStageCandidate) -> bool:
+    if not (left.event_flags.get("partnership_event") and right.event_flags.get("partnership_event")):
+        return False
+
+    left_date = left.published_ts.date() if left.published_ts else None
+    right_date = right.published_ts.date() if right.published_ts else None
+    if left_date is None or right_date is None:
+        return False
+    if abs((left_date - right_date).days) > 3:
+        return False
+
+    left_pair = _extract_partnership_entities(_candidate_text(left))
+    right_pair = _extract_partnership_entities(_candidate_text(right))
+    if left_pair is None or right_pair is None:
+        return False
+    return left_pair == right_pair
 
 
 def _extract_primary_entity(text: str) -> str | None:
@@ -238,6 +296,20 @@ def _normalize_entity(raw: str) -> str | None:
     if not cleaned or cleaned in {"the", "a", "an", "startup", "company", "firm"}:
         return None
     return re.sub(r"\s+", " ", cleaned)
+
+
+def _extract_partnership_entities(text: str) -> tuple[str, str] | None:
+    pairs: set[tuple[str, str]] = set()
+    for pattern in (PAIR_PARTNERSHIP_RE, WITH_PARTNERSHIP_RE):
+        for match in pattern.finditer(text):
+            left = _normalize_entity(match.group("left"))
+            right = _normalize_entity(match.group("right"))
+            if not left or not right or left == right:
+                continue
+            pairs.add(tuple(sorted((left, right))))
+    if len(pairs) != 1:
+        return None
+    return next(iter(pairs))
 
 
 def _extract_amount(text: str) -> tuple[str, str, str] | None:
@@ -290,6 +362,18 @@ def _direct_event_framing_score(title: str) -> int:
     if DIRECT_FUNDING_HEADLINE_RE.search(title):
         score += 2
     elif FUNDING_VERB_RE.search(title):
+        score += 1
+    if any(phrase in lowered for phrase in CLICKBAIT_PHRASES):
+        score -= 1
+    return score
+
+
+def _direct_partnership_framing_score(title: str) -> int:
+    lowered = title.lower()
+    score = 0
+    if PAIR_PARTNERSHIP_RE.search(title) or WITH_PARTNERSHIP_RE.search(title):
+        score += 2
+    elif any(term in lowered for term in ("partnership", "partners with", "partnered with", "collaboration")):
         score += 1
     if any(phrase in lowered for phrase in CLICKBAIT_PHRASES):
         score -= 1
