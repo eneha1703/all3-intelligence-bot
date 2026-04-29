@@ -22,6 +22,10 @@ def build_parser() -> argparse.ArgumentParser:
     replay_parser.add_argument("--end-date", required=True, help="Replay window end date in YYYY-MM-DD")
     replay_parser.add_argument("--label", required=True, help="Replay label to prepend to Telegram messages")
     replay_parser.add_argument(
+        "--allowlist-urls-file",
+        help="Optional text file with one allowlisted URL per line. When set, replay only sends matched URLs.",
+    )
+    replay_parser.add_argument(
         "--send",
         action="store_true",
         help="Actually send replay cards to Telegram instead of only logging candidates",
@@ -61,6 +65,7 @@ def main() -> int:
             end_date=args.end_date,
             replay_label=args.label,
             send=args.send,
+            allowlist_urls_file=Path(args.allowlist_urls_file) if args.allowlist_urls_file else None,
         )
         print(
             f"Replay run complete: run_id={result.run_id} window={args.start_date}..{args.end_date} "

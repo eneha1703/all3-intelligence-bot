@@ -19,8 +19,13 @@ on:
         type: string
       replay_label:
         description: "Label prepended to each replay Telegram message"
-        required: true
-        default: "[REPLAY / MANUAL VALIDATION 2026-04-24..2026-04-29]"
+        required: false
+        default: ""
+        type: string
+      allowlist_urls:
+        description: "Optional multiline allowlist of replay URLs; only matched URLs will be sent or dry-run logged"
+        required: false
+        default: ""
         type: string
       send_messages:
         description: "Send replay messages to Telegram"
@@ -78,6 +83,13 @@ jobs:
           cp data/source-artifact/all3_radar.db data/radar_replay.db
           ls -lh data/radar_replay.db
 
+      - name: Materialize replay allowlist file
+        run: |
+          cat <<'EOF' > data/replay_allowlist_urls.txt
+          ${{ inputs.allowlist_urls }}
+          EOF
+          ls -lh data/replay_allowlist_urls.txt
+
       - name: Run replay window
         run: |
           if [ "${{ inputs.send_messages }}" = "true" ]; then
@@ -89,6 +101,7 @@ jobs:
             --start-date "${{ inputs.start_date }}" \
             --end-date "${{ inputs.end_date }}" \
             --label "${{ inputs.replay_label }}" \
+            --allowlist-urls-file "data/replay_allowlist_urls.txt" \
             ${SEND_FLAG}
 
       - name: Upload replay DB snapshot

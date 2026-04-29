@@ -475,6 +475,22 @@ class RadarRepository:
             ).fetchall()
         return [self._row_to_stored_item(row) for row in rows]
 
+    def load_raw_urls_for_items(self, normalized_item_ids: list[str]) -> dict[str, str]:
+        if not normalized_item_ids:
+            return {}
+        placeholders = ",".join("?" for _ in normalized_item_ids)
+        with connect(self.database_path) as connection:
+            rows = connection.execute(
+                f"""
+                SELECT ni.id AS normalized_item_id, ri.url AS raw_url
+                FROM normalized_items ni
+                JOIN raw_items ri ON ri.id = ni.raw_item_id
+                WHERE ni.id IN ({placeholders})
+                """,
+                tuple(normalized_item_ids),
+            ).fetchall()
+        return {str(row["normalized_item_id"]): str(row["raw_url"]) for row in rows if row["raw_url"]}
+
     def record_telegram_delivery(
         self,
         run_id: str,
