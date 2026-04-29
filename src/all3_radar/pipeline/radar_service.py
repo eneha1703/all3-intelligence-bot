@@ -128,6 +128,7 @@ class RadarService:
         sent_count = 0
         skipped_send_count = 0
         failed_sources = 0
+        source_audit_rows: list[dict[str, object]] = []
 
         try:
             for source in selected_sources:
@@ -143,9 +144,25 @@ class RadarService:
                     items = collect_from_source(source=source, adapters=adapters, collected_at=now)
                 except Exception as exc:
                     failed_sources += 1
+                    source_audit_rows.append(
+                        {
+                            "source_id": source.id,
+                            "source_name": source.name,
+                            "status": f"failed: {exc}",
+                            "items_collected": 0,
+                        }
+                    )
                     LOGGER.warning("Source collection failed: id=%s reason=%s", source.id, exc)
                     continue
                 LOGGER.info("Collected items from source: id=%s count=%s", source.id, len(items))
+                source_audit_rows.append(
+                    {
+                        "source_id": source.id,
+                        "source_name": source.name,
+                        "status": "ok",
+                        "items_collected": len(items),
+                    }
+                )
 
                 source_normalized_count = 0
                 for item in items:
@@ -561,7 +578,7 @@ class RadarService:
             )
             try:
                 decision_rows = self.repository.list_radar_decision_details_for_run(run_id)
-                report_path = write_run_audit_report(self.repo_root, result, decision_rows)
+                report_path = write_run_audit_report(self.repo_root, result, decision_rows, source_audit_rows)
                 LOGGER.info("Radar run audit report written: %s", report_path)
             except Exception:
                 LOGGER.exception("Failed to write radar run audit report for run_id=%s", run_id)

@@ -57,8 +57,22 @@ def test_render_run_audit_markdown_includes_summary_skip_counts_and_sent_items(m
             "skip_reason": "weak_or_empty_telegram_card",
         },
     ]
+    source_audit_rows = [
+        {
+            "source_id": "source-a",
+            "source_name": "Source A",
+            "status": "ok",
+            "items_collected": 4,
+        },
+        {
+            "source_id": "source-f",
+            "source_name": "Source F",
+            "status": "failed: timeout",
+            "items_collected": 0,
+        },
+    ]
 
-    markdown = render_run_audit_markdown(result, decision_rows)
+    markdown = render_run_audit_markdown(result, decision_rows, source_audit_rows)
 
     assert "# News Radar Run Audit" in markdown
     assert "- pipeline_run_id: `run-1`" in markdown
@@ -73,4 +87,6 @@ def test_render_run_audit_markdown_includes_summary_skip_counts_and_sent_items(m
     assert "- `weak_or_empty_telegram_card`: `1`" in markdown
     assert "| Story A | source-a | https://example.com/a |" in markdown
     assert "| Story B | source-b | https://example.com/b |" in markdown
-    assert "- not included yet" in markdown
+    assert "| source-f | Source F | failed: timeout | 0 |" in markdown
+    assert "| source-a | 4 |" in markdown
+    assert "| source-f | 0 |" in markdown

@@ -23,11 +23,17 @@ _SEND_PROBLEM_SKIP_REASONS = (
 )
 
 
-def render_run_audit_markdown(result: RadarRunResult, decision_rows: list[dict[str, Any]]) -> str:
+def render_run_audit_markdown(
+    result: RadarRunResult,
+    decision_rows: list[dict[str, Any]],
+    source_audit_rows: list[dict[str, Any]] | None = None,
+) -> str:
     skip_reason_counts = Counter(
         row["skip_reason"] for row in decision_rows if row.get("skip_reason")
     )
     sent_rows = [row for row in decision_rows if row.get("send_status") == "sent"]
+    source_audit_rows = source_audit_rows or []
+    failed_source_rows = [row for row in source_audit_rows if row.get("status") != "ok"]
     commit_sha = os.getenv("GITHUB_SHA") or "not available"
     github_run_id = os.getenv("GITHUB_RUN_ID")
     artifact_reference = f"radar-db-{github_run_id}" if github_run_id else "not available"
@@ -103,17 +109,50 @@ def render_run_audit_markdown(result: RadarRunResult, decision_rows: list[dict[s
             "",
             "## Source Failures",
             "",
-            "- not included yet",
+            "| Source ID | Source Name | Status/Error | Items Collected |",
+            "| --- | --- | --- | --- |",
             "",
         ]
     )
+    if failed_source_rows:
+        for row in failed_source_rows:
+            source_id = _sanitize_cell(row.get("source_id"))
+            source_name = _sanitize_cell(row.get("source_name"))
+            status = _sanitize_cell(row.get("status"))
+            items_collected = _sanitize_cell(row.get("items_collected"))
+            lines.append(f"| {source_id} | {source_name} | {status} | {items_collected} |")
+    else:
+        lines.append("| none | none | none | none |")
+
+    lines.extend(
+        [
+            "",
+            "## Source Collection Counts",
+            "",
+            "| Source ID | Collected Items |",
+            "| --- | --- |",
+        ]
+    )
+    if source_audit_rows:
+        for row in source_audit_rows:
+            source_id = _sanitize_cell(row.get("source_id"))
+            items_collected = _sanitize_cell(row.get("items_collected"))
+            lines.append(f"| {source_id} | {items_collected} |")
+    else:
+        lines.append("| none | none |")
+
     return "\n".join(lines)
 
 
-def write_run_audit_report(repo_root: Path, result: RadarRunResult, decision_rows: list[dict[str, Any]]) -> Path:
+def write_run_audit_report(
+    repo_root: Path,
+    result: RadarRunResult,
+    decision_rows: list[dict[str, Any]],
+    source_audit_rows: list[dict[str, Any]] | None = None,
+) -> Path:
     report_path = repo_root / "data" / f"radar-run-audit-{result.run_id}.md"
     report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(render_run_audit_markdown(result, decision_rows), encoding="utf-8")
+    report_path.write_text(render_run_audit_markdown(result, decision_rows, source_audit_rows), encoding="utf-8")
     return report_path
 
 
