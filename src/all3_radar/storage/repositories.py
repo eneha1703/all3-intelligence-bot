@@ -19,6 +19,7 @@ from all3_radar.domain.models import (
     SourceDefinition,
     StoredNormalizedItem,
 )
+from all3_radar.pipeline.funding_sent_history import FundingSemanticKey, funding_key_from_text, same_funding_event
 from all3_radar.storage.db import connect
 
 
@@ -456,6 +457,60 @@ class RadarRepository:
                 (canonical_url,),
             ).fetchone()
         return bool(row)
+
+    def find_sent_alert_for_same_funding_event(self, semantic_key: FundingSemanticKey) -> dict[str, Any] | None:
+        start_date = semantic_key.published_date.isoformat()
+        end_date = semantic_key.published_date.isoformat()
+        with connect(self.database_path) as connection:
+            rows = connection.execute(
+                """
+                SELECT td.normalized_item_id,
+                       td.canonical_event_id,
+                       td.created_at AS sent_at,
+                       ni.canonical_url,
+                       ni.title,
+                       ni.text_preview,
+                       ni.published_ts,
+                       ri.url AS raw_url,
+                       rd.signals_json
+                FROM telegram_deliveries td
+                JOIN normalized_items ni ON ni.id = td.normalized_item_id
+                LEFT JOIN raw_items ri ON ri.id = ni.raw_item_id
+                LEFT JOIN radar_decisions rd ON rd.normalized_item_id = ni.id
+                WHERE td.bot_kind = 'alert'
+                  AND td.status = 'sent'
+                  AND ni.published_ts IS NOT NULL
+                  AND date(ni.published_ts) >= date(?, '-3 days')
+                  AND date(ni.published_ts) <= date(?, '+3 days')
+                ORDER BY td.created_at DESC, ni.published_ts DESC, td.normalized_item_id ASC
+                """,
+                (start_date, end_date),
+            ).fetchall()
+
+        for row in rows:
+            signals = json.loads(row["signals_json"] or "{}")
+            event_flags = signals.get("event_flags", {})
+            if not isinstance(event_flags, dict):
+                event_flags = {}
+            previous_key = funding_key_from_text(
+                title=str(row["title"]),
+                preview=str(row["text_preview"]) if row["text_preview"] else None,
+                published_ts=datetime.fromisoformat(str(row["published_ts"])) if row["published_ts"] else None,
+                event_flags=event_flags,
+            )
+            if previous_key is None:
+                continue
+            if same_funding_event(semantic_key, previous_key):
+                return {
+                    "normalized_item_id": str(row["normalized_item_id"]),
+                    "canonical_event_id": str(row["canonical_event_id"]) if row["canonical_event_id"] else None,
+                    "canonical_url": str(row["canonical_url"]),
+                    "raw_url": str(row["raw_url"]) if row["raw_url"] else None,
+                    "title": str(row["title"]),
+                    "published_ts": str(row["published_ts"]),
+                    "sent_at": str(row["sent_at"]),
+                }
+        return None
 
     def load_items_for_published_window(self, start_date: str, end_date: str) -> list[StoredNormalizedItem]:
         with connect(self.database_path) as connection:

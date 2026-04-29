@@ -600,3 +600,125 @@ def test_radar_late_send_stage_dedupes_same_funding_event_without_base_cluster_m
 
     assert suppressed_row == ("skip", "duplicate_same_event_shortlist")
     assert "Late send-stage duplicate suppression" in caplog.text
+
+
+def test_radar_does_not_resend_same_funding_event_across_runs_with_different_url_and_event_id(
+    monkeypatch, tmp_path, caplog
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "radar_repeat_semantic_funding.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+
+    now = datetime.now(timezone.utc)
+    first_feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>The founders behind a $1.5B food delivery exit just raised $25M from RTP Global for a construction robotics startup</title>
+    <link>https://direct-a.example/all3-clickbait</link>
+    <description>All3, a construction robotics company, has raised $25 million in a seed round led by RTP Global to expand its robotic construction platform.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=3))}</pubDate>
+    <guid>a1</guid>
+  </item>
+</channel></rss>"""
+    second_feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>All3 raises $25M to boost construction productivity with robotics and AI</title>
+    <link>https://direct-b.example/all3-direct</link>
+    <description>All3 has raised $25 million in a seed round led by RTP Global to scale its robotic construction platform for jobsite productivity.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=1))}</pubDate>
+    <guid>b1</guid>
+  </item>
+</channel></rss>"""
+
+    registry = SourceRegistry(
+        (
+            SourceDefinition(
+                id="direct_a",
+                name="Direct A",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://direct-a.example/feed.xml",
+                priority=80,
+                tags=("construction", "robotics"),
+            ),
+            SourceDefinition(
+                id="direct_b",
+                name="Direct B",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://direct-b.example/feed.xml",
+                priority=80,
+                tags=("construction", "robotics"),
+            ),
+        )
+    )
+
+    class FakeGeminiClient:
+        is_available = True
+
+        def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
+            return ("The round supports scaling construction robotics deployment.", None)
+
+    class FakeTelegramSender:
+        def __init__(self) -> None:
+            self.sent_cards = []
+
+        def send_card(self, card):
+            self.sent_cards.append(card)
+            return [
+                TelegramDelivery(
+                    chat_id="123",
+                    status="sent",
+                    telegram_message_id="msg-1",
+                    error_text=None,
+                    payload_text=card.text,
+                )
+            ]
+
+    feeds = {
+        "https://direct-a.example/feed.xml": first_feed,
+        "https://direct-b.example/feed.xml": second_feed,
+    }
+
+    def fake_fetch_text(url: str) -> str:
+        return feeds[url]
+
+    fake_sender = FakeTelegramSender()
+    caplog.set_level("INFO")
+    service = RadarService(
+        repo_root=repo_root,
+        registry=registry,
+        fetch_text_fn=fake_fetch_text,
+        gemini_client=FakeGeminiClient(),
+        telegram_sender=fake_sender,
+    )
+
+    first_result = service.run(source_id="direct_a", dry_run=False)
+    second_result = service.run(source_id="direct_b", dry_run=False)
+
+    assert first_result.sent_items == 1
+    assert second_result.sent_items == 0
+    assert len(fake_sender.sent_cards) == 1
+
+    with sqlite3.connect(db_path) as connection:
+        decision_row = connection.execute(
+            """
+            SELECT rd.send_status, rd.skip_reason
+            FROM radar_decisions rd
+            JOIN normalized_items ni ON ni.id = rd.normalized_item_id
+            WHERE ni.title = ?
+            """,
+            ("All3 raises $25M to boost construction productivity with robotics and AI",),
+        ).fetchone()
+
+    assert decision_row == ("skip", "already_sent_same_funding_event")
+    assert "Cross-run funding sent-history suppression" in caplog.text

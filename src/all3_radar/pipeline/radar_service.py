@@ -28,6 +28,7 @@ from all3_radar.pipeline.competitors import detect_competitor_matches, load_comp
 from all3_radar.pipeline.dedupe import ClusterResult, ClusterableRecord, cluster_records
 from all3_radar.pipeline.editorial import evaluate_send_stage_editorial
 from all3_radar.pipeline.freshness import evaluate_freshness
+from all3_radar.pipeline.funding_sent_history import funding_key_from_candidate
 from all3_radar.pipeline.normalize import normalize_collected_item
 from all3_radar.pipeline.ranking import load_ranking_rules, rank_item
 from all3_radar.pipeline.send_stage_dedupe import candidate_from_item, suppress_same_event_funding_duplicates
@@ -272,26 +273,49 @@ class RadarService:
                         and self.repository.has_sent_alert_for_event(context.cluster_assignment.canonical_event_id)
                     )
                     already_sent_url = self.repository.has_sent_alert_for_url(context.item.canonical_url)
-                    context.already_sent = already_sent_event or already_sent_url
                     context.decision = rank_item(
                         item=context.item,
                         competitor_count=competitor_count,
                         freshness_is_fresh=context.freshness.is_fresh,
                         ranking_rules=ranking_rules,
                     )
+                    funding_match = None
+                    if not already_sent_event and not already_sent_url:
+                        semantic_funding_key = funding_key_from_candidate(context.item, context.decision)
+                        if semantic_funding_key is not None:
+                            funding_match = self.repository.find_sent_alert_for_same_funding_event(semantic_funding_key)
+                            if funding_match is not None:
+                                LOGGER.info(
+                                    "Cross-run funding sent-history suppression: item=%s previous_item=%s previous_event=%s previous_url=%s",
+                                    context.item.normalized_item_id,
+                                    funding_match["normalized_item_id"],
+                                    funding_match["canonical_event_id"] or "<none>",
+                                    funding_match["canonical_url"],
+                                )
+                    context.already_sent = already_sent_event or already_sent_url or funding_match is not None
                     if context.already_sent:
+                        skip_reason = "already_sent_same_funding_event"
+                        if already_sent_event:
+                            skip_reason = "already_sent_canonical_event"
+                        elif already_sent_url:
+                            skip_reason = "already_sent_story_url"
                         context.decision = RankedDecision(
                             relevance_status=context.decision.relevance_status,
                             send_status="skip",
-                            skip_reason=(
-                                "already_sent_canonical_event" if already_sent_event else "already_sent_story_url"
-                            ),
+                            skip_reason=skip_reason,
                             score=context.decision.score,
                             signals={
                                 **context.decision.signals,
                                 "already_sent": True,
                                 "already_sent_canonical_event": already_sent_event,
                                 "already_sent_story_url": already_sent_url,
+                                "already_sent_same_funding_event": funding_match is not None,
+                                "already_sent_previous_item_id": (
+                                    funding_match["normalized_item_id"] if funding_match is not None else None
+                                ),
+                                "already_sent_previous_event_id": (
+                                    funding_match["canonical_event_id"] if funding_match is not None else None
+                                ),
                             },
                             is_shortlisted=False,
                             is_borderline=False,
