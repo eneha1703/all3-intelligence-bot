@@ -1,0 +1,97 @@
+name: News Radar Replay
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "GitHub Actions run id whose radar-db artifact should seed the replay DB"
+        required: true
+        type: string
+      start_date:
+        description: "Replay window start date (YYYY-MM-DD)"
+        required: true
+        default: "2026-04-24"
+        type: string
+      end_date:
+        description: "Replay window end date (YYYY-MM-DD)"
+        required: true
+        default: "2026-04-29"
+        type: string
+      replay_label:
+        description: "Label prepended to each replay Telegram message"
+        required: true
+        default: "[REPLAY / MANUAL VALIDATION 2026-04-24..2026-04-29]"
+        type: string
+      send_messages:
+        description: "Send replay messages to Telegram"
+        required: true
+        default: "false"
+        type: choice
+        options:
+          - "true"
+          - "false"
+
+jobs:
+  replay:
+    runs-on: ubuntu-latest
+    env:
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+      TELEGRAM_ALERT_BOT_TOKEN: ${{ secrets.REPLAY_TELEGRAM_ALERT_BOT_TOKEN }}
+      TELEGRAM_ALERT_CHAT_IDS: ${{ vars.REPLAY_TELEGRAM_ALERT_CHAT_IDS }}
+      DATABASE_PATH: data/radar_replay.db
+      ALLOW_COLLECTED_AT_FALLBACK: "false"
+      GOOGLE_COMPETITOR_CHECK_ENABLED: "true"
+      GOOGLE_COMPETITOR_SEND_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -e .[dev]
+
+      - name: Ensure replay directories exist
+        run: mkdir -p data replay-source-artifact
+
+      - name: Download source DB snapshot artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.source_run_id }}
+          name: radar-db-${{ inputs.source_run_id }}
+          path: replay-source-artifact
+
+      - name: Prepare isolated replay DB
+        run: |
+          if [ ! -f replay-source-artifact/all3_radar.db ]; then
+            echo "Expected replay-source-artifact/all3_radar.db from radar-db-${{ inputs.source_run_id }}"
+            ls -R replay-source-artifact || true
+            exit 1
+          fi
+          cp replay-source-artifact/all3_radar.db data/radar_replay.db
+          ls -lh data/radar_replay.db
+
+      - name: Run replay window
+        run: |
+          if [ "${{ inputs.send_messages }}" = "true" ]; then
+            SEND_FLAG="--send"
+          else
+            SEND_FLAG=""
+          fi
+          python -m all3_radar.app.radar_cli replay-window \
+            --start-date "${{ inputs.start_date }}" \
+            --end-date "${{ inputs.end_date }}" \
+            --label "${{ inputs.replay_label }}" \
+            ${SEND_FLAG}
+
+      - name: Upload replay DB snapshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: radar-replay-db-${{ github.run_id }}
+          path: data/radar_replay.db
+          if-no-files-found: ignore
+          retention-days: 7
