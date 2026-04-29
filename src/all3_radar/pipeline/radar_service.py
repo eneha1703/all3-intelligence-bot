@@ -30,6 +30,7 @@ from all3_radar.pipeline.editorial import evaluate_send_stage_editorial
 from all3_radar.pipeline.freshness import evaluate_freshness
 from all3_radar.pipeline.normalize import normalize_collected_item
 from all3_radar.pipeline.ranking import load_ranking_rules, rank_item
+from all3_radar.pipeline.send_stage_dedupe import candidate_from_item, suppress_same_event_funding_duplicates
 from all3_radar.sources.base import FetchText
 from all3_radar.sources.registry import SourceRegistry, load_source_registry
 from all3_radar.storage.db import initialize_database
@@ -369,6 +370,41 @@ class RadarService:
                 sendable_contexts.append(context)
 
             sendable_contexts.sort(key=lambda context: context.decision.score if context.decision else 0, reverse=True)
+            suppressed_duplicates = suppress_same_event_funding_duplicates(
+                [
+                    candidate_from_item(context.item, context.decision)
+                    for context in sendable_contexts
+                    if context.decision is not None
+                ]
+            )
+            if suppressed_duplicates:
+                suppressed_by_id = {item.suppressed_item_id: item for item in suppressed_duplicates}
+                filtered_sendable_contexts: list[CurrentRunContext] = []
+                for context in sendable_contexts:
+                    suppression = suppressed_by_id.get(context.item.normalized_item_id)
+                    if suppression is None:
+                        filtered_sendable_contexts.append(context)
+                        continue
+                    skipped_send_count += 1
+                    context.decision = RankedDecision(
+                        relevance_status=context.decision.relevance_status,
+                        send_status="skip",
+                        skip_reason=suppression.reason,
+                        score=context.decision.score,
+                        signals={
+                            **context.decision.signals,
+                            "duplicate_same_event_representative": suppression.representative_item_id,
+                        },
+                        is_shortlisted=context.decision.is_shortlisted,
+                        is_borderline=context.decision.is_borderline,
+                    )
+                    LOGGER.info(
+                        "Late send-stage duplicate suppression: item=%s representative=%s reason=%s",
+                        context.item.normalized_item_id,
+                        suppression.representative_item_id,
+                        suppression.reason,
+                    )
+                sendable_contexts = filtered_sendable_contexts
             sendable_contexts = sendable_contexts[: self.settings.radar.max_cards_per_run]
 
             for context in contexts:
