@@ -163,3 +163,76 @@ def test_major_industrial_ai_merger_story_from_broad_feed_reaches_send_path() ->
     assert decision.relevance_status == "keep"
     assert decision.send_status == "stored_only"
     assert decision.score == 60
+
+
+def test_abb_like_launch_sets_product_launch_event() -> None:
+    item = _make_item(
+        "ABB Robotics launches PoWa cobot family targeting industrial tasks",
+        "ABB Robotics said its new PoWa family of cobots addresses a long-standing gap in the market between traditional cobots.",
+        broad_feed=False,
+    )
+
+    flags = derive_event_flags(item)
+
+    assert flags["product_launch_event"] is True
+
+
+def test_ency_like_platform_update_sets_product_launch_event() -> None:
+    item = _make_item(
+        "Ency updates hybrid robot programming platform with multi-brand and 3D vision capabilities",
+        "Ency Software has released a major update to its Ency Hyper platform, adding support for mixed-brand robot cells, SCARA robots, and integrated 3D vision on physical robots.",
+        broad_feed=False,
+    )
+
+    flags = derive_event_flags(item)
+
+    assert flags["product_launch_event"] is True
+
+
+def test_kollmorgen_like_tool_launch_sets_product_launch_event() -> None:
+    item = _make_item(
+        "Kollmorgen launches layout analysis tool to improve mobile robot performance",
+        "Kollmorgen has introduced a new software tool called the NDC Layout Assistant to improve routes for automated guided vehicles and autonomous mobile robots.",
+        broad_feed=False,
+    )
+
+    flags = derive_event_flags(item)
+
+    assert flags["product_launch_event"] is True
+
+
+def test_generic_thought_leadership_does_not_set_product_launch_event() -> None:
+    item = _make_item(
+        "Why industrial AI platforms matter for the next decade",
+        "A commentary on how manufacturers should think about software strategy and long-term adoption choices.",
+        broad_feed=True,
+    )
+
+    flags = derive_event_flags(item)
+
+    assert flags["product_launch_event"] is False
+
+
+def test_generic_ai_business_profile_does_not_set_product_launch_event() -> None:
+    item = _make_item(
+        "AI startup expands enterprise platform ambitions in Europe",
+        "The company profile outlines hiring plans, go-to-market strategy, and customer traction without a concrete product launch.",
+        broad_feed=True,
+    )
+
+    flags = derive_event_flags(item)
+
+    assert flags["product_launch_event"] is False
+
+
+def test_funding_only_story_does_not_set_product_launch_event() -> None:
+    item = _make_item(
+        "Construction robotics startup raises $25M seed round",
+        "The funding will help the company scale hiring and expand internationally.",
+        broad_feed=False,
+    )
+
+    flags = derive_event_flags(item)
+
+    assert flags["funding_event"] is True
+    assert flags["product_launch_event"] is False

@@ -73,6 +73,57 @@ INDUSTRIAL_ROBOTICS_TERMS = (
     "factory floor",
     "factories",
 )
+PRODUCT_LAUNCH_VERBS = (
+    "launches",
+    "launched",
+    "unveils",
+    "unveiled",
+    "introduces",
+    "introduced",
+    "releases",
+    "released",
+    "updates",
+    "updated",
+    "rolls out",
+    "rolled out",
+    "debuts",
+    "debuted",
+)
+PRODUCT_LAUNCH_NOUNS = (
+    "product",
+    "platform",
+    "tool",
+    "software",
+    "system",
+    "family",
+    "cobot",
+    "cobots",
+    "robot",
+    "robots",
+    "controller",
+    "assistant",
+)
+PRODUCT_OPERATIONAL_TERMS = (
+    "robot cell",
+    "robot cells",
+    "scara",
+    "3d vision",
+    "machine vision",
+    "physical robots",
+    "programming platform",
+    "cobot",
+    "cobots",
+    "automated guided vehicles",
+    "agv",
+    "agvs",
+    "autonomous mobile robots",
+    "mobile robot",
+    "mobile robots",
+    "factory",
+    "factories",
+    "production",
+    "industrial tasks",
+)
 NON_FUNDING_RAISED_PHRASES = (
     "raised concerns",
     "raised fresh concerns",
@@ -159,6 +210,15 @@ def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
     funding_event = _contains_any(haystack, FUNDING_TERMS) and not _contains_any(haystack, NON_FUNDING_RAISED_PHRASES)
     acquisition_event = _contains_any(haystack, ACQUISITION_TERMS)
     partnership_event = _contains_any(haystack, PARTNERSHIP_TERMS)
+    product_launch_event = (
+        _contains_any(haystack, PRODUCT_LAUNCH_VERBS)
+        and _contains_any(haystack, PRODUCT_LAUNCH_NOUNS)
+        and (
+            industrial_robotics_signal
+            or construction_innovation_signal
+            or _contains_any(haystack, PRODUCT_OPERATIONAL_TERMS)
+        )
+    )
     strategic_ai_major_deal_signal = (
         bool(item.metadata.get("broad_feed"))
         and _contains_any(haystack, AI_CORE_TERMS)
@@ -172,6 +232,7 @@ def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
     return {
         "funding_event": funding_event,
         "partnership_event": partnership_event,
+        "product_launch_event": product_launch_event,
         "acquisition_event": acquisition_event,
         "deployment_event": _contains_any(haystack, DEPLOYMENT_TERMS),
         "factory_opening_or_expansion": _contains_any(haystack, FACTORY_TERMS),
