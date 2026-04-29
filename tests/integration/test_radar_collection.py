@@ -845,3 +845,459 @@ def test_radar_does_not_resend_same_funding_event_across_runs_with_different_url
 
     assert decision_row == ("skip", "already_sent_same_funding_event")
     assert "Cross-run funding sent-history suppression" in caplog.text
+
+
+def test_radar_does_not_resend_same_deployment_event_across_runs_with_different_url_and_event_id(
+    monkeypatch, tmp_path, caplog
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "radar_repeat_semantic_deployment.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+
+    now = datetime.now(timezone.utc)
+    first_feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Hexagon and Schaeffler to install 1,000 Aeon humanoid robots across global factory network</title>
+    <link>https://direct-a.example/hexagon-schaeffler-aeon</link>
+    <description>Hexagon and Schaeffler said the rollout will deploy 1,000 Aeon humanoid robots across factories worldwide.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=6))}</pubDate>
+    <guid>a1</guid>
+  </item>
+</channel></rss>"""
+    second_feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Schaeffler confirms deployment of 1,000 Hexagon humanoid robots by 2032</title>
+    <link>https://direct-b.example/schaeffler-hexagon-deploys</link>
+    <description>Schaeffler said the deployment will place 1,000 Hexagon humanoid robots across its global factory operations and industrial manufacturing sites by 2032.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=6))}</pubDate>
+    <guid>b1</guid>
+  </item>
+</channel></rss>"""
+
+    registry = SourceRegistry(
+        (
+            SourceDefinition(
+                id="direct_a",
+                name="Direct A",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://direct-a.example/feed.xml",
+                priority=80,
+                tags=("robotics", "industrial"),
+            ),
+            SourceDefinition(
+                id="direct_b",
+                name="Direct B",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://direct-b.example/feed.xml",
+                priority=80,
+                tags=("robotics", "industrial"),
+            ),
+        )
+    )
+
+    class FakeGeminiClient:
+        is_available = True
+
+        def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
+            return ("The deployment expands humanoid rollout across industrial operations.", None)
+
+    class FakeTelegramSender:
+        def __init__(self) -> None:
+            self.sent_cards = []
+
+        def send_card(self, card):
+            self.sent_cards.append(card)
+            return [
+                TelegramDelivery(
+                    chat_id="123",
+                    status="sent",
+                    telegram_message_id="msg-1",
+                    error_text=None,
+                    payload_text=card.text,
+                )
+            ]
+
+    feeds = {
+        "https://direct-a.example/feed.xml": first_feed,
+        "https://direct-b.example/feed.xml": second_feed,
+    }
+
+    def fake_fetch_text(url: str) -> str:
+        return feeds[url]
+
+    fake_sender = FakeTelegramSender()
+    caplog.set_level("INFO")
+    service = RadarService(
+        repo_root=repo_root,
+        registry=registry,
+        fetch_text_fn=fake_fetch_text,
+        gemini_client=FakeGeminiClient(),
+        telegram_sender=fake_sender,
+    )
+
+    first_result = service.run(source_id="direct_a", dry_run=False)
+    second_result = service.run(source_id="direct_b", dry_run=False)
+
+    assert first_result.sent_items == 1
+    assert second_result.sent_items == 0
+    assert len(fake_sender.sent_cards) == 1
+
+    with sqlite3.connect(db_path) as connection:
+        decision_row = connection.execute(
+            """
+            SELECT rd.send_status, rd.skip_reason
+            FROM radar_decisions rd
+            JOIN normalized_items ni ON ni.id = rd.normalized_item_id
+            WHERE ni.title = ?
+            """,
+            ("Schaeffler confirms deployment of 1,000 Hexagon humanoid robots by 2032",),
+        ).fetchone()
+
+    assert decision_row == ("skip", "already_sent_same_deployment_event")
+    assert "Cross-run deployment sent-history suppression" in caplog.text
+
+
+def test_radar_allows_same_deployment_entities_with_different_quantity_across_runs(
+    monkeypatch, tmp_path
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "radar_repeat_semantic_deployment_quantity.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+
+    now = datetime.now(timezone.utc)
+    first_feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Hexagon and Schaeffler to install 1,000 Aeon humanoid robots across global factory network</title>
+    <link>https://direct-a.example/hexagon-schaeffler-aeon</link>
+    <description>Hexagon and Schaeffler said the rollout will deploy 1,000 Aeon humanoid robots across factories worldwide.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=6))}</pubDate>
+    <guid>a1</guid>
+  </item>
+</channel></rss>"""
+    second_feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Schaeffler confirms deployment of 500 Hexagon humanoid robots by 2032</title>
+    <link>https://direct-b.example/schaeffler-hexagon-500</link>
+    <description>Schaeffler said the deployment will place 500 Hexagon humanoid robots across its global factory operations and industrial manufacturing sites by 2032.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=6))}</pubDate>
+    <guid>b1</guid>
+  </item>
+</channel></rss>"""
+
+    registry = SourceRegistry(
+        (
+            SourceDefinition(
+                id="direct_a",
+                name="Direct A",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://direct-a.example/feed.xml",
+                priority=80,
+                tags=("robotics", "industrial"),
+            ),
+            SourceDefinition(
+                id="direct_b",
+                name="Direct B",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://direct-b.example/feed.xml",
+                priority=80,
+                tags=("robotics", "industrial"),
+            ),
+        )
+    )
+
+    class FakeGeminiClient:
+        is_available = True
+
+        def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
+            return ("The deployment expands humanoid rollout across industrial operations.", None)
+
+    class FakeTelegramSender:
+        def __init__(self) -> None:
+            self.sent_cards = []
+
+        def send_card(self, card):
+            self.sent_cards.append(card)
+            return [
+                TelegramDelivery(
+                    chat_id="123",
+                    status="sent",
+                    telegram_message_id="msg-1",
+                    error_text=None,
+                    payload_text=card.text,
+                )
+            ]
+
+    feeds = {
+        "https://direct-a.example/feed.xml": first_feed,
+        "https://direct-b.example/feed.xml": second_feed,
+    }
+
+    def fake_fetch_text(url: str) -> str:
+        return feeds[url]
+
+    fake_sender = FakeTelegramSender()
+    service = RadarService(
+        repo_root=repo_root,
+        registry=registry,
+        fetch_text_fn=fake_fetch_text,
+        gemini_client=FakeGeminiClient(),
+        telegram_sender=fake_sender,
+    )
+
+    first_result = service.run(source_id="direct_a", dry_run=False)
+    second_result = service.run(source_id="direct_b", dry_run=False)
+
+    assert first_result.sent_items == 1
+    assert second_result.sent_items == 1
+    assert len(fake_sender.sent_cards) == 2
+
+
+def test_radar_allows_different_deployment_entities_with_same_quantity_across_runs(
+    monkeypatch, tmp_path
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "radar_repeat_semantic_deployment_entities.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+
+    now = datetime.now(timezone.utc)
+    first_feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Hexagon and Schaeffler to install 1,000 Aeon humanoid robots across global factory network</title>
+    <link>https://direct-a.example/hexagon-schaeffler-aeon</link>
+    <description>Hexagon and Schaeffler said the rollout will deploy 1,000 Aeon humanoid robots across factories worldwide.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=6))}</pubDate>
+    <guid>a1</guid>
+  </item>
+</channel></rss>"""
+    second_feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>ABB and SKF to install 1,000 Aeon humanoid robots across factory sites</title>
+    <link>https://direct-b.example/abb-skf-aeon</link>
+    <description>ABB and SKF said the rollout will deploy 1,000 Aeon humanoid robots across industrial factory and manufacturing sites.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=6))}</pubDate>
+    <guid>b1</guid>
+  </item>
+</channel></rss>"""
+
+    registry = SourceRegistry(
+        (
+            SourceDefinition(
+                id="direct_a",
+                name="Direct A",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://direct-a.example/feed.xml",
+                priority=80,
+                tags=("robotics", "industrial"),
+            ),
+            SourceDefinition(
+                id="direct_b",
+                name="Direct B",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://direct-b.example/feed.xml",
+                priority=80,
+                tags=("robotics", "industrial"),
+            ),
+        )
+    )
+
+    class FakeGeminiClient:
+        is_available = True
+
+        def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
+            return ("The deployment expands humanoid rollout across industrial operations.", None)
+
+    class FakeTelegramSender:
+        def __init__(self) -> None:
+            self.sent_cards = []
+
+        def send_card(self, card):
+            self.sent_cards.append(card)
+            return [
+                TelegramDelivery(
+                    chat_id="123",
+                    status="sent",
+                    telegram_message_id="msg-1",
+                    error_text=None,
+                    payload_text=card.text,
+                )
+            ]
+
+    feeds = {
+        "https://direct-a.example/feed.xml": first_feed,
+        "https://direct-b.example/feed.xml": second_feed,
+    }
+
+    def fake_fetch_text(url: str) -> str:
+        return feeds[url]
+
+    fake_sender = FakeTelegramSender()
+    service = RadarService(
+        repo_root=repo_root,
+        registry=registry,
+        fetch_text_fn=fake_fetch_text,
+        gemini_client=FakeGeminiClient(),
+        telegram_sender=fake_sender,
+    )
+
+    first_result = service.run(source_id="direct_a", dry_run=False)
+    second_result = service.run(source_id="direct_b", dry_run=False)
+
+    assert first_result.sent_items == 1
+    assert second_result.sent_items == 1
+    assert len(fake_sender.sent_cards) == 2
+
+
+def test_radar_does_not_skip_non_deployment_strategy_article_across_runs(
+    monkeypatch, tmp_path
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "radar_repeat_semantic_deployment_strategy.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+
+    now = datetime.now(timezone.utc)
+    first_feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Hexagon and Schaeffler to install 1,000 Aeon humanoid robots across global factory network</title>
+    <link>https://direct-a.example/hexagon-schaeffler-aeon</link>
+    <description>Hexagon and Schaeffler said the rollout will deploy 1,000 Aeon humanoid robots across factories worldwide.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=6))}</pubDate>
+    <guid>a1</guid>
+  </item>
+</channel></rss>"""
+    second_feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>How humanoid robotics strategy is evolving in Europe</title>
+    <link>https://direct-b.example/humanoid-strategy</link>
+    <description>A strategy article on how manufacturers are thinking about the humanoid market over the next decade.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=6))}</pubDate>
+    <guid>b1</guid>
+  </item>
+</channel></rss>"""
+
+    registry = SourceRegistry(
+        (
+            SourceDefinition(
+                id="direct_a",
+                name="Direct A",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://direct-a.example/feed.xml",
+                priority=80,
+                tags=("robotics", "industrial"),
+            ),
+            SourceDefinition(
+                id="direct_b",
+                name="Direct B",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://direct-b.example/feed.xml",
+                priority=80,
+                tags=("robotics", "industrial"),
+            ),
+        )
+    )
+
+    class FakeGeminiClient:
+        is_available = True
+
+        def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
+            return ("The deployment expands humanoid rollout across industrial operations.", None)
+
+    class FakeTelegramSender:
+        def __init__(self) -> None:
+            self.sent_cards = []
+
+        def send_card(self, card):
+            self.sent_cards.append(card)
+            return [
+                TelegramDelivery(
+                    chat_id="123",
+                    status="sent",
+                    telegram_message_id="msg-1",
+                    error_text=None,
+                    payload_text=card.text,
+                )
+            ]
+
+    feeds = {
+        "https://direct-a.example/feed.xml": first_feed,
+        "https://direct-b.example/feed.xml": second_feed,
+    }
+
+    def fake_fetch_text(url: str) -> str:
+        return feeds[url]
+
+    fake_sender = FakeTelegramSender()
+    service = RadarService(
+        repo_root=repo_root,
+        registry=registry,
+        fetch_text_fn=fake_fetch_text,
+        gemini_client=FakeGeminiClient(),
+        telegram_sender=fake_sender,
+    )
+
+    first_result = service.run(source_id="direct_a", dry_run=False)
+    second_result = service.run(source_id="direct_b", dry_run=False)
+
+    assert first_result.sent_items == 1
+    assert second_result.sent_items == 0
+    assert len(fake_sender.sent_cards) == 1
+
+    with sqlite3.connect(db_path) as connection:
+        decision_row = connection.execute(
+            """
+            SELECT rd.send_status, rd.skip_reason
+            FROM radar_decisions rd
+            JOIN normalized_items ni ON ni.id = rd.normalized_item_id
+            WHERE ni.title = ?
+            """,
+            ("How humanoid robotics strategy is evolving in Europe",),
+        ).fetchone()
+
+    assert decision_row != ("skip", "already_sent_same_deployment_event")

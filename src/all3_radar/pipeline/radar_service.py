@@ -25,6 +25,7 @@ from all3_radar.observability.logging import configure_logging
 from all3_radar.observability.run_summary import format_radar_run_summary
 from all3_radar.pipeline.collect import build_adapters, collect_from_source, log_source_inventory
 from all3_radar.pipeline.competitors import detect_competitor_matches, load_competitor_catalog
+from all3_radar.pipeline.deployment_event_key import deployment_key_from_text
 from all3_radar.pipeline.dedupe import ClusterResult, ClusterableRecord, cluster_records
 from all3_radar.pipeline.editorial import evaluate_send_stage_editorial
 from all3_radar.pipeline.freshness import evaluate_freshness
@@ -298,6 +299,7 @@ class RadarService:
                         ranking_rules=ranking_rules,
                     )
                     funding_match = None
+                    deployment_match = None
                     if not already_sent_event and not already_sent_url:
                         semantic_funding_key = funding_key_from_candidate(context.item, context.decision)
                         if semantic_funding_key is not None:
@@ -310,13 +312,42 @@ class RadarService:
                                     funding_match["canonical_event_id"] or "<none>",
                                     funding_match["canonical_url"],
                                 )
-                    context.already_sent = already_sent_event or already_sent_url or funding_match is not None
+                        if funding_match is None:
+                            event_flags = context.decision.signals.get("event_flags", {})
+                            if not isinstance(event_flags, dict):
+                                event_flags = {}
+                            semantic_deployment_key = deployment_key_from_text(
+                                title=context.item.title,
+                                preview=context.item.text_preview,
+                                published_ts=context.item.published_ts,
+                                event_flags=event_flags,
+                            )
+                            if semantic_deployment_key is not None:
+                                deployment_match = self.repository.find_sent_alert_for_same_deployment_event(
+                                    semantic_deployment_key
+                                )
+                                if deployment_match is not None:
+                                    LOGGER.info(
+                                        "Cross-run deployment sent-history suppression: item=%s previous_item=%s previous_event=%s previous_url=%s",
+                                        context.item.normalized_item_id,
+                                        deployment_match["normalized_item_id"],
+                                        deployment_match["canonical_event_id"] or "<none>",
+                                        deployment_match["canonical_url"],
+                                    )
+                    context.already_sent = (
+                        already_sent_event
+                        or already_sent_url
+                        or funding_match is not None
+                        or deployment_match is not None
+                    )
                     if context.already_sent:
                         skip_reason = "already_sent_same_funding_event"
                         if already_sent_event:
                             skip_reason = "already_sent_canonical_event"
                         elif already_sent_url:
                             skip_reason = "already_sent_story_url"
+                        elif deployment_match is not None:
+                            skip_reason = "already_sent_same_deployment_event"
                         context.decision = RankedDecision(
                             relevance_status=context.decision.relevance_status,
                             send_status="skip",
@@ -328,11 +359,16 @@ class RadarService:
                                 "already_sent_canonical_event": already_sent_event,
                                 "already_sent_story_url": already_sent_url,
                                 "already_sent_same_funding_event": funding_match is not None,
+                                "already_sent_same_deployment_event": deployment_match is not None,
                                 "already_sent_previous_item_id": (
-                                    funding_match["normalized_item_id"] if funding_match is not None else None
+                                    funding_match["normalized_item_id"]
+                                    if funding_match is not None
+                                    else (deployment_match["normalized_item_id"] if deployment_match is not None else None)
                                 ),
                                 "already_sent_previous_event_id": (
-                                    funding_match["canonical_event_id"] if funding_match is not None else None
+                                    funding_match["canonical_event_id"]
+                                    if funding_match is not None
+                                    else (deployment_match["canonical_event_id"] if deployment_match is not None else None)
                                 ),
                             },
                             is_shortlisted=False,

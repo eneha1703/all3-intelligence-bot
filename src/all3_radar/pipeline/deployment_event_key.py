@@ -12,12 +12,14 @@ DEPLOYMENT_PAIR_RE = re.compile(
     rf"(?P<left>{ENTITY_RE})\s+and\s+(?P<right>{ENTITY_RE})\s+"
     r"(?:(?i:to)\s+)?"
     r"(?:(?i:plan|plans|planned)\s+to\s+)?"
-    r"(?P<event>(?i:deploy|deploys|deployed|deploying|install|installs|installed|installation|rollout|roll out|rolling out|pilot))\b"
+    r"(?P<event>(?i:deploy|deploys|deployed|deploying|deployment|install|installs|installed|installation|rollout|roll out|rolling out|pilot))\b"
 )
 LEADING_DEPLOYER_RE = re.compile(
     rf"^(?P<entity>{ENTITY_RE})\s+"
     r"(?:(?i:plan|plans|planned)\s+to\s+)?"
-    r"(?P<event>(?i:deploy|deploys|deployed|deploying|install|installs|installed|installation|rollout|roll out|rolling out|pilot))\b"
+    r"(?:(?i:confirm|confirms|confirmed|announce|announces|announced)\s+)?"
+    r"(?:(?i:the)\s+)?"
+    r"(?P<event>(?i:deploy|deploys|deployed|deploying|deployment|install|installs|installed|installation|rollout|roll out|rolling out|pilot))\b"
 )
 QUANTITY_RE = re.compile(
     r"\b(?P<quantity>\d{1,3}(?:,\d{3})+|\d+)\s+"
@@ -175,7 +177,15 @@ def _is_entity_branded_generic_token(product_token: str, entity_pair: tuple[str,
     if len(parts) < 2:
         return False
     trailing = " ".join(parts[1:])
-    if trailing not in {"humanoid", "humanoids", "robot", "robots", "robot systems"}:
+    if trailing not in {
+        "humanoid",
+        "humanoids",
+        "robot",
+        "robots",
+        "robot systems",
+        "humanoid robot",
+        "humanoid robots",
+    }:
         return False
     leading_entity = _normalize_entity(parts[0])
     return leading_entity in entity_pair if leading_entity else False
