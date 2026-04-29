@@ -73,8 +73,24 @@ def test_render_run_audit_markdown_includes_summary_skip_counts_and_sent_items(m
             "duration_seconds": 9.876,
         },
     ]
+    stage_timings = {
+        "normalization_and_freshness": 12.345,
+        "historical_competitor_count_load": 98.765,
+    }
+    stage_counters = {
+        "historical_items_loaded": 321,
+        "contexts_count": 20,
+        "shortlisted_count": 6,
+    }
 
-    markdown = render_run_audit_markdown(result, decision_rows, source_audit_rows, 123.456)
+    markdown = render_run_audit_markdown(
+        result,
+        decision_rows,
+        source_audit_rows,
+        123.456,
+        stage_timings,
+        stage_counters,
+    )
 
     assert "# News Radar Run Audit" in markdown
     assert "- pipeline_run_id: `run-1`" in markdown
@@ -84,6 +100,10 @@ def test_render_run_audit_markdown_includes_summary_skip_counts_and_sent_items(m
     assert "- send_skips: `3`" in markdown
     assert "- failed_sources: `1`" in markdown
     assert "- duration_seconds: `123.456`" in markdown
+    assert "| historical_items_loaded | 321 |" in markdown
+    assert "| contexts_count | 20 |" in markdown
+    assert "| normalization_and_freshness | 12.345 |" in markdown
+    assert "| historical_competitor_count_load | 98.765 |" in markdown
     assert "- `already_sent_same_funding_event`: `1`" in markdown
     assert "- `already_sent_same_deployment_event`: `0`" in markdown
     assert "- `duplicate_same_product_launch_event_shortlist`: `1`" in markdown

@@ -132,6 +132,11 @@ class RadarService:
         skipped_send_count = 0
         failed_sources = 0
         source_audit_rows: list[dict[str, object]] = []
+        stage_timings: dict[str, float] = {}
+        stage_counters: dict[str, int] = {}
+
+        def record_stage_timing(label: str, started: float) -> None:
+            stage_timings[label] = stage_timings.get(label, 0.0) + (perf_counter() - started)
 
         try:
             for source in selected_sources:
@@ -173,6 +178,7 @@ class RadarService:
                 )
 
                 source_normalized_count = 0
+                normalization_started = perf_counter()
                 for item in items:
                     collected_count += 1
                     raw_item_id = self.repository.insert_raw_item(run_id, item)
@@ -203,6 +209,7 @@ class RadarService:
 
                     contexts.append(CurrentRunContext(source=source, item=stored_item, freshness=freshness))
 
+                record_stage_timing("normalization_and_freshness", normalization_started)
                 LOGGER.info(
                     "Source processing summary: id=%s collected=%s normalized=%s",
                     source.id,
@@ -210,6 +217,7 @@ class RadarService:
                     source_normalized_count,
                 )
 
+            historical_dedupe_started = perf_counter()
             competitor_catalog = load_competitor_catalog(self.repo_root / "config" / "competitors.yaml")
             current_ids = {context.item.normalized_item_id for context in contexts}
             historical_items = [
@@ -218,7 +226,11 @@ class RadarService:
                 if item.normalized_item_id not in current_ids
             ]
             source_priority_map = {source.id: source.priority for source in self.registry.all()}
+            record_stage_timing("historical_dedupe_load", historical_dedupe_started)
+            stage_counters["historical_items_loaded"] = len(historical_items)
+            stage_counters["contexts_count"] = len(contexts)
 
+            competitor_matching_started = perf_counter()
             for context in contexts:
                 matches = detect_competitor_matches(
                     title=context.item.title,
@@ -235,6 +247,22 @@ class RadarService:
                         ", ".join(matched_names),
                     )
 
+            record_stage_timing("competitor_matching", competitor_matching_started)
+
+            historical_competitor_count_started = perf_counter()
+            historical_records = [
+                ClusterableRecord(
+                    item=item,
+                    source_priority=source_priority_map.get(item.source_id, 0),
+                    competitor_count=self.repository.load_competitor_match_count(item.normalized_item_id),
+                    current_run=False,
+                    canonical_event_id=item.canonical_event_id,
+                )
+                for item in historical_items
+            ]
+            record_stage_timing("historical_competitor_count_load", historical_competitor_count_started)
+
+            canonical_clustering_started = perf_counter()
             cluster_result = cluster_records(
                 current_records=[
                     ClusterableRecord(
@@ -245,17 +273,10 @@ class RadarService:
                     )
                     for context in contexts
                 ],
-                historical_records=[
-                    ClusterableRecord(
-                        item=item,
-                        source_priority=source_priority_map.get(item.source_id, 0),
-                        competitor_count=self.repository.load_competitor_match_count(item.normalized_item_id),
-                        current_run=False,
-                        canonical_event_id=item.canonical_event_id,
-                    )
-                    for item in historical_items
-                ],
+                historical_records=historical_records,
             )
+
+            record_stage_timing("canonical_clustering", canonical_clustering_started)
 
             assignments_by_event: dict[str, ClusterAssignment] = {}
             for context in contexts:
@@ -271,6 +292,7 @@ class RadarService:
                     assignment.duplicate_reason or "representative",
                 )
 
+            canonical_event_writes_started = perf_counter()
             for event_id, assignment in assignments_by_event.items():
                 self.repository.upsert_canonical_event(
                     assignment=assignment,
@@ -278,9 +300,12 @@ class RadarService:
                     published_values=cluster_result.published_by_event_id[event_id],
                 )
 
+            record_stage_timing("canonical_event_writes", canonical_event_writes_started)
+
             ranking_rules = load_ranking_rules(self.repo_root / "config" / "ranking_rules.yaml")
             shortlisted_contexts: list[CurrentRunContext] = []
 
+            ranking_and_sent_history_started = perf_counter()
             for context in contexts:
                 competitor_count = len({match.competitor_name for match in context.competitor_matches})
                 if context.cluster_assignment and not context.cluster_assignment.is_current_run_representative:
@@ -395,9 +420,12 @@ class RadarService:
 
             shortlisted_contexts.sort(key=lambda context: context.decision.score if context.decision else 0, reverse=True)
             shortlisted_contexts = shortlisted_contexts[: self.settings.radar.shortlist_size_before_gemini]
+            stage_counters["shortlisted_count"] = len(shortlisted_contexts)
+            record_stage_timing("ranking_and_sent_history", ranking_and_sent_history_started)
 
             send_threshold = ranking_rules["thresholds"]["send_min_score"]
             sendable_contexts: list[CurrentRunContext] = []
+            summary_generation_started = perf_counter()
             for context in shortlisted_contexts:
                 context.summary = summarize_candidate(context.item, context.decision, self.gemini_client)
                 if context.summary.gemini_decision_override == "drop":
@@ -454,6 +482,9 @@ class RadarService:
                 )
                 sendable_contexts.append(context)
 
+            record_stage_timing("summary_generation", summary_generation_started)
+
+            editorial_and_late_dedupe_started = perf_counter()
             sendable_contexts.sort(key=lambda context: context.decision.score if context.decision else 0, reverse=True)
             suppressed_duplicates = suppress_same_event_funding_duplicates(
                 [
@@ -491,11 +522,15 @@ class RadarService:
                     )
                 sendable_contexts = filtered_sendable_contexts
             sendable_contexts = sendable_contexts[: self.settings.radar.max_cards_per_run]
+            record_stage_timing("editorial_and_late_dedupe", editorial_and_late_dedupe_started)
 
+            summary_generation_started = perf_counter()
             for context in contexts:
                 if context.summary is None and context.decision and context.decision.is_shortlisted:
                     context.summary = summarize_candidate(context.item, context.decision, self.gemini_client)
+            record_stage_timing("summary_generation", summary_generation_started)
 
+            delivery_started = perf_counter()
             for context in sendable_contexts:
                 card = build_news_card(
                     headline=context.item.title,
@@ -565,6 +600,9 @@ class RadarService:
                         is_borderline=context.decision.is_borderline,
                     )
 
+            record_stage_timing("delivery", delivery_started)
+
+            decision_persistence_started = perf_counter()
             for context in contexts:
                 decision = context.decision
                 assert decision is not None
@@ -585,6 +623,8 @@ class RadarService:
                 if decision.send_status == "skip" and not context.already_sent and not dry_run:
                     skipped_send_count += 0
 
+            record_stage_timing("decision_persistence", decision_persistence_started)
+
             result = RadarRunResult(
                 run_id=run_id,
                 selected_sources=len(selected_sources),
@@ -600,6 +640,7 @@ class RadarService:
                 skipped_send_items=skipped_send_count,
                 failed_sources=failed_sources,
             )
+            run_finalize_and_audit_started = perf_counter()
             self.repository.finish_pipeline_run(
                 run_id,
                 PipelineStatus.COMPLETED,
@@ -621,12 +662,15 @@ class RadarService:
             )
             try:
                 decision_rows = self.repository.list_radar_decision_details_for_run(run_id)
+                record_stage_timing("run_finalize_and_audit", run_finalize_and_audit_started)
                 report_path = write_run_audit_report(
                     self.repo_root,
                     result,
                     decision_rows,
                     source_audit_rows,
                     round(perf_counter() - run_started, 3),
+                    {label: round(duration, 3) for label, duration in stage_timings.items()},
+                    stage_counters,
                 )
                 LOGGER.info("Radar run audit report written: %s", report_path)
             except Exception:
@@ -634,6 +678,7 @@ class RadarService:
             LOGGER.info("Radar run complete: %s", format_radar_run_summary(result))
             return result
         except Exception:
+            run_finalize_and_audit_started = perf_counter()
             self.repository.finish_pipeline_run(
                 run_id,
                 PipelineStatus.FAILED,

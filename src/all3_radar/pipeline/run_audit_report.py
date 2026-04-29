@@ -29,6 +29,8 @@ def render_run_audit_markdown(
     decision_rows: list[dict[str, Any]],
     source_audit_rows: list[dict[str, Any]] | None = None,
     total_duration_seconds: float | None = None,
+    stage_timings: dict[str, float] | None = None,
+    stage_counters: dict[str, int] | None = None,
 ) -> str:
     skip_reason_counts = Counter(
         row["skip_reason"] for row in decision_rows if row.get("skip_reason")
@@ -36,6 +38,8 @@ def render_run_audit_markdown(
     sent_rows = [row for row in decision_rows if row.get("send_status") == "sent"]
     source_audit_rows = source_audit_rows or []
     failed_source_rows = [row for row in source_audit_rows if row.get("status") != "ok"]
+    stage_timings = stage_timings or {}
+    stage_counters = stage_counters or {}
     commit_sha = os.getenv("GITHUB_SHA") or "not available"
     github_run_id = os.getenv("GITHUB_RUN_ID")
     artifact_reference = f"radar-db-{github_run_id}" if github_run_id else "not available"
@@ -58,10 +62,41 @@ def render_run_audit_markdown(
         f"- send_skips: `{result.skipped_send_items}`",
         f"- failed_sources: `{result.failed_sources}`",
         f"- duration_seconds: `{_sanitize_cell(total_duration_seconds) or 'not available'}`",
-        "",
-        "## Skip Reason Counts",
-        "",
     ]
+
+    if stage_counters:
+        lines.extend(
+            [
+                "",
+                "## Stage Counters",
+                "",
+                "| Counter | Value |",
+                "| --- | --- |",
+            ]
+        )
+        for counter_name, value in stage_counters.items():
+            lines.append(f"| {_sanitize_cell(counter_name)} | {_sanitize_cell(value)} |")
+
+    if stage_timings:
+        lines.extend(
+            [
+                "",
+                "## Stage Timings",
+                "",
+                "| Stage | Duration Seconds |",
+                "| --- | --- |",
+            ]
+        )
+        for stage_name, duration_seconds in stage_timings.items():
+            lines.append(f"| {_sanitize_cell(stage_name)} | {_sanitize_cell(duration_seconds)} |")
+
+    lines.extend(
+        [
+            "",
+            "## Skip Reason Counts",
+            "",
+        ]
+    )
 
     if skip_reason_counts:
         for reason, count in sorted(skip_reason_counts.items()):
@@ -155,11 +190,20 @@ def write_run_audit_report(
     decision_rows: list[dict[str, Any]],
     source_audit_rows: list[dict[str, Any]] | None = None,
     total_duration_seconds: float | None = None,
+    stage_timings: dict[str, float] | None = None,
+    stage_counters: dict[str, int] | None = None,
 ) -> Path:
     report_path = repo_root / "data" / f"radar-run-audit-{result.run_id}.md"
     report_path.parent.mkdir(parents=True, exist_ok=True)
     report_path.write_text(
-        render_run_audit_markdown(result, decision_rows, source_audit_rows, total_duration_seconds),
+        render_run_audit_markdown(
+            result,
+            decision_rows,
+            source_audit_rows,
+            total_duration_seconds,
+            stage_timings,
+            stage_counters,
+        ),
         encoding="utf-8",
     )
     return report_path
