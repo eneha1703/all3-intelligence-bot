@@ -44,6 +44,10 @@ from all3_radar.summarization.claude_final_card_client import (
     ClaudeFinalCardClient,
     ClaudeFinalCardUnavailableError,
 )
+from all3_radar.summarization.claude_editorial_review_client import (
+    ClaudeEditorialReviewClient,
+    ClaudeEditorialReviewUnavailableError,
+)
 from all3_radar.summarization.radar_summary import summarize_candidate
 
 LOGGER = logging.getLogger(__name__)
@@ -102,6 +106,7 @@ class RadarService:
         repository: RadarRepository | None = None,
         fetch_text_fn: FetchText | None = None,
         gemini_client: GeminiClient | None = None,
+        claude_editorial_review_client: ClaudeEditorialReviewClient | None = None,
         claude_final_card_client: ClaudeFinalCardClient | None = None,
         telegram_sender: TelegramSender | None = None,
     ) -> None:
@@ -115,6 +120,18 @@ class RadarService:
             api_key=self.settings.integrations.gemini_api_key,
             model=self.settings.integrations.gemini_model,
         )
+        if claude_editorial_review_client is not None:
+            self.claude_editorial_review_client = claude_editorial_review_client
+        elif self.settings.radar.claude_editorial_enabled:
+            self.claude_editorial_review_client = ClaudeEditorialReviewClient(
+                enabled=self.settings.radar.claude_editorial_enabled,
+                api_key=self.settings.integrations.anthropic_api_key,
+                model=self.settings.integrations.claude_editorial_model,
+                timeout_seconds=self.settings.integrations.claude_editorial_timeout_seconds,
+                max_tokens=self.settings.integrations.claude_editorial_max_tokens,
+            )
+        else:
+            self.claude_editorial_review_client = None
         if claude_final_card_client is not None:
             self.claude_final_card_client = claude_final_card_client
         elif self.settings.radar.claude_final_card_enabled:
@@ -449,7 +466,6 @@ class RadarService:
             record_stage_timing("ranking_and_sent_history", ranking_and_sent_history_started)
 
             send_threshold = ranking_rules["thresholds"]["send_min_score"]
-            sendable_contexts: list[CurrentRunContext] = []
             summary_generation_started = perf_counter()
             for context in shortlisted_contexts:
                 context.summary = summarize_candidate(context.item, context.decision, self.gemini_client)
@@ -463,16 +479,145 @@ class RadarService:
                         is_shortlisted=False,
                         is_borderline=False,
                     )
-                    continue
-                if not (
-                    context.decision.relevance_status == "keep"
-                    and context.decision.score >= send_threshold
+            record_stage_timing("summary_generation", summary_generation_started)
+
+            if (
+                self.settings.radar.claude_editorial_enabled
+                and self.claude_editorial_review_client is not None
+                and self.claude_editorial_review_client.is_available
+            ):
+                claude_editorial_contexts = [
+                    context
+                    for context in contexts
+                    if context.decision is not None
+                    and context.freshness.is_fresh
+                    and context.decision.relevance_status == "keep"
                     and context.decision.send_status != "skip"
+                    and (
+                        context.decision.is_shortlisted
+                        or context.decision.is_borderline
+                        or context.decision.score >= max(0, send_threshold - 6)
+                    )
+                ]
+                claude_editorial_contexts.sort(
+                    key=lambda context: context.decision.score if context.decision else 0,
+                    reverse=True,
+                )
+                claude_editorial_contexts = claude_editorial_contexts[
+                    : self.settings.radar.claude_editorial_max_candidates
+                ]
+                for context in claude_editorial_contexts:
+                    if context.summary is None:
+                        context.summary = summarize_candidate(context.item, context.decision, self.gemini_client)
+                    increment_stage_counter("claude_editorial_attempted")
+                    try:
+                        claude_result = self.claude_editorial_review_client.review_candidate(
+                            title=context.item.title,
+                            url=context.item.canonical_url,
+                            source=context.source.name,
+                            summary=context.summary.summary_text if context.summary else None,
+                            score=context.decision.score,
+                            ranking_signals=context.decision.signals,
+                            freshness=context.freshness.status.value,
+                            relevance=context.decision.relevance_status,
+                        )
+                    except ClaudeEditorialReviewUnavailableError as exc:
+                        increment_stage_counter("claude_editorial_fallback")
+                        LOGGER.warning(
+                            "Claude editorial fallback: item=%s reason=%s",
+                            context.item.normalized_item_id,
+                            exc,
+                        )
+                        continue
+                    except Exception as exc:
+                        increment_stage_counter("claude_editorial_error")
+                        LOGGER.warning(
+                            "Claude editorial error: item=%s reason=%s",
+                            context.item.normalized_item_id,
+                            exc,
+                        )
+                        continue
+
+                    if claude_result.is_high_confidence_rejection:
+                        increment_stage_counter("claude_editorial_rejected")
+                        context.decision = RankedDecision(
+                            relevance_status=context.decision.relevance_status,
+                            send_status="stored_only",
+                            skip_reason="claude_editorial_rejected",
+                            score=context.decision.score,
+                            signals={
+                                **context.decision.signals,
+                                "claude_editorial_reject_reason": claude_result.reject_reason,
+                                "claude_editorial_confidence": claude_result.confidence,
+                            },
+                            is_shortlisted=context.decision.is_shortlisted,
+                            is_borderline=context.decision.is_borderline,
+                        )
+                        LOGGER.info(
+                            "Claude editorial rejected candidate: item=%s reason=%s",
+                            context.item.normalized_item_id,
+                            claude_result.reject_reason,
+                        )
+                        continue
+
+                    if claude_result.is_high_confidence_promotion:
+                        increment_stage_counter("claude_editorial_promoted")
+                        context.decision = RankedDecision(
+                            relevance_status=context.decision.relevance_status,
+                            send_status=context.decision.send_status,
+                            skip_reason=None,
+                            score=context.decision.score,
+                            signals={
+                                **context.decision.signals,
+                                "claude_editorial_promoted": True,
+                                "claude_editorial_confidence": claude_result.confidence,
+                            },
+                            is_shortlisted=context.decision.is_shortlisted,
+                            is_borderline=context.decision.is_borderline,
+                        )
+                        context.final_headline = claude_result.edited_title
+                        context.final_summary_text = claude_result.edited_summary
+                        LOGGER.info(
+                            "Claude editorial promoted candidate: item=%s score=%s",
+                            context.item.normalized_item_id,
+                            context.decision.score,
+                        )
+                        continue
+
+                    increment_stage_counter("claude_editorial_fallback")
+                    LOGGER.warning(
+                        "Claude editorial fallback: item=%s reason=%s",
+                        context.item.normalized_item_id,
+                        f"confidence_{claude_result.confidence}",
+                    )
+
+            editorial_and_late_dedupe_started = perf_counter()
+            sendable_candidate_contexts: list[CurrentRunContext] = list(shortlisted_contexts)
+            shortlisted_ids = {context.item.normalized_item_id for context in shortlisted_contexts}
+            for context in contexts:
+                if (
+                    context.decision is not None
+                    and context.decision.signals.get("claude_editorial_promoted", False)
+                    and context.item.normalized_item_id not in shortlisted_ids
                 ):
+                    sendable_candidate_contexts.append(context)
+
+            sendable_contexts: list[CurrentRunContext] = []
+            for context in sendable_candidate_contexts:
+                if context.decision.relevance_status != "keep" or context.decision.send_status == "skip":
+                    continue
+
+                claude_promoted = bool(context.decision.signals.get("claude_editorial_promoted", False))
+                if (
+                    not claude_promoted
+                    and context.decision.skip_reason == "claude_editorial_rejected"
+                ):
+                    continue
+                if not claude_promoted and context.decision.score < send_threshold:
                     continue
 
                 editorial = evaluate_send_stage_editorial(context.item, context.decision)
-                if not editorial.allow_send:
+                if not editorial.allow_send and not claude_promoted:
                     context.decision = RankedDecision(
                         relevance_status=context.decision.relevance_status,
                         send_status="stored_only",
@@ -503,13 +648,10 @@ class RadarService:
                     "Editorial shaping decision: item=%s allow_send=%s reason=%s",
                     context.item.normalized_item_id,
                     True,
-                    "eligible",
+                    "claude_promoted" if claude_promoted else "eligible",
                 )
                 sendable_contexts.append(context)
 
-            record_stage_timing("summary_generation", summary_generation_started)
-
-            editorial_and_late_dedupe_started = perf_counter()
             sendable_contexts.sort(key=lambda context: context.decision.score if context.decision else 0, reverse=True)
             suppressed_duplicates = suppress_same_event_funding_duplicates(
                 [
