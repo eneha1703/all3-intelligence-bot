@@ -326,6 +326,96 @@ def test_valid_timber_industrialized_construction_story_still_keeps_scope() -> N
     assert reason is None
 
 
+def test_teradyne_robotics_revenue_story_keeps_scope() -> None:
+    item = _make_item(
+        "Teradyne Robotics revenue rises at the start of 2026",
+        "Teradyne Robotics reported stronger quarter revenue growth across its robotics segment, including Universal Robots and MiR.",
+        broad_feed=False,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "keep"
+    assert reason is None
+
+
+def test_universal_robots_segment_revenue_story_keeps_scope() -> None:
+    item = _make_item(
+        "Universal Robots segment revenue rises in Q1 as cobot sales improve",
+        "Universal Robots said its robotics segment revenue and quarterly sales improved as collaborative robots orders recovered.",
+        broad_feed=False,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "keep"
+    assert reason is None
+
+
+def test_mir_mobile_industrial_robots_orders_story_keeps_scope() -> None:
+    item = _make_item(
+        "MiR reports stronger mobile industrial robots orders in Q2",
+        "Mobile Industrial Robots said quarterly orders and revenue for its AMRs improved in the second quarter.",
+        broad_feed=False,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "keep"
+    assert reason is None
+
+
+def test_generic_corporate_earnings_story_without_robotics_segment_still_drops() -> None:
+    item = _make_item(
+        "Industrial conglomerate beats earnings expectations in Q1",
+        "The company reported stronger quarterly revenue, earnings, and margin performance across its global businesses.",
+        broad_feed=True,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "drop"
+    assert reason == "no_clear_all3_scope"
+
+
+def test_parent_company_stock_market_story_without_robotics_segment_still_drops() -> None:
+    item = _make_item(
+        "Teradyne shares rise after analyst upgrade on semiconductor outlook",
+        "Investors pushed the stock higher after analysts praised the parent company's market position and valuation.",
+        broad_feed=True,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "drop"
+    assert reason == "no_clear_all3_scope"
+
+
 def test_broad_feed_major_industrial_ai_merger_story_survives_scope_gate() -> None:
     item = _make_item(
         "Cohere and Aleph Alpha explore merger with Schwarz Group backing",

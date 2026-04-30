@@ -268,6 +268,41 @@ INDUSTRIAL_ROBOTICS_CONTEXT_TERMS = {
     "factory floor",
     "factories",
 }
+ROBOTICS_BUSINESS_ENTITY_TERMS = {
+    "teradyne robotics",
+    "universal robots",
+    "mobile industrial robots",
+    "mir",
+    "robotics revenue",
+    "robotics segment revenue",
+    "robotics segment",
+    "collaborative robots",
+    "cobots",
+    "mobile robots",
+    "amrs",
+    "autonomous mobile robots",
+}
+ROBOTICS_BUSINESS_PERFORMANCE_TERMS = {
+    "revenue",
+    "sales",
+    "orders",
+    "margin",
+    "earnings",
+    "quarter",
+    "q1",
+    "q2",
+    "q3",
+    "q4",
+    "segment",
+    "growth",
+    "grew",
+    "decline",
+    "declined",
+    "rises",
+    "rose",
+    "falls",
+    "fell",
+}
 BUILT_ENVIRONMENT_TERMS = {
     "jobsite",
     "worksite",
@@ -477,6 +512,10 @@ def has_clear_all3_scope(item: StoredNormalizedItem, competitor_count: int, even
     if has_any_term(haystack, BROAD_FEED_SCOPE_TERMS):
         return True
     if event_flags.get("timber_strategic_signal"):
+        return True
+    if has_any_term(haystack, ROBOTICS_BUSINESS_ENTITY_TERMS) and has_any_term(
+        haystack, ROBOTICS_BUSINESS_PERFORMANCE_TERMS
+    ):
         return True
     if has_any_term(haystack, ROBOTICS_TERMS) and has_any_term(haystack, STRATEGIC_WORK_ENV_TERMS):
         return True
