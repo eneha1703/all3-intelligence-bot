@@ -137,6 +137,13 @@ QUANTIFIED_SCALE_RE = re.compile(
     r"\$?\d+[,\d]*(\.\d+)?\s?(m|bn|billion|million)"
     r")\b"
 )
+BILLION_SCALE_RE = re.compile(
+    r"\b("
+    r"\$?\d+[,\d]*(\.\d+)?\s?(b|bn|billion)|"
+    r"valued at\s+\$?\d+[,\d]*(\.\d+)?\s?(b|bn|billion)|"
+    r"valuation\s+of\s+\$?\d+[,\d]*(\.\d+)?\s?(b|bn|billion)"
+    r")\b"
+)
 WAREHOUSE_LOGISTICS_TERMS = ("warehouse", "logistics", "intralogistics", "material handling")
 STRATEGIC_CONTEXT_TERMS = ("construction", "industrial", "manufacturing", "factory", "factories", "jobsite", "worksite", "assembly", "production")
 AI_CORE_TERMS = (
@@ -147,6 +154,50 @@ AI_CORE_TERMS = (
     "vla model",
     "physical ai",
     "physics ai",
+)
+AI_COMPANY_CONTEXT_TERMS = (
+    "ai",
+    "artificial intelligence",
+    "physical ai",
+    "physics ai",
+    "startup",
+    "startups",
+    "company",
+    "companies",
+    "lab",
+    "labs",
+)
+AI_COMPANY_MODEL_TERMS = (
+    "model",
+    "models",
+    "platform",
+    "platforms",
+    "system",
+    "systems",
+)
+PHYSICAL_INDUSTRY_AI_STRONG_TERMS = (
+    "aerospace",
+    "automotive",
+    "advanced manufacturing",
+    "manufacturing",
+    "industrial",
+    "robotics",
+    "robot",
+    "robots",
+    "robotic interactions",
+    "engineering workflows",
+    "engineering software",
+    "factory",
+    "factories",
+    "production",
+    "materials",
+    "industrial automation",
+)
+PHYSICAL_INDUSTRY_AI_WEAK_TERMS = (
+    "engineering",
+    "automation",
+    "physical world",
+    "drug discovery",
 )
 STRATEGIC_AI_PHYSICAL_TERMS = (
     "engineering",
@@ -193,10 +244,16 @@ def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
     return any(_term_pattern(term).search(lowered) for term in terms)
 
 
+def _count_matches(text: str, terms: tuple[str, ...]) -> int:
+    lowered = text.lower()
+    return sum(1 for term in terms if _term_pattern(term).search(lowered))
+
+
 def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
     haystack = f"{item.title} {item.text_preview or ''}".lower()
     timber_present = _contains_any(haystack, TIMBER_TERMS)
     quantified_scale = bool(QUANTIFIED_SCALE_RE.search(haystack))
+    billion_scale = bool(BILLION_SCALE_RE.search(haystack))
     timber_strategic = timber_present and (_contains_any(haystack, TIMBER_STRATEGIC_TERMS) or quantified_scale)
     adjacent_logistics_only = _contains_any(haystack, WAREHOUSE_LOGISTICS_TERMS) and not _contains_any(haystack, STRATEGIC_CONTEXT_TERMS)
     industrial_robotics_signal = (
@@ -210,6 +267,24 @@ def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
     funding_event = _contains_any(haystack, FUNDING_TERMS) and not _contains_any(haystack, NON_FUNDING_RAISED_PHRASES)
     acquisition_event = _contains_any(haystack, ACQUISITION_TERMS)
     partnership_event = _contains_any(haystack, PARTNERSHIP_TERMS)
+    ai_company_context = _contains_any(haystack, AI_COMPANY_CONTEXT_TERMS) or (
+        funding_event and _contains_any(haystack, AI_COMPANY_MODEL_TERMS)
+    )
+    weak_physical_industry_count = _count_matches(haystack, PHYSICAL_INDUSTRY_AI_WEAK_TERMS)
+    physical_industry_ai_megafunding_signal = (
+        ai_company_context
+        and (
+            funding_event
+            or billion_scale
+        )
+        and (
+            _contains_any(haystack, PHYSICAL_INDUSTRY_AI_STRONG_TERMS)
+            or (
+                billion_scale
+                and weak_physical_industry_count >= 2
+            )
+        )
+    )
     product_launch_event = (
         _contains_any(haystack, PRODUCT_LAUNCH_VERBS)
         and _contains_any(haystack, PRODUCT_LAUNCH_NOUNS)
@@ -245,6 +320,7 @@ def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
         "timber_policy_signal": timber_policy_signal,
         "timber_economics_signal": timber_economics_signal,
         "strategic_ai_major_deal_signal": strategic_ai_major_deal_signal,
+        "physical_industry_ai_megafunding_signal": physical_industry_ai_megafunding_signal,
         "showcase_only_architecture_penalty": timber_present
         and _contains_any(haystack, SHOWCASE_TIMBER_TERMS)
         and not timber_strategic,

@@ -148,6 +148,99 @@ def test_major_industrial_ai_funding_story_from_broad_feed_reaches_send_path() -
     assert decision.score == 43
 
 
+def test_physical_industry_ai_megafunding_story_survives_scope_gate() -> None:
+    item = _make_item(
+        "After a $10B raise, a new AI startup becomes one of the most valuable five-month-old startups ever funded",
+        "The company says the round will expand aerospace, automotive, advanced manufacturing, engineering workflows, and robotics capabilities across physical industries.",
+        broad_feed=True,
+    )
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["physical_industry_ai_megafunding_signal"] is True
+    assert decision.relevance_status == "keep"
+    assert decision.skip_reason is None
+
+
+def test_generic_megafunding_ai_story_without_physical_terms_remains_out_of_scope() -> None:
+    item = _make_item(
+        "After a $10B raise, an AI startup becomes one of the most valuable five-month-old startups ever funded",
+        "The company says the round will expand enterprise AI assistants, customer support automation, and office productivity tools.",
+        broad_feed=True,
+    )
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["physical_industry_ai_megafunding_signal"] is False
+    assert decision.relevance_status == "drop"
+    assert decision.skip_reason == "no_clear_all3_scope"
+
+
+def test_ai_coding_assistant_funding_remains_out_of_scope() -> None:
+    item = _make_item(
+        "AI coding assistant startup raises $2B to expand developer tooling",
+        "The company said the funding will expand code completion, agent workflows, and office productivity integrations.",
+        broad_feed=True,
+    )
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["physical_industry_ai_megafunding_signal"] is False
+    assert decision.relevance_status == "drop"
+    assert decision.skip_reason == "no_clear_all3_scope"
+
+
+def test_robotics_manufacturing_ai_funding_remains_in_scope() -> None:
+    item = _make_item(
+        "Industrial AI startup raises $1.2B to expand robotics and manufacturing software",
+        "The company says the funding will support factory deployment, robotics systems, and manufacturing workflow automation.",
+        broad_feed=True,
+    )
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["physical_industry_ai_megafunding_signal"] is True
+    assert decision.relevance_status == "keep"
+
+
+def test_smaller_generic_ai_funding_remains_out_of_scope() -> None:
+    item = _make_item(
+        "Enterprise AI startup raises $45M to scale workflow assistants",
+        "The funding will help the company expand customer support, productivity, and internal knowledge tools.",
+        broad_feed=True,
+    )
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["physical_industry_ai_megafunding_signal"] is False
+    assert decision.relevance_status == "drop"
+    assert decision.skip_reason == "no_clear_all3_scope"
+
+
+def test_weaker_physical_wording_requires_billion_scale() -> None:
+    large_item = _make_item(
+        "AI startup raises $3B to expand engineering and automation platforms",
+        "The company says the funding will support engineering and automation systems used across the physical world.",
+        broad_feed=True,
+    )
+    small_item = _make_item(
+        "AI startup raises $80M to expand engineering and automation platforms",
+        "The company says the funding will support engineering and automation systems used across the physical world.",
+        broad_feed=True,
+    )
+
+    large_flags = derive_event_flags(large_item)
+    small_flags = derive_event_flags(small_item)
+
+    assert large_flags["physical_industry_ai_megafunding_signal"] is True
+    assert small_flags["physical_industry_ai_megafunding_signal"] is False
+
+
 def test_major_industrial_ai_merger_story_from_broad_feed_reaches_send_path() -> None:
     item = _make_item(
         "Cohere and Aleph Alpha explore merger with Schwarz Group backing",
