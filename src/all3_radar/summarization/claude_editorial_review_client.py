@@ -20,6 +20,17 @@ MAX_SUMMARY_LENGTH = 280
 class ClaudeEditorialReviewUnavailableError(RuntimeError):
     """Raised when Claude editorial review is unavailable or invalid."""
 
+    def __init__(
+        self,
+        reason: str,
+        message: str | None = None,
+        *,
+        status_code: int | None = None,
+    ) -> None:
+        self.reason = reason
+        self.status_code = status_code
+        super().__init__(message or reason)
+
 
 def _normalize_text(value: str | None) -> str | None:
     if value is None:
@@ -147,11 +158,11 @@ class ClaudeEditorialReviewClient:
         relevance: str | None,
     ) -> ClaudeEditorialReviewResult:
         if not self.enabled:
-            raise ClaudeEditorialReviewUnavailableError("CLAUDE_EDITORIAL_ENABLED is false.")
+            raise ClaudeEditorialReviewUnavailableError("unknown", "CLAUDE_EDITORIAL_ENABLED is false.")
         if not self.api_key:
-            raise ClaudeEditorialReviewUnavailableError("ANTHROPIC_API_KEY is not configured.")
+            raise ClaudeEditorialReviewUnavailableError("unknown", "ANTHROPIC_API_KEY is not configured.")
         if not self.model:
-            raise ClaudeEditorialReviewUnavailableError("CLAUDE_EDITORIAL_MODEL is not configured.")
+            raise ClaudeEditorialReviewUnavailableError("unknown", "CLAUDE_EDITORIAL_MODEL is not configured.")
 
         prompt = build_claude_editorial_review_prompt(
             title=title,
@@ -182,15 +193,36 @@ class ClaudeEditorialReviewClient:
         try:
             with urllib.request.urlopen(request, timeout=self.timeout_seconds) as response:
                 body = json.loads(response.read().decode("utf-8"))
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError) as exc:
-            raise ClaudeEditorialReviewUnavailableError(f"Claude request failed: {exc}") from exc
+        except urllib.error.HTTPError as exc:
+            raise ClaudeEditorialReviewUnavailableError(
+                "api_http_error",
+                "Claude request failed with HTTP error.",
+                status_code=exc.code,
+            ) from exc
+        except TimeoutError as exc:
+            raise ClaudeEditorialReviewUnavailableError(
+                "api_timeout",
+                "Claude request timed out.",
+            ) from exc
+        except urllib.error.URLError as exc:
+            reason = "api_timeout" if isinstance(exc.reason, TimeoutError) else "api_network_error"
+            raise ClaudeEditorialReviewUnavailableError(
+                reason,
+                "Claude request failed with network error.",
+            ) from exc
+        except json.JSONDecodeError as exc:
+            raise ClaudeEditorialReviewUnavailableError(
+                "api_json_decode_error",
+                "Claude API response body was not valid JSON.",
+            ) from exc
 
         content = self._extract_text(body)
         try:
             parsed = json.loads(content)
         except json.JSONDecodeError as exc:
             raise ClaudeEditorialReviewUnavailableError(
-                "Claude editorial review response was not valid JSON."
+                "response_not_json",
+                "Claude editorial review response was not valid JSON.",
             ) from exc
         return self._validate_result(parsed)
 
@@ -205,21 +237,24 @@ class ClaudeEditorialReviewClient:
             ).strip()
         except (KeyError, TypeError) as exc:
             raise ClaudeEditorialReviewUnavailableError(
-                "Claude response did not contain text content."
+                "response_missing_text",
+                "Claude response did not contain text content.",
             ) from exc
         if not text:
-            raise ClaudeEditorialReviewUnavailableError("Claude response was empty.")
+            raise ClaudeEditorialReviewUnavailableError("response_empty", "Claude response was empty.")
         return text
 
     @staticmethod
     def _validate_result(parsed: Any) -> ClaudeEditorialReviewResult:
         if not isinstance(parsed, dict):
             raise ClaudeEditorialReviewUnavailableError(
-                "Claude editorial review response must be a JSON object."
+                "response_not_json",
+                "Claude editorial review response must be a JSON object.",
             )
         if "send_ok" not in parsed or not isinstance(parsed["send_ok"], bool):
             raise ClaudeEditorialReviewUnavailableError(
-                "Claude editorial review response must include boolean send_ok."
+                "response_missing_send_ok",
+                "Claude editorial review response must include boolean send_ok.",
             )
 
         send_ok = parsed["send_ok"]
@@ -227,7 +262,8 @@ class ClaudeEditorialReviewClient:
         confidence = _normalize_text(parsed.get("confidence"))
         if confidence is None or confidence not in VALID_CONFIDENCE_LEVELS:
             raise ClaudeEditorialReviewUnavailableError(
-                "Claude editorial review response had invalid confidence."
+                "response_invalid_confidence",
+                "Claude editorial review response had invalid confidence.",
             )
 
         edited_title = _sanitize_title(parsed.get("edited_title"))
@@ -237,12 +273,14 @@ class ClaudeEditorialReviewClient:
             if confidence == "high":
                 if edited_title is None:
                     raise ClaudeEditorialReviewUnavailableError(
-                        "Claude editorial review high-confidence promotion was missing a usable title."
+                        "response_invalid_promotion",
+                        "Claude editorial review high-confidence promotion was missing a usable title.",
                     )
                 edited_summary = _sanitize_summary(edited_title, parsed.get("edited_summary"))
                 if edited_summary is None:
                     raise ClaudeEditorialReviewUnavailableError(
-                        "Claude editorial review high-confidence promotion was missing a usable summary."
+                        "response_invalid_promotion",
+                        "Claude editorial review high-confidence promotion was missing a usable summary.",
                     )
             reject_reason = None
         else:
@@ -250,7 +288,8 @@ class ClaudeEditorialReviewClient:
             edited_summary = None
             if confidence == "high" and reject_reason is None:
                 raise ClaudeEditorialReviewUnavailableError(
-                    "Claude editorial review high-confidence rejection must include reject_reason."
+                    "response_invalid_rejection",
+                    "Claude editorial review high-confidence rejection must include reject_reason.",
                 )
 
         return ClaudeEditorialReviewResult(

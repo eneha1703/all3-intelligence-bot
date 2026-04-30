@@ -179,8 +179,9 @@ def test_review_candidate_invalid_json_raises(monkeypatch: pytest.MonkeyPatch) -
         lambda request, timeout: _FakeResponse(_payload("not-json")),
     )
 
-    with pytest.raises(ClaudeEditorialReviewUnavailableError, match="not valid JSON"):
+    with pytest.raises(ClaudeEditorialReviewUnavailableError, match="not valid JSON") as exc_info:
         _review(_client())
+    assert exc_info.value.reason == "response_not_json"
 
 
 def test_review_candidate_missing_send_ok_raises(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -191,8 +192,9 @@ def test_review_candidate_missing_send_ok_raises(monkeypatch: pytest.MonkeyPatch
         ),
     )
 
-    with pytest.raises(ClaudeEditorialReviewUnavailableError, match="send_ok"):
+    with pytest.raises(ClaudeEditorialReviewUnavailableError, match="send_ok") as exc_info:
         _review(_client())
+    assert exc_info.value.reason == "response_missing_send_ok"
 
 
 def test_review_candidate_high_confidence_rejection_requires_reason(
@@ -215,8 +217,9 @@ def test_review_candidate_high_confidence_rejection_requires_reason(
         ),
     )
 
-    with pytest.raises(ClaudeEditorialReviewUnavailableError, match="reject_reason"):
+    with pytest.raises(ClaudeEditorialReviewUnavailableError, match="reject_reason") as exc_info:
         _review(_client())
+    assert exc_info.value.reason == "response_invalid_rejection"
 
 
 def test_review_candidate_high_confidence_promotion_requires_title_and_summary(
@@ -239,8 +242,9 @@ def test_review_candidate_high_confidence_promotion_requires_title_and_summary(
         ),
     )
 
-    with pytest.raises(ClaudeEditorialReviewUnavailableError, match="usable title"):
+    with pytest.raises(ClaudeEditorialReviewUnavailableError, match="usable title") as exc_info:
         _review(_client())
+    assert exc_info.value.reason == "response_invalid_promotion"
 
 
 def test_review_candidate_softbank_robotics_datacenter_example_is_valid_promotion(
@@ -313,5 +317,7 @@ def test_review_candidate_http_error_is_controlled(monkeypatch: pytest.MonkeyPat
 
     monkeypatch.setattr("urllib.request.urlopen", _raise)
 
-    with pytest.raises(ClaudeEditorialReviewUnavailableError, match="Claude request failed"):
+    with pytest.raises(ClaudeEditorialReviewUnavailableError, match="HTTP error") as exc_info:
         _review(_client())
+    assert exc_info.value.reason == "api_http_error"
+    assert exc_info.value.status_code == 429

@@ -51,6 +51,21 @@ from all3_radar.summarization.claude_editorial_review_client import (
 from all3_radar.summarization.radar_summary import summarize_candidate
 
 LOGGER = logging.getLogger(__name__)
+KNOWN_CLAUDE_EDITORIAL_FALLBACK_REASONS = {
+    "api_http_error",
+    "api_timeout",
+    "api_network_error",
+    "api_json_decode_error",
+    "response_not_json",
+    "response_empty",
+    "response_missing_text",
+    "response_missing_send_ok",
+    "response_invalid_confidence",
+    "response_invalid_rejection",
+    "response_invalid_promotion",
+    "low_or_medium_confidence",
+    "unknown",
+}
 
 
 @dataclass
@@ -179,6 +194,14 @@ class RadarService:
 
         def increment_stage_counter(label: str, amount: int = 1) -> None:
             stage_counters[label] = stage_counters.get(label, 0) + amount
+
+        def record_claude_editorial_fallback(reason: str) -> str:
+            sanitized_reason = (
+                reason if reason in KNOWN_CLAUDE_EDITORIAL_FALLBACK_REASONS else "unknown"
+            )
+            increment_stage_counter("claude_editorial_fallback")
+            increment_stage_counter(f"claude_editorial_fallback_{sanitized_reason}")
+            return sanitized_reason
 
         try:
             for source in selected_sources:
@@ -522,19 +545,23 @@ class RadarService:
                             relevance=context.decision.relevance_status,
                         )
                     except ClaudeEditorialReviewUnavailableError as exc:
-                        increment_stage_counter("claude_editorial_fallback")
+                        fallback_reason = record_claude_editorial_fallback(exc.reason)
                         LOGGER.warning(
-                            "Claude editorial fallback: item=%s reason=%s",
-                            context.item.normalized_item_id,
-                            exc,
+                            'Claude editorial fallback: reason=%s%s title="%s" source="%s"',
+                            fallback_reason,
+                            f" status={exc.status_code}" if exc.status_code is not None else "",
+                            context.item.title,
+                            context.source.name,
                         )
                         continue
                     except Exception as exc:
                         increment_stage_counter("claude_editorial_error")
+                        record_claude_editorial_fallback("unknown")
                         LOGGER.warning(
-                            "Claude editorial error: item=%s reason=%s",
-                            context.item.normalized_item_id,
-                            exc,
+                            'Claude editorial error: reason=unknown title="%s" source="%s" error=%s',
+                            context.item.title,
+                            context.source.name,
+                            type(exc).__name__,
                         )
                         continue
 
@@ -584,11 +611,13 @@ class RadarService:
                         )
                         continue
 
-                    increment_stage_counter("claude_editorial_fallback")
+                    fallback_reason = record_claude_editorial_fallback("low_or_medium_confidence")
                     LOGGER.warning(
-                        "Claude editorial fallback: item=%s reason=%s",
-                        context.item.normalized_item_id,
-                        f"confidence_{claude_result.confidence}",
+                        'Claude editorial fallback: reason=%s confidence=%s title="%s" source="%s"',
+                        fallback_reason,
+                        claude_result.confidence,
+                        context.item.title,
+                        context.source.name,
                     )
 
             editorial_and_late_dedupe_started = perf_counter()

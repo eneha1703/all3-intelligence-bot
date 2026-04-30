@@ -2113,7 +2113,7 @@ def test_claude_editorial_high_confidence_rejection_blocks_subtle_false_positive
 
 
 def test_claude_editorial_unavailable_falls_back_to_old_deterministic_behavior(
-    monkeypatch, tmp_path
+    monkeypatch, tmp_path, caplog
 ) -> None:
     repo_root = Path(__file__).resolve().parents[2]
     db_path = tmp_path / "radar_claude_editorial_fallback.db"
@@ -2180,7 +2180,11 @@ def test_claude_editorial_unavailable_falls_back_to_old_deterministic_behavior(
 
         def review_candidate(self, **kwargs):
             self.call_count += 1
-            raise ClaudeEditorialReviewUnavailableError("invalid_json")
+            raise ClaudeEditorialReviewUnavailableError(
+                "api_http_error",
+                "Claude request failed with HTTP error.",
+                status_code=400,
+            )
 
     captured_stage_counters: dict[str, int] = {}
 
@@ -2194,6 +2198,7 @@ def test_claude_editorial_unavailable_falls_back_to_old_deterministic_behavior(
         return feed
 
     monkeypatch.setattr("all3_radar.pipeline.radar_service.write_run_audit_report", fake_write_run_audit_report)
+    caplog.set_level("WARNING")
     fake_sender = FakeTelegramSender()
     fake_claude = FakeClaudeEditorialClient()
     service = RadarService(
@@ -2212,10 +2217,15 @@ def test_claude_editorial_unavailable_falls_back_to_old_deterministic_behavior(
     assert len(fake_sender.sent_cards) == 1
     assert captured_stage_counters["claude_editorial_attempted"] == 1
     assert captured_stage_counters["claude_editorial_fallback"] == 1
+    assert captured_stage_counters["claude_editorial_fallback_api_http_error"] == 1
+    assert (
+        'Claude editorial fallback: reason=api_http_error status=400 title="Kewazo raises funding for construction robot rollout" source="Claude Editorial Fallback Feed"'
+        in caplog.text
+    )
 
 
 def test_claude_editorial_cap_is_respected(
-    monkeypatch, tmp_path
+    monkeypatch, tmp_path, caplog
 ) -> None:
     repo_root = Path(__file__).resolve().parents[2]
     db_path = tmp_path / "radar_claude_editorial_cap.db"
@@ -2311,6 +2321,7 @@ def test_claude_editorial_cap_is_respected(
         return feed
 
     monkeypatch.setattr("all3_radar.pipeline.radar_service.write_run_audit_report", fake_write_run_audit_report)
+    caplog.set_level("WARNING")
     fake_sender = FakeTelegramSender()
     fake_claude = FakeClaudeEditorialClient()
     service = RadarService(
@@ -2329,3 +2340,5 @@ def test_claude_editorial_cap_is_respected(
     assert len(fake_sender.sent_cards) == 2
     assert captured_stage_counters["claude_editorial_attempted"] == 1
     assert captured_stage_counters["claude_editorial_fallback"] == 1
+    assert captured_stage_counters["claude_editorial_fallback_low_or_medium_confidence"] == 1
+    assert "Claude editorial fallback: reason=low_or_medium_confidence confidence=medium" in caplog.text
