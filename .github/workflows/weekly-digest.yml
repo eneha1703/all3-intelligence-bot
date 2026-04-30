@@ -101,9 +101,9 @@ jobs:
           if re.search(r"https?://", visible_text):
               raise SystemExit("Curated digest contains raw visible URLs outside href attributes.")
 
-          output_path = Path("data/weekly_digest_2026-W18.md")
+          output_path = Path("data/weekly_digest_manual_curated_2026-W18.md")
           output_path.write_text(digest_text, encoding="utf-8")
-          Path("data/weekly_digest_2026-W18.report.md").write_text(
+          Path("data/weekly_digest_manual_curated_2026-W18.report.md").write_text(
               "Curated Week 18 digest path selected for manual Bot 2 send.\n",
               encoding="utf-8",
           )
@@ -119,17 +119,26 @@ jobs:
           from pathlib import Path
 
           repo_root = Path.cwd()
-          candidates = sorted(
-              repo_root.glob("data/weekly_digest_*.md"),
-              key=lambda path: path.stat().st_mtime,
-              reverse=True,
-          )
-          digest_files = [path for path in candidates if not path.name.endswith(".report.md")]
-          if not digest_files:
-              raise SystemExit("No weekly digest artifact found.")
+          manual_mode = "${{ github.event.inputs.manual_curated_week18 }}".strip().lower() == "true"
+          if manual_mode:
+              digest_path = repo_root / "data" / "weekly_digest_manual_curated_2026-W18.md"
+              if not digest_path.exists():
+                  raise SystemExit(f"Manual curated digest file was not created: {digest_path}")
+          else:
+              candidates = sorted(
+                  repo_root.glob("data/weekly_digest_*.md"),
+                  key=lambda path: path.stat().st_mtime,
+                  reverse=True,
+              )
+              digest_files = [path for path in candidates if not path.name.endswith(".report.md")]
+              if not digest_files:
+                  raise SystemExit("No weekly digest artifact found.")
+              digest_path = digest_files[0]
 
-          digest_path = digest_files[0]
           message = digest_path.read_text(encoding="utf-8").strip()
+          first_line = message.splitlines()[0] if message.splitlines() else ""
+          print(f"Digest first line: {first_line}")
+          print(f"Digest message length: {len(message)}")
 
           if not message.startswith("Top 5 News Highlights |"):
               raise SystemExit("Digest does not start with the required title prefix.")
