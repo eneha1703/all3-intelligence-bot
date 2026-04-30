@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from email.utils import format_datetime
@@ -13,6 +14,21 @@ from all3_radar.summarization.claude_editorial_review_client import (
     ClaudeEditorialReviewUnavailableError,
 )
 from all3_radar.sources.registry import SourceRegistry
+
+
+def _load_radar_decision_for_title(db_path: Path, title: str) -> tuple[str, str | None, dict, int]:
+    with sqlite3.connect(db_path) as connection:
+        row = connection.execute(
+            """
+            SELECT rd.send_status, rd.skip_reason, rd.signals_json, rd.used_gemini
+            FROM radar_decisions rd
+            JOIN normalized_items ni ON ni.id = rd.normalized_item_id
+            WHERE ni.title = ?
+            """,
+            (title,),
+        ).fetchone()
+    assert row is not None
+    return row[0], row[1], json.loads(row[2]), row[3]
 
 
 def test_radar_collection_persists_direct_source_items(monkeypatch, tmp_path, caplog) -> None:
@@ -164,7 +180,11 @@ def test_radar_collection_dedupes_and_sends_with_mocks(monkeypatch, tmp_path, ca
         is_available = True
 
         def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
-            return ("The round supports deployment expansion across construction robotics workflows.", None)
+            return (
+                "The round supports deployment expansion across construction robotics workflows. "
+                "Kewazo is using the capital to scale rollout across factory and jobsite operations.",
+                None,
+            )
 
     class FakeTelegramSender:
         def __init__(self) -> None:
@@ -444,7 +464,11 @@ def test_radar_does_not_resend_same_canonical_event_across_runs(monkeypatch, tmp
         is_available = True
 
         def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
-            return ("The round supports deployment expansion across construction robotics workflows.", None)
+            return (
+                "The round supports deployment expansion across construction robotics workflows. "
+                "Kewazo is using the capital to scale rollout across factory and jobsite operations.",
+                None,
+            )
 
     class FakeTelegramSender:
         def __init__(self) -> None:
@@ -1369,7 +1393,11 @@ def test_claude_final_card_disabled_preserves_current_behavior_without_calling_c
         is_available = True
 
         def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
-            return ("The round supports deployment expansion across construction robotics workflows.", None)
+            return (
+                "The round supports deployment expansion across construction robotics workflows. "
+                "Kewazo is using the capital to scale rollout across factory and jobsite operations.",
+                None,
+            )
 
     class FakeTelegramSender:
         def __init__(self) -> None:
@@ -1418,6 +1446,18 @@ def test_claude_final_card_disabled_preserves_current_behavior_without_calling_c
     assert fake_claude.call_count == 0
     assert len(fake_sender.sent_cards) == 1
     assert "<b>Kewazo raises funding for construction robot rollout</b>" in fake_sender.sent_cards[0].text
+    send_status, skip_reason, signals, used_gemini = _load_radar_decision_for_title(
+        db_path, "Kewazo raises funding for construction robot rollout"
+    )
+    assert send_status == "sent"
+    assert skip_reason is None
+    assert used_gemini == 1
+    assert signals["card_writer"] == "gemini_summary"
+    assert signals["final_card_title_source"] == "original_title"
+    assert signals["final_card_summary_source"] == "gemini_summary"
+    assert signals["claude_final_card_reviewed"] is False
+    assert signals["claude_final_card_outcome"] == "not_attempted"
+    assert signals["claude_final_card_reason"] is None
 
 
 def test_claude_final_card_success_updates_final_card_and_stage_counters(
@@ -1462,7 +1502,11 @@ def test_claude_final_card_success_updates_final_card_and_stage_counters(
         is_available = True
 
         def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
-            return ("The round supports deployment expansion across construction robotics workflows.", None)
+            return (
+                "The round supports deployment expansion across construction robotics workflows. "
+                "Kewazo is using the capital to scale rollout across factory and jobsite operations.",
+                None,
+            )
 
     class FakeTelegramSender:
         def __init__(self) -> None:
@@ -1531,6 +1575,18 @@ def test_claude_final_card_success_updates_final_card_and_stage_counters(
     assert "Claude edited summary for the final Telegram card." in fake_sender.sent_cards[0].text
     assert captured_stage_counters["claude_final_card_attempted"] == 1
     assert captured_stage_counters["claude_final_card_used"] == 1
+    send_status, skip_reason, signals, used_gemini = _load_radar_decision_for_title(
+        db_path, "Kewazo raises funding for construction robot rollout"
+    )
+    assert send_status == "sent"
+    assert skip_reason is None
+    assert used_gemini == 1
+    assert signals["card_writer"] == "claude_final_card"
+    assert signals["final_card_title_source"] == "claude_final_card"
+    assert signals["final_card_summary_source"] == "claude_final_card"
+    assert signals["claude_final_card_reviewed"] is True
+    assert signals["claude_final_card_outcome"] == "rewritten"
+    assert signals["claude_final_card_reason"] is None
 
 
 def test_claude_final_card_rejection_marks_stored_only_and_skips_send(
@@ -1699,7 +1755,11 @@ def test_claude_final_card_failure_falls_back_to_deterministic_send_and_cap(
         is_available = True
 
         def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
-            return (preview or title, None)
+            return (
+                "Kewazo says the round supports deployment expansion across construction robotics workflows. "
+                "The company is using the capital to scale rollout across factory and jobsite operations.",
+                None,
+            )
 
     class FakeTelegramSender:
         def __init__(self) -> None:
@@ -1759,6 +1819,106 @@ def test_claude_final_card_failure_falls_back_to_deterministic_send_and_cap(
     assert "<b>Hexagon and Schaeffler to install 1,000 Aeon humanoid robots across global factory network</b>" in fake_sender.sent_cards[1].text
     assert captured_stage_counters["claude_final_card_attempted"] == 1
     assert captured_stage_counters["claude_final_card_fallback"] == 1
+    send_status, skip_reason, signals, used_gemini = _load_radar_decision_for_title(
+        db_path, "Kewazo raises funding for construction robot rollout"
+    )
+    assert send_status == "sent"
+    assert skip_reason is None
+    assert used_gemini == 1
+    assert signals["claude_final_card_reviewed"] is True
+    assert signals["claude_final_card_outcome"] == "fallback_unavailable"
+    assert signals["claude_final_card_reason"] == "invalid_json"
+    assert signals["card_writer"] == "deterministic_after_claude_final_card_fallback"
+    assert signals["final_card_title_source"] == "original_title"
+    assert signals["final_card_summary_source"] == "gemini_summary"
+
+
+def test_deterministic_fallback_summary_records_card_writer_diagnostics(
+    monkeypatch, tmp_path
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "radar_deterministic_summary.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("CLAUDE_FINAL_CARD_ENABLED", "false")
+
+    now = datetime.now(timezone.utc)
+    feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Kewazo raises funding for construction robot rollout</title>
+    <link>https://example.com/kewazo</link>
+    <description>The company said the round will support factory and jobsite deployment expansion.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=1))}</pubDate>
+    <guid>a1</guid>
+  </item>
+</channel></rss>"""
+
+    registry = SourceRegistry(
+        (
+            SourceDefinition(
+                id="deterministic_summary_feed",
+                name="Deterministic Summary Feed",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://example.com/deterministic-summary.xml",
+                priority=100,
+                tags=("robotics", "construction"),
+            ),
+        )
+    )
+
+    class FakeGeminiClient:
+        is_available = False
+
+    class FakeTelegramSender:
+        def __init__(self) -> None:
+            self.sent_cards = []
+
+        def send_card(self, card):
+            self.sent_cards.append(card)
+            return [
+                TelegramDelivery(
+                    chat_id="123",
+                    status="sent",
+                    telegram_message_id="msg-1",
+                    error_text=None,
+                    payload_text=card.text,
+                )
+            ]
+
+    def fake_fetch_text(url: str) -> str:
+        assert url == "https://example.com/deterministic-summary.xml"
+        return feed
+
+    fake_sender = FakeTelegramSender()
+    service = RadarService(
+        repo_root=repo_root,
+        registry=registry,
+        fetch_text_fn=fake_fetch_text,
+        gemini_client=FakeGeminiClient(),
+        telegram_sender=fake_sender,
+    )
+
+    result = service.run(dry_run=False)
+
+    assert result.sent_items == 1
+    assert len(fake_sender.sent_cards) == 1
+    send_status, skip_reason, signals, used_gemini = _load_radar_decision_for_title(
+        db_path, "Kewazo raises funding for construction robot rollout"
+    )
+    assert send_status == "sent"
+    assert skip_reason is None
+    assert used_gemini == 0
+    assert signals["card_writer"] == "deterministic_summary"
+    assert signals["final_card_title_source"] == "original_title"
+    assert signals["final_card_summary_source"] == "deterministic_summary"
+    assert signals["claude_final_card_reviewed"] is False
+    assert signals["claude_final_card_outcome"] == "not_attempted"
+    assert signals["claude_final_card_reason"] is None
 
 
 def test_claude_editorial_disabled_preserves_current_behavior_without_calling_client(
@@ -1975,6 +2135,18 @@ def test_claude_editorial_high_confidence_promotion_sends_below_threshold_story(
     assert "<b>SoftBank-backed Roze automates data center construction</b>" in fake_sender.sent_cards[0].text
     assert captured_stage_counters["claude_editorial_attempted"] == 1
     assert captured_stage_counters["claude_editorial_promoted"] == 1
+    send_status, skip_reason, signals, used_gemini = _load_radar_decision_for_title(
+        db_path, "SoftBank backs robotics startup Roze for data center construction automation"
+    )
+    assert send_status == "sent"
+    assert skip_reason is None
+    assert used_gemini == 0
+    assert signals["card_writer"] == "claude_editorial_promotion"
+    assert signals["final_card_title_source"] == "claude_editorial_promotion"
+    assert signals["final_card_summary_source"] == "claude_editorial_promotion"
+    assert signals["claude_final_card_reviewed"] is False
+    assert signals["claude_final_card_outcome"] == "not_attempted"
+    assert signals["claude_final_card_reason"] is None
 
 
 def test_claude_editorial_high_confidence_rejection_blocks_subtle_false_positive(

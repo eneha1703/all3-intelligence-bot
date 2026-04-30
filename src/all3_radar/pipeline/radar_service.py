@@ -82,6 +82,72 @@ class CurrentRunContext:
     final_summary_text: str | None = None
 
 
+def _with_context_signals(context: CurrentRunContext, **updates: object) -> None:
+    if context.decision is None:
+        return
+    merged_signals = {**context.decision.signals, **updates}
+    context.decision = RankedDecision(
+        relevance_status=context.decision.relevance_status,
+        send_status=context.decision.send_status,
+        skip_reason=context.decision.skip_reason,
+        score=context.decision.score,
+        signals=merged_signals,
+        is_shortlisted=context.decision.is_shortlisted,
+        is_borderline=context.decision.is_borderline,
+    )
+
+
+def _resolve_card_writer_diagnostics(context: CurrentRunContext) -> dict[str, object]:
+    if context.decision is None:
+        return {}
+
+    signals = context.decision.signals
+    outcome = signals.get("claude_final_card_outcome")
+    reviewed = bool(signals.get("claude_final_card_reviewed", False))
+    title_source = signals.get("final_card_title_source")
+    summary_source = signals.get("final_card_summary_source")
+    reason = signals.get("claude_final_card_reason")
+
+    if outcome is None:
+        reviewed = False
+        outcome = "not_attempted"
+        reason = None
+
+    if title_source is None:
+        title_source = "original_title"
+
+    if summary_source is None:
+        if context.final_summary_text and signals.get("claude_editorial_promoted", False):
+            summary_source = "claude_editorial_promotion"
+        elif context.summary is not None and context.summary.used_gemini:
+            summary_source = "gemini_summary"
+        else:
+            summary_source = "deterministic_summary"
+
+    if context.final_headline and title_source == "claude_final_card":
+        card_writer = "claude_final_card"
+    elif context.final_headline and title_source == "claude_editorial_promotion":
+        card_writer = "claude_editorial_promotion"
+    elif outcome in {"fallback_unavailable", "fallback_low_confidence"}:
+        if title_source == "claude_editorial_promotion" or summary_source == "claude_editorial_promotion":
+            card_writer = "claude_editorial_promotion"
+        else:
+            card_writer = "deterministic_after_claude_final_card_fallback"
+    elif summary_source == "gemini_summary":
+        card_writer = "gemini_summary"
+    else:
+        card_writer = "deterministic_summary"
+
+    return {
+        "card_writer": card_writer,
+        "final_card_title_source": title_source,
+        "final_card_summary_source": summary_source,
+        "claude_final_card_reviewed": reviewed,
+        "claude_final_card_outcome": outcome,
+        "claude_final_card_reason": reason,
+    }
+
+
 def _settings_snapshot(settings: object) -> dict:
     snapshot = asdict(settings)
     snapshot["app"]["database_path"] = str(snapshot["app"]["database_path"])
@@ -604,6 +670,11 @@ class RadarService:
                         )
                         context.final_headline = claude_result.edited_title
                         context.final_summary_text = claude_result.edited_summary
+                        _with_context_signals(
+                            context,
+                            final_card_title_source="claude_editorial_promotion",
+                            final_card_summary_source="claude_editorial_promotion",
+                        )
                         LOGGER.info(
                             "Claude editorial promoted candidate: item=%s score=%s",
                             context.item.normalized_item_id,
@@ -746,6 +817,12 @@ class RadarService:
                         )
                     except ClaudeFinalCardUnavailableError as exc:
                         increment_stage_counter("claude_final_card_fallback")
+                        _with_context_signals(
+                            context,
+                            claude_final_card_reviewed=True,
+                            claude_final_card_outcome="fallback_unavailable",
+                            claude_final_card_reason=str(exc),
+                        )
                         LOGGER.warning(
                             "Claude final-card fallback: item=%s reason=%s",
                             context.item.normalized_item_id,
@@ -755,6 +832,12 @@ class RadarService:
                         continue
                     except Exception as exc:
                         increment_stage_counter("claude_final_card_error")
+                        _with_context_signals(
+                            context,
+                            claude_final_card_reviewed=True,
+                            claude_final_card_outcome="fallback_unavailable",
+                            claude_final_card_reason=type(exc).__name__,
+                        )
                         LOGGER.warning(
                             "Claude final-card error: item=%s reason=%s",
                             context.item.normalized_item_id,
@@ -779,6 +862,12 @@ class RadarService:
                             is_shortlisted=context.decision.is_shortlisted,
                             is_borderline=context.decision.is_borderline,
                         )
+                        _with_context_signals(
+                            context,
+                            claude_final_card_reviewed=True,
+                            claude_final_card_outcome="rejected",
+                            claude_final_card_reason=claude_result.reject_reason,
+                        )
                         LOGGER.info(
                             "Claude final-card rejected candidate: item=%s reason=%s",
                             context.item.normalized_item_id,
@@ -788,6 +877,12 @@ class RadarService:
 
                     if claude_result.confidence == "low" or not claude_result.title or not claude_result.summary:
                         increment_stage_counter("claude_final_card_fallback")
+                        _with_context_signals(
+                            context,
+                            claude_final_card_reviewed=True,
+                            claude_final_card_outcome="fallback_low_confidence",
+                            claude_final_card_reason="low_confidence_or_missing_fields",
+                        )
                         LOGGER.warning(
                             "Claude final-card fallback: item=%s reason=%s",
                             context.item.normalized_item_id,
@@ -799,6 +894,14 @@ class RadarService:
                     context.final_headline = claude_result.title
                     context.final_summary_text = claude_result.summary
                     increment_stage_counter("claude_final_card_used")
+                    _with_context_signals(
+                        context,
+                        claude_final_card_reviewed=True,
+                        claude_final_card_outcome="rewritten",
+                        claude_final_card_reason=None,
+                        final_card_title_source="claude_final_card",
+                        final_card_summary_source="claude_final_card",
+                    )
                     filtered_sendable_contexts.append(context)
                 sendable_contexts = filtered_sendable_contexts
 
@@ -810,6 +913,7 @@ class RadarService:
 
             delivery_started = perf_counter()
             for context in sendable_contexts:
+                _with_context_signals(context, **_resolve_card_writer_diagnostics(context))
                 card = build_news_card(
                     headline=context.final_headline or context.item.title,
                     summary_text=context.final_summary_text or (context.summary.summary_text if context.summary else None),
