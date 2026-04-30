@@ -23,6 +23,8 @@ jobs:
       CLAUDE_DIGEST_TIMEOUT_SECONDS: ${{ vars.CLAUDE_DIGEST_TIMEOUT_SECONDS }}
       CLAUDE_DIGEST_MAX_INPUT_ITEMS: ${{ vars.CLAUDE_DIGEST_MAX_INPUT_ITEMS }}
       CLAUDE_DIGEST_MAX_TOKENS: ${{ vars.CLAUDE_DIGEST_MAX_TOKENS }}
+      TELEGRAM_DIGEST_BOT_TOKEN: ${{ secrets.TELEGRAM_DIGEST_BOT_TOKEN }}
+      TELEGRAM_DIGEST_CHAT_IDS: ${{ vars.TELEGRAM_DIGEST_CHAT_IDS }}
       DATABASE_PATH: data/all3_radar.db
     steps:
       - uses: actions/checkout@v4
@@ -53,6 +55,83 @@ jobs:
         run: python -m all3_radar.app.admin_cli db init
       - name: Build digest
         run: python -m all3_radar.app.digest_cli build --week "${{ github.event.inputs.week_key || 'latest' }}"
+      - name: Send digest to Bot 2
+        shell: python
+        run: |
+          import json
+          import os
+          import re
+          import sys
+          import urllib.request
+          from pathlib import Path
+
+          repo_root = Path.cwd()
+          candidates = sorted(
+              repo_root.glob("data/weekly_digest_*.md"),
+              key=lambda path: path.stat().st_mtime,
+              reverse=True,
+          )
+          digest_files = [path for path in candidates if not path.name.endswith(".report.md")]
+          if not digest_files:
+              raise SystemExit("No weekly digest artifact found.")
+
+          digest_path = digest_files[0]
+          message = digest_path.read_text(encoding="utf-8").strip()
+
+          if not message.startswith("Top 5 News Highlights |"):
+              raise SystemExit("Digest does not start with the required title prefix.")
+          if len(message) >= 4096:
+              raise SystemExit(f"Digest message is too long for a single Telegram message: {len(message)}")
+
+          numbered_items = re.findall(r"(?m)^\d+\. <b>", message)
+          if len(numbered_items) < 5:
+              raise SystemExit(f"Digest must contain at least 5 numbered items, found {len(numbered_items)}.")
+
+          if '<a href="' not in message or '>Link</a>' not in message:
+              raise SystemExit("Digest is missing embedded HTML Link anchors.")
+          if "example.com" in message:
+              raise SystemExit("Digest still contains example.com placeholder links.")
+
+          visible_text = re.sub(r'<a href="[^"]+">Link</a>', "Link", message)
+          if re.search(r"https?://", visible_text):
+              raise SystemExit("Digest contains raw visible URLs outside href attributes.")
+
+          bot_token = (os.environ.get("TELEGRAM_DIGEST_BOT_TOKEN") or "").strip()
+          chat_ids_raw = (os.environ.get("TELEGRAM_DIGEST_CHAT_IDS") or "").strip()
+          if not bot_token:
+              raise SystemExit("TELEGRAM_DIGEST_BOT_TOKEN is empty.")
+          if not chat_ids_raw:
+              raise SystemExit("TELEGRAM_DIGEST_CHAT_IDS is empty.")
+
+          chat_ids = [part.strip() for part in chat_ids_raw.split(",") if part.strip()]
+          if not chat_ids:
+              raise SystemExit("No valid TELEGRAM_DIGEST_CHAT_IDS were provided.")
+
+          masked_token = f"{bot_token[:4]}***{bot_token[-4:]}" if len(bot_token) >= 8 else "***"
+          print(f"Sending digest artifact {digest_path.name} to {len(chat_ids)} Bot 2 chat(s) with token {masked_token}")
+
+          endpoint = f"https://api.telegram.org/bot{bot_token}/sendMessage"
+          for chat_id in chat_ids:
+              payload = json.dumps(
+                  {
+                      "chat_id": chat_id,
+                      "text": message,
+                      "parse_mode": "HTML",
+                      "disable_web_page_preview": True,
+                  }
+              ).encode("utf-8")
+              request = urllib.request.Request(
+                  endpoint,
+                  data=payload,
+                  headers={"Content-Type": "application/json"},
+                  method="POST",
+              )
+              with urllib.request.urlopen(request, timeout=30) as response:
+                  body = json.loads(response.read().decode("utf-8"))
+              if not body.get("ok"):
+                  raise SystemExit(f"Telegram send failed for chat_id={chat_id}: {body}")
+              masked_chat = f"{chat_id[:4]}***{chat_id[-4:]}" if len(chat_id) >= 8 else "***"
+              print(f"Sent digest to Bot 2 chat_id={masked_chat} ok=true")
       - name: Upload digest artifact
         uses: actions/upload-artifact@v4
         with:
