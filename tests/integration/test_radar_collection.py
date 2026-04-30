@@ -6,7 +6,7 @@ from pathlib import Path
 from all3_radar.delivery.telegram import TelegramDelivery
 from all3_radar.domain.enums import SourceKind, SourceLayer
 from all3_radar.domain.models import ClaudeFinalCardResult, SourceDefinition
-from all3_radar.pipeline.radar_service import RadarService
+from all3_radar.pipeline.radar_service import RadarService, _settings_snapshot
 from all3_radar.summarization.claude_final_card_client import ClaudeFinalCardUnavailableError
 from all3_radar.sources.registry import SourceRegistry
 
@@ -77,6 +77,25 @@ def test_radar_collection_persists_direct_source_items(monkeypatch, tmp_path, ca
     assert normalized_url == "https://example.com/recent-story"
     assert "Loaded source inventory" in caplog.text
     assert "Collected items from source: id=sample_direct_rss count=3" in caplog.text
+
+
+def test_settings_snapshot_masks_anthropic_key(monkeypatch, tmp_path) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    monkeypatch.setenv("DATABASE_PATH", str(tmp_path / "radar.db"))
+    monkeypatch.setenv("GEMINI_API_KEY", "gemini-secret")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "anthropic-secret")
+    monkeypatch.setenv("TELEGRAM_ALERT_BOT_TOKEN", "telegram-secret")
+
+    service = RadarService(
+        repo_root=repo_root,
+        registry=SourceRegistry(()),
+    )
+
+    snapshot = _settings_snapshot(service.settings)
+
+    assert snapshot["integrations"]["gemini_api_key"] == "***"
+    assert snapshot["integrations"]["anthropic_api_key"] == "***"
+    assert snapshot["integrations"]["telegram_alert_bot_token"] == "***"
 
 
 def test_radar_collection_dedupes_and_sends_with_mocks(monkeypatch, tmp_path, caplog) -> None:

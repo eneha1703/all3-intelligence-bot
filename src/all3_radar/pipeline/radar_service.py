@@ -67,6 +67,9 @@ def _settings_snapshot(settings: object) -> dict:
     snapshot = asdict(settings)
     snapshot["app"]["database_path"] = str(snapshot["app"]["database_path"])
     snapshot["integrations"]["gemini_api_key"] = "***" if snapshot["integrations"]["gemini_api_key"] else None
+    snapshot["integrations"]["anthropic_api_key"] = (
+        "***" if snapshot["integrations"]["anthropic_api_key"] else None
+    )
     snapshot["integrations"]["telegram_alert_bot_token"] = (
         "***" if snapshot["integrations"]["telegram_alert_bot_token"] else None
     )
