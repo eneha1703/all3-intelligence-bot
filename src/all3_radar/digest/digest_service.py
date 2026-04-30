@@ -10,12 +10,13 @@ from pathlib import Path
 from all3_radar.config.loader import load_settings
 from all3_radar.digest.claude_client import ClaudeDigestClient, ClaudeDigestUnavailableError
 from all3_radar.digest.corpus import (
-    build_claude_corpus_prompt,
+    build_claude_selection_prompt,
+    build_claude_writer_prompt,
     build_default_output_path,
     hydrate_digest_candidates,
-    parse_week_key,
+    resolve_digest_window,
 )
-from all3_radar.digest.writer import build_digest_markdown
+from all3_radar.digest.writer import build_digest_html, build_digest_markdown
 from all3_radar.domain.enums import PipelineName, PipelineStatus
 from all3_radar.observability.logging import configure_logging
 from all3_radar.storage.db import initialize_database
@@ -67,20 +68,23 @@ class DigestService:
         initialize_database(self.settings.app.database_path, repo_root / "src" / "all3_radar" / "storage" / "schema.sql")
 
     def build_digest(self, week_key: str, output_path: Path | None = None) -> WeeklyDigestBuildResult:
-        normalized_week_key = week_key.strip()
-        week_start, week_end = parse_week_key(normalized_week_key)
+        window = resolve_digest_window(week_key)
+        normalized_week_key = window.week_key
         output_path = output_path or build_default_output_path(self.repo_root, normalized_week_key)
+        report_output_path = output_path.with_name(f"{output_path.stem}.report.md")
         output_path.parent.mkdir(parents=True, exist_ok=True)
+        report_output_path.parent.mkdir(parents=True, exist_ok=True)
 
         pipeline_run_id = self.repository.create_pipeline_run(PipelineName.DIGEST, _settings_snapshot(self.settings))
         digest_run_id = self.repository.create_weekly_digest_run(pipeline_run_id, normalized_week_key)
         fallback_reason: str | None = None
-        final_markdown: str | None = None
+        final_markdown = ""
+        claude_used = False
 
         try:
             rows = self.repository.load_digest_candidates_for_week(
-                start_date=week_start.isoformat(),
-                end_date=week_end.isoformat(),
+                start_date=window.previous_thursday.isoformat(),
+                end_date=window.current_thursday.isoformat(),
                 limit=self.settings.digest.shortlist_size_before_claude,
                 require_canonical_events=self.settings.digest.require_canonical_events,
             )
@@ -102,24 +106,46 @@ class DigestService:
             )
             self.repository.replace_weekly_digest_candidates(digest_run_id, rows)
 
-            claude_section: str | None = None
+            selected_candidates = candidates[:5]
             if candidates and self.claude_client.is_available:
-                prompt = build_claude_corpus_prompt(
-                    normalized_week_key,
+                selection_prompt = build_claude_selection_prompt(
+                    window,
                     candidates,
                     self.settings.digest.claude_digest_max_input_items,
                 )
                 try:
-                    claude_section = self.claude_client.generate_digest_section(prompt)
+                    selected_ids = self.claude_client.select_top_story_ids(
+                        selection_prompt,
+                        allowed_ids={candidate.canonical_event_id for candidate in candidates},
+                        exact_count=min(5, len(candidates)),
+                    )
+                    selected_candidates = [
+                        candidate for candidate in candidates if candidate.canonical_event_id in set(selected_ids)
+                    ]
+                    selected_candidates.sort(key=lambda candidate: selected_ids.index(candidate.canonical_event_id))
                 except ClaudeDigestUnavailableError as exc:
                     fallback_reason = str(exc)
-                    LOGGER.warning("Claude digest synthesis unavailable for week=%s reason=%s", normalized_week_key, exc)
+                    LOGGER.warning("Claude digest selection unavailable for week=%s reason=%s", normalized_week_key, exc)
             elif self.settings.digest.claude_digest_enabled:
                 fallback_reason = "Claude digest synthesis is enabled but not fully configured."
-                LOGGER.warning("Claude digest synthesis skipped for week=%s reason=%s", normalized_week_key, fallback_reason)
+                LOGGER.warning("Claude digest selection skipped for week=%s reason=%s", normalized_week_key, fallback_reason)
 
-            final_markdown = build_digest_markdown(normalized_week_key, candidates, claude_section=claude_section)
+            final_markdown = build_digest_html(window.title, selected_candidates)
+            if selected_candidates and self.claude_client.is_available and fallback_reason is None:
+                writer_prompt = build_claude_writer_prompt(window, selected_candidates)
+                try:
+                    final_markdown = self.claude_client.generate_telegram_digest(
+                        writer_prompt,
+                        expected_title=window.title,
+                    )
+                    claude_used = True
+                except ClaudeDigestUnavailableError as exc:
+                    fallback_reason = str(exc)
+                    final_markdown = build_digest_html(window.title, selected_candidates)
+                    LOGGER.warning("Claude digest writing unavailable for week=%s reason=%s", normalized_week_key, exc)
+
             output_path.write_text(final_markdown, encoding="utf-8")
+            report_output_path.write_text(build_digest_markdown(normalized_week_key, selected_candidates), encoding="utf-8")
             self.repository.finish_weekly_digest_run(
                 digest_run_id=digest_run_id,
                 status=PipelineStatus.COMPLETED,
@@ -132,9 +158,11 @@ class DigestService:
                 {
                     "week_key": normalized_week_key,
                     "candidate_count": len(candidates),
-                    "claude_used": bool(claude_section),
+                    "claude_used": claude_used,
                     "fallback_reason": fallback_reason,
                     "output_path": str(output_path),
+                    "report_output_path": str(report_output_path),
+                    "digest_title": window.title,
                 },
             )
             return WeeklyDigestBuildResult(
@@ -143,7 +171,7 @@ class DigestService:
                 week_key=normalized_week_key,
                 output_path=output_path,
                 candidate_count=len(candidates),
-                claude_used=bool(claude_section),
+                claude_used=claude_used,
                 fallback_reason=fallback_reason,
             )
         except Exception:

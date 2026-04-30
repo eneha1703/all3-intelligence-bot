@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from all3_radar.digest.corpus import DigestCandidate
-from all3_radar.digest.writer import build_digest_markdown
+from all3_radar.digest.writer import build_digest_html, build_digest_markdown
 
 
 def test_build_digest_markdown_includes_deterministic_sections() -> None:
@@ -28,3 +28,26 @@ def test_build_digest_markdown_includes_deterministic_sections() -> None:
     assert "## Signals Snapshot" in markdown
     assert "## Top Stories" in markdown
     assert "[Flex and Teradyne expand partnership to scale physical AI](https://example.com/flex-teradyne)" in markdown
+
+
+def test_build_digest_html_embeds_link_without_visible_raw_url() -> None:
+    candidate = DigestCandidate(
+        canonical_event_id="event-1",
+        normalized_item_id="item-1",
+        source_id="destatis_press",
+        title="German construction orders recover before capacity does",
+        canonical_url="https://example.com/destatis",
+        published_ts=datetime(2026, 4, 29, 9, 0, tzinfo=timezone.utc),
+        score=82,
+        summary_text="Destatis signaled improving order intake while site capacity and labor remain constrained.",
+        event_flags={"construction_statistics_signal": True},
+    )
+
+    digest_html = build_digest_html(
+        "Top 5 News Highlights | 23-30 April 2026 | Week 18",
+        [candidate],
+    )
+
+    assert digest_html.startswith("Top 5 News Highlights | 23-30 April 2026 | Week 18")
+    assert '<a href="https://example.com/destatis">Link</a>' in digest_html
+    assert "https://example.com/destatis" not in digest_html.replace('<a href="https://example.com/destatis">Link</a>', "")

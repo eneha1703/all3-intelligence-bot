@@ -2,10 +2,26 @@
 
 from __future__ import annotations
 
+import html
+import re
 from collections import Counter
 from datetime import datetime, timezone
 
 from all3_radar.digest.corpus import DigestCandidate
+
+URL_RE = re.compile(r"https?://\S+")
+
+
+def _sanitize_summary_text(summary_text: str | None) -> str:
+    if not summary_text:
+        return "This story remained one of the week's strongest operational signals across the All3 scope."
+    normalized = URL_RE.sub("", summary_text).strip()
+    normalized = re.sub(r"\s+", " ", normalized).strip(" .")
+    if not normalized:
+        return "This story remained one of the week's strongest operational signals across the All3 scope."
+    if normalized[-1] not in ".!?":
+        normalized = f"{normalized}."
+    return normalized
 
 
 def _format_story_block(index: int, candidate: DigestCandidate) -> list[str]:
@@ -17,6 +33,24 @@ def _format_story_block(index: int, candidate: DigestCandidate) -> list[str]:
     if candidate.summary_text:
         lines.append(f"   Summary: {candidate.summary_text}")
     return lines
+
+
+def build_digest_html(title: str, candidates: list[DigestCandidate]) -> str:
+    lines = [title]
+    if not candidates:
+        lines.extend(["", "No eligible stories were found for this digest window."])
+        return "\n".join(lines)
+
+    for index, candidate in enumerate(candidates, start=1):
+        paragraph = _sanitize_summary_text(candidate.summary_text)
+        lines.extend(
+            [
+                "",
+                f"{index}. <b>{html.escape(candidate.title)}</b>",
+                f'{html.escape(paragraph)} <a href="{html.escape(candidate.canonical_url, quote=True)}">Link</a>',
+            ]
+        )
+    return "\n".join(lines)
 
 
 def _build_signal_snapshot(candidates: list[DigestCandidate]) -> list[str]:

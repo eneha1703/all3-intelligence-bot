@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -25,25 +25,76 @@ class DigestCandidate:
     event_flags: dict[str, bool]
 
 
-def parse_week_key(week_key: str) -> tuple[date, date]:
+@dataclass(frozen=True)
+class DigestWindow:
+    week_key: str
+    previous_thursday: date
+    current_thursday: date
+    iso_week_number: int
+    title: str
+
+
+def _normalize_current_thursday(week_key: str, today: date | None = None) -> date:
     normalized = week_key.strip()
     if normalized == "latest":
-        today = datetime.now(timezone.utc).date()
-        iso_year, iso_week, _ = today.isocalendar()
-    else:
-        match = WEEK_KEY_RE.match(normalized)
-        if not match:
-            raise ValueError(f"Invalid week key: {week_key!r}")
-        iso_year = int(match.group("year"))
-        iso_week = int(match.group("week"))
-    week_start = date.fromisocalendar(iso_year, iso_week, 1)
-    week_end = date.fromisocalendar(iso_year, iso_week, 7)
-    return week_start, week_end
+        resolved_today = today or datetime.now(timezone.utc).date()
+        offset = (resolved_today.weekday() - 3) % 7
+        return resolved_today - timedelta(days=offset)
+
+    match = WEEK_KEY_RE.match(normalized)
+    if not match:
+        raise ValueError(f"Invalid week key: {week_key!r}")
+    iso_year = int(match.group("year"))
+    iso_week = int(match.group("week"))
+    return date.fromisocalendar(iso_year, iso_week, 4)
+
+
+def _format_digest_range(previous_thursday: date, current_thursday: date) -> str:
+    if previous_thursday.year == current_thursday.year and previous_thursday.month == current_thursday.month:
+        return f"{previous_thursday.day}-{current_thursday.day} {current_thursday.strftime('%B %Y')}"
+    if previous_thursday.year == current_thursday.year:
+        return (
+            f"{previous_thursday.day} {previous_thursday.strftime('%B')}-"
+            f"{current_thursday.day} {current_thursday.strftime('%B %Y')}"
+        )
+    return (
+        f"{previous_thursday.day} {previous_thursday.strftime('%B %Y')}-"
+        f"{current_thursday.day} {current_thursday.strftime('%B %Y')}"
+    )
+
+
+def resolve_digest_window(week_key: str, today: date | None = None) -> DigestWindow:
+    current_thursday = _normalize_current_thursday(week_key, today=today)
+    previous_thursday = current_thursday - timedelta(days=7)
+    iso_year, iso_week, _ = current_thursday.isocalendar()
+    normalized_week_key = f"{iso_year}-W{iso_week:02d}"
+    title = (
+        f"Top 5 News Highlights | "
+        f"{_format_digest_range(previous_thursday, current_thursday)} | "
+        f"Week {iso_week}"
+    )
+    return DigestWindow(
+        week_key=normalized_week_key,
+        previous_thursday=previous_thursday,
+        current_thursday=current_thursday,
+        iso_week_number=iso_week,
+        title=title,
+    )
+
+
+def parse_week_key(week_key: str) -> tuple[date, date]:
+    window = resolve_digest_window(week_key)
+    return window.previous_thursday, window.current_thursday
 
 
 def build_default_output_path(repo_root: Path, week_key: str) -> Path:
     safe_week = week_key.replace("/", "_")
     return repo_root / "data" / f"weekly_digest_{safe_week}.md"
+
+
+def build_report_output_path(repo_root: Path, week_key: str) -> Path:
+    safe_week = week_key.replace("/", "_")
+    return repo_root / "data" / f"weekly_digest_{safe_week}.report.md"
 
 
 def hydrate_digest_candidates(rows: list[dict[str, Any]]) -> list[DigestCandidate]:
@@ -94,3 +145,71 @@ def build_claude_corpus_prompt(week_key: str, candidates: list[DigestCandidate],
             ]
         )
     return "\n".join(lines)
+
+
+def build_claude_selection_prompt(window: DigestWindow, candidates: list[DigestCandidate], max_items: int) -> str:
+    selected = candidates[:max_items]
+    payload = [
+        {
+            "canonical_event_id": candidate.canonical_event_id,
+            "normalized_item_id": candidate.normalized_item_id,
+            "source": candidate.source_id,
+            "title": candidate.title,
+            "url": candidate.canonical_url,
+            "published_ts": candidate.published_ts.isoformat() if candidate.published_ts else None,
+            "score": candidate.score,
+            "summary": candidate.summary_text,
+            "signals": candidate.event_flags,
+        }
+        for candidate in selected
+    ]
+    return "\n".join(
+        [
+            "You are selecting the Top 5 weekly digest stories for Bot 2.",
+            f"Digest title: {window.title}",
+            f"Digest window: {window.previous_thursday.isoformat()} through {window.current_thursday.isoformat()}",
+            "Select exactly 5 distinct stories from the provided candidates.",
+            "Prioritize All3 relevance, physical AI, industrial robotics, construction automation, housing industrialization, timber adoption/scaling/economics/policy, infrastructure automation, strategic signal strength, novelty, and hard operational evidence.",
+            "Reject duplicate coverage of the same event and weak generic commentary.",
+            "Consumer AI, restaurant/menu personalization AI, generic automotive capex, generic trade-policy stories, and generic executive/profile stories should not make the Top 5 unless robotics/automation is central.",
+            "Return only compact JSON with this exact schema:",
+            '{"selected_ids":["canonical_event_id_1","canonical_event_id_2","canonical_event_id_3","canonical_event_id_4","canonical_event_id_5"]}',
+            "",
+            "Candidates JSON:",
+            json.dumps(payload, ensure_ascii=False, sort_keys=True),
+        ]
+    )
+
+
+def build_claude_writer_prompt(window: DigestWindow, candidates: list[DigestCandidate]) -> str:
+    payload = [
+        {
+            "canonical_event_id": candidate.canonical_event_id,
+            "source": candidate.source_id,
+            "title": candidate.title,
+            "url": candidate.canonical_url,
+            "published_ts": candidate.published_ts.isoformat() if candidate.published_ts else None,
+            "score": candidate.score,
+            "summary": candidate.summary_text,
+            "signals": candidate.event_flags,
+        }
+        for candidate in candidates
+    ]
+    return "\n".join(
+        [
+            "Write the final Weekly Digest Bot 2 message in Telegram HTML.",
+            "English only, even when a source is non-English.",
+            "Be concise, analytical, and non-hyped. Explain what happened, why it matters, and the strategic signal.",
+            "Use exactly 5 items and keep each item to one dense paragraph.",
+            "The first line must be the digest title exactly as provided.",
+            "For each item use this structure:",
+            "1. <b>Headline</b>",
+            'Paragraph ending with <a href="SOURCE_URL">Link</a>',
+            "Do not show raw URLs in visible text.",
+            "Do not invent facts beyond the provided input.",
+            f"Title: {window.title}",
+            "",
+            "Selected items JSON:",
+            json.dumps(payload, ensure_ascii=False, sort_keys=True),
+        ]
+    )
