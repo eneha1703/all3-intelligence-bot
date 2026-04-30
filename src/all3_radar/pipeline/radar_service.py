@@ -163,54 +163,131 @@ def _claude_editorial_review_priority(context: CurrentRunContext) -> tuple[int, 
     if not isinstance(event_flags, dict):
         event_flags = {}
 
-    robotics_business_story = _contains_any_term(
-        haystack,
-        (
-            "teradyne robotics",
-            "universal robots",
-            "mobile industrial robots",
-            " mir ",
-            "robotics revenue",
-            "robotics segment revenue",
-            "robotics segment",
-        ),
-    ) and _contains_any_term(
-        haystack,
-        ("revenue", "sales", "orders", "margin", "earnings", "quarter", "q1", "q2", "q3", "q4", "growth", "decline"),
+    robotics_terms = (
+        "robot",
+        "robots",
+        "robotic",
+        "robotics",
+        "cobot",
+        "cobots",
+        "amr",
+        "amrs",
+        "mobile robot",
+        "mobile robots",
+        "humanoid",
+        "humanoids",
     )
-    automation_engineering_story = _contains_any_term(
-        haystack,
-        (
-            "manufacturing language model",
-            "industrial automation design",
-            "automation engineering",
-            "automation cell design",
-            "robotics deployment engineering",
-            "commissioning",
-            "integration",
-            "high-mix, low-volume",
-        ),
+    business_performance_terms = (
+        "revenue",
+        "sales",
+        "orders",
+        "margin",
+        "earnings",
+        "quarter",
+        "q1",
+        "q2",
+        "q3",
+        "q4",
+        "segment",
+        "growth",
+        "decline",
+        "rose",
+        "rises",
+        "fell",
+        "falls",
     )
-    robotics_infrastructure_story = _contains_any_term(
-        haystack,
-        (
-            "robotics-led infrastructure",
-            "data center construction",
-            "data centre",
-            "physical ai platform",
-            "robotics company roze",
-            "roze ai",
-        ),
+    infrastructure_terms = (
+        "infrastructure",
+        "data center",
+        "data centers",
+        "data centre",
+        "data centres",
+        "construction capacity",
+        "buildout",
+        "energy assets",
+        "land and infrastructure",
     )
-    greenhouse_automation_story = _contains_any_term(
-        haystack,
-        (
-            "greenhouse",
-            "harvesting robots",
-            "robot-ready",
-            "horticulture",
-            "fully-automated greenhouses",
-        ),
+    physical_ai_platform_terms = (
+        "physical ai",
+        "physics ai",
+        "ai platform",
+        "platform for physical industries",
+        "platform opportunity",
+    )
+    automation_enablement_terms = (
+        "manufacturing language model",
+        "industrial automation design",
+        "automation engineering",
+        "automation cell design",
+        "cell design",
+        "deployment engineering",
+        "commissioning",
+        "integration",
+        "programming",
+        "cad",
+        "high-mix, low-volume",
+        "factory automation workflows",
+    )
+    greenhouse_terms = (
+        "greenhouse",
+        "greenhouses",
+        "horticulture",
+        "harvesting robot",
+        "harvesting robots",
+        "robot-ready",
+        "agritech",
+        "growers",
+    )
+    procurement_terms = (
+        "procurement automation",
+        "purchase orders",
+        "approval history",
+        "erp",
+        "back-office",
+        "workflow automation",
+        "audit-ready supply chains",
+    )
+    security_terms = (
+        "access control",
+        "security automation",
+        "industrial iot",
+        "iiot",
+        "real-time security",
+        "connected sensors",
+    )
+    auction_terms = (
+        "auction",
+        "liquidate",
+        "liquidation",
+        "surplus equipment",
+        "surplus inventory",
+        "asset disposition",
+    )
+    explainer_terms = (
+        "here's how",
+        "what does",
+        "who can",
+        "how do",
+        "who are the competitors",
+        "how to ride",
+        "crash record",
+    )
+
+    robotics_business_story = _contains_any_term(haystack, robotics_terms) and _contains_any_term(
+        haystack, business_performance_terms
+    )
+    automation_engineering_story = _contains_any_term(haystack, automation_enablement_terms) and (
+        _contains_any_term(haystack, ("automation", "robot", "robotics", "factory", "manufacturing", "industrial"))
+    )
+    robotics_infrastructure_story = (
+        _contains_any_term(haystack, robotics_terms)
+        and _contains_any_term(haystack, infrastructure_terms)
+    ) or (
+        _contains_any_term(haystack, physical_ai_platform_terms)
+        and _contains_any_term(haystack, ("industrial", "manufacturing", "robotics", "infrastructure", "construction"))
+    )
+    greenhouse_automation_story = _contains_any_term(haystack, greenhouse_terms) and _contains_any_term(
+        haystack, ("automation", "robot", "robotics", "automated", "physical")
     )
     clear_industrial_operating_signal = bool(
         event_flags.get("industrial_robotics_signal")
@@ -236,27 +313,11 @@ def _claude_editorial_review_priority(context: CurrentRunContext) -> tuple[int, 
         haystack, ("robot", "automation", "factory", "construction", "housing")
     )
     security_automation_story = _contains_any_term(
-        haystack,
-        (
-            "access control",
-            "security automation",
-            "industrial iot",
-            "iiot",
-            "real-time security",
-        ),
+        haystack, security_terms
     )
-    procurement_story = _contains_any_term(
-        haystack,
-        ("procurement automation", "purchase orders", "approval history", "audit-ready supply chains"),
-    )
-    auction_story = _contains_any_term(
-        haystack,
-        ("auction", "liquidate", "liquidation", "surplus robots", "asset disposition"),
-    )
-    generic_business_explainer = _contains_any_term(
-        haystack,
-        ("here's how", "what does", "who can", "how do", "who are the competitors"),
-    )
+    procurement_story = _contains_any_term(haystack, procurement_terms)
+    auction_story = _contains_any_term(haystack, auction_terms)
+    generic_business_explainer = _contains_any_term(haystack, explainer_terms)
 
     if (
         consumer_robotaxi_story

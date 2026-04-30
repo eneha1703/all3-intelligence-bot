@@ -2571,20 +2571,20 @@ def test_claude_editorial_review_pool_prioritizes_strategic_borderline_candidate
 </channel></rss>""",
         "https://robot-report.example/feed.xml": f"""<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"><channel>{
-            item_xml(
-                "Teradyne Robotics revenue rises at the start of 2026",
-                "https://www.therobotreport.com/teradyne-robotics-revenue-rises-start-2026/",
-                "Teradyne Robotics brought in $91 million in Q1 2026, with its AI products helping to boost robotics sales.",
-                "rr-teradyne",
-            )
-        }{
-            item_xml(
-                "Launchpad Build AI offers MLM to speed industrial automation design",
-                "https://www.therobotreport.com/launchpad-build-ai-offers-manufacturing-language-model-industrial-automation/",
-                "Launchpad Build AI says its Manufacturing Language Model can democratize automation for high-mix, low-volume production with inputs from photos, videos, or CAD.",
-                "rr-launchpad",
-            )
-        }</channel></rss>""",
+                item_xml(
+                    "Robotics segment revenue rises at the start of 2026",
+                    "https://www.therobotreport.com/teradyne-robotics-revenue-rises-start-2026/",
+                    "Teradyne Robotics brought in $91 million in Q1 2026, with its AI products helping to boost robotics sales.",
+                    "rr-teradyne",
+                )
+            }{
+                item_xml(
+                    "Manufacturing language model speeds industrial automation design",
+                    "https://www.therobotreport.com/launchpad-build-ai-offers-manufacturing-language-model-industrial-automation/",
+                    "Launchpad Build AI says its Manufacturing Language Model can democratize automation for high-mix, low-volume production with inputs from photos, videos, or CAD.",
+                    "rr-launchpad",
+                )
+            }</channel></rss>""",
         "https://robotics-automation.example/feed.xml": f"""<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"><channel>{
             item_xml(
@@ -2608,22 +2608,22 @@ def test_claude_editorial_review_pool_prioritizes_strategic_borderline_candidate
                 "ran-procurement",
             )
         }{
-            item_xml(
-                "Eternal.ag launches omni-directional trolley as ‘stepping stone to fully-automated greenhouses’",
-                "https://roboticsandautomationnews.com/2026/04/30/eternal-ag-launches-omni-directional-trolley-as-stepping-stone-to-fully-automated-greenhouses/101115/",
-                "The German agritech startup calls the trolley a robot-ready stepping stone to greenhouse automation, fully-automated greenhouses, and harvesting robots for industrial greenhouse operations.",
-                "ran-eternal",
-            )
-        }</channel></rss>""",
+                item_xml(
+                    "Omni-directional trolley positions greenhouse automation for harvesting robots",
+                    "https://roboticsandautomationnews.com/2026/04/30/eternal-ag-launches-omni-directional-trolley-as-stepping-stone-to-fully-automated-greenhouses/101115/",
+                    "The German agritech startup calls the trolley a robot-ready stepping stone to greenhouse automation, fully-automated greenhouses, and harvesting robots for industrial greenhouse operations.",
+                    "ran-eternal",
+                )
+            }</channel></rss>""",
         "https://tech-funding.example/feed.xml": f"""<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"><channel>{
-            item_xml(
-                "SoftBank eyes $100B US IPO for Roze AI, its robotics-led infrastructure venture: report",
-                "https://techfundingnews.com/masayoshi-son-softbank-roze-ai-100bn-ipo/",
-                "SoftBank is getting ready to launch Roze AI, a robotics-led infrastructure company combining robotics, data center construction, and physical AI platform ambitions.",
-                "tfn-roze",
-            )
-        }</channel></rss>""",
+                item_xml(
+                    "Robotics-led infrastructure venture targets data center buildout",
+                    "https://techfundingnews.com/masayoshi-son-softbank-roze-ai-100bn-ipo/",
+                    "SoftBank is getting ready to launch Roze AI, a robotics-led infrastructure company combining robotics, data center construction, and physical AI platform ambitions.",
+                    "tfn-roze",
+                )
+            }</channel></rss>""",
     }
 
     registry = SourceRegistry(
@@ -2722,8 +2722,8 @@ def test_claude_editorial_review_pool_prioritizes_strategic_borderline_candidate
             title = kwargs["title"]
             self.reviewed_titles.append(title)
             if title in {
-                "Teradyne Robotics revenue rises at the start of 2026",
-                "Launchpad Build AI offers MLM to speed industrial automation design",
+                "Robotics segment revenue rises at the start of 2026",
+                "Manufacturing language model speeds industrial automation design",
             }:
                 return ClaudeEditorialReviewResult(
                     send_ok=True,
@@ -2782,10 +2782,10 @@ def test_claude_editorial_review_pool_prioritizes_strategic_borderline_candidate
     assert captured_stage_counters["claude_editorial_fallback_low_or_medium_confidence"] == 2
 
     assert {
-        "Teradyne Robotics revenue rises at the start of 2026",
-        "Launchpad Build AI offers MLM to speed industrial automation design",
-        "SoftBank eyes $100B US IPO for Roze AI, its robotics-led infrastructure venture: report",
-        "Eternal.ag launches omni-directional trolley as ‘stepping stone to fully-automated greenhouses’",
+        "Robotics segment revenue rises at the start of 2026",
+        "Manufacturing language model speeds industrial automation design",
+        "Robotics-led infrastructure venture targets data center buildout",
+        "Omni-directional trolley positions greenhouse automation for harvesting robots",
     } == set(fake_claude.reviewed_titles[:4])
     assert "China Warehouse Robotics Company HyperLeap Enters US Market" not in fake_claude.reviewed_titles
     assert "How Procurement Automation Creates Audit-Ready Supply Chains in Manufacturing" not in fake_claude.reviewed_titles
@@ -2793,10 +2793,10 @@ def test_claude_editorial_review_pool_prioritizes_strategic_borderline_candidate
     assert "Waymo, Alphabet's robotaxi service, is growing fast. Here's how to ride, costs, and the self-driving cars' crash record." not in fake_claude.reviewed_titles
 
     for title in (
-        "Teradyne Robotics revenue rises at the start of 2026",
-        "Launchpad Build AI offers MLM to speed industrial automation design",
-        "SoftBank eyes $100B US IPO for Roze AI, its robotics-led infrastructure venture: report",
-        "Eternal.ag launches omni-directional trolley as ‘stepping stone to fully-automated greenhouses’",
+        "Robotics segment revenue rises at the start of 2026",
+        "Manufacturing language model speeds industrial automation design",
+        "Robotics-led infrastructure venture targets data center buildout",
+        "Omni-directional trolley positions greenhouse automation for harvesting robots",
     ):
         send_status, skip_reason, _, _ = _load_radar_decision_for_title(db_path, title)
         assert send_status == "stored_only"
