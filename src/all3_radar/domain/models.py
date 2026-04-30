@@ -132,6 +132,19 @@ class SummaryResult:
 
 
 @dataclass(frozen=True)
+class ClaudeFinalCardResult:
+    send_ok: bool
+    reject_reason: str | None
+    title: str | None
+    summary: str | None
+    why_it_matters: str | None
+    duplicate_risk: str | None
+    confidence: str | None
+    used_claude: bool
+    fallback_reason: str | None = None
+
+
+@dataclass(frozen=True)
 class TelegramCard:
     text: str
     headline: str

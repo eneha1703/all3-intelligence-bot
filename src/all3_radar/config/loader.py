@@ -103,6 +103,12 @@ def load_settings(repo_root: Path, env: Mapping[str, str] | None = None) -> Sett
             google_competitor_send_enabled=_parse_bool(
                 _apply_env_override(radar, "google_competitor_send_enabled", env, "GOOGLE_COMPETITOR_SEND_ENABLED")
             ),
+            claude_final_card_enabled=_parse_bool(env.get("CLAUDE_FINAL_CARD_ENABLED", "false")),
+            claude_final_card_max_candidates=_parse_int(
+                env.get("CLAUDE_FINAL_CARD_MAX_CANDIDATES", "3"),
+                "radar.claude_final_card_max_candidates",
+                default=3,
+            ),
         ),
         digest=DigestConfig(
             stories_per_digest=_parse_int(digest["stories_per_digest"], "digest.stories_per_digest"),
@@ -137,6 +143,17 @@ def load_settings(repo_root: Path, env: Mapping[str, str] | None = None) -> Sett
                 env.get("CLAUDE_DIGEST_MAX_TOKENS", "1200"),
                 "integrations.claude_digest_max_tokens",
                 default=1200,
+            ),
+            claude_final_card_model=env.get("CLAUDE_FINAL_CARD_MODEL", "claude-3-5-sonnet-latest") or None,
+            claude_final_card_timeout_seconds=_parse_int(
+                env.get("CLAUDE_FINAL_CARD_TIMEOUT_SECONDS", "12"),
+                "integrations.claude_final_card_timeout_seconds",
+                default=12,
+            ),
+            claude_final_card_max_tokens=_parse_int(
+                env.get("CLAUDE_FINAL_CARD_MAX_TOKENS", "300"),
+                "integrations.claude_final_card_max_tokens",
+                default=300,
             ),
             telegram_alert_bot_token=env.get("TELEGRAM_ALERT_BOT_TOKEN") or None,
             telegram_alert_chat_ids=_parse_chat_ids(env.get("TELEGRAM_ALERT_CHAT_IDS")),

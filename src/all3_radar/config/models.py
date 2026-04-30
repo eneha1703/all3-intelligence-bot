@@ -22,6 +22,8 @@ class RadarConfig:
     shortlist_size_before_gemini: int
     google_competitor_check_enabled: bool
     google_competitor_send_enabled: bool
+    claude_final_card_enabled: bool
+    claude_final_card_max_candidates: int
 
 
 @dataclass(frozen=True)
@@ -47,6 +49,9 @@ class IntegrationsConfig:
     claude_digest_model: str | None
     claude_digest_timeout_seconds: int
     claude_digest_max_tokens: int
+    claude_final_card_model: str | None
+    claude_final_card_timeout_seconds: int
+    claude_final_card_max_tokens: int
     telegram_alert_bot_token: str | None
     telegram_alert_chat_ids: tuple[str, ...]
 
