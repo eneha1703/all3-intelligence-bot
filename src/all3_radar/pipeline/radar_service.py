@@ -97,6 +97,39 @@ def _with_context_signals(context: CurrentRunContext, **updates: object) -> None
     )
 
 
+def _set_claude_editorial_diagnostics(
+    context: CurrentRunContext,
+    *,
+    reviewed: bool,
+    outcome: str,
+    review_rank: int | None = None,
+    confidence: str | None = None,
+    reason: str | None = None,
+    not_reviewed_reason: str | None = None,
+) -> None:
+    _with_context_signals(
+        context,
+        claude_editorial_reviewed=reviewed,
+        claude_editorial_review_rank=review_rank,
+        claude_editorial_outcome=outcome,
+        claude_editorial_confidence=confidence,
+        claude_editorial_reason=reason,
+        claude_editorial_not_reviewed_reason=not_reviewed_reason,
+    )
+
+
+def _mark_claude_editorial_not_reviewed(context: CurrentRunContext, reason: str) -> None:
+    _set_claude_editorial_diagnostics(
+        context,
+        reviewed=False,
+        outcome="not_reviewed",
+        review_rank=None,
+        confidence=None,
+        reason=None,
+        not_reviewed_reason=reason,
+    )
+
+
 def _resolve_card_writer_diagnostics(context: CurrentRunContext) -> dict[str, object]:
     if context.decision is None:
         return {}
@@ -757,15 +790,9 @@ class RadarService:
                     )
             record_stage_timing("summary_generation", summary_generation_started)
 
-            if (
-                self.settings.radar.claude_editorial_enabled
-                and self.claude_editorial_review_client is not None
-                and self.claude_editorial_review_client.is_available
-            ):
-                claude_editorial_contexts = [
-                    context
-                    for context in contexts
-                    if context.decision is not None
+            def is_claude_editorial_eligible(context: CurrentRunContext) -> bool:
+                return (
+                    context.decision is not None
                     and context.freshness.is_fresh
                     and context.decision.relevance_status == "keep"
                     and context.decision.send_status != "skip"
@@ -774,15 +801,57 @@ class RadarService:
                         or context.decision.is_borderline
                         or context.decision.score >= max(0, send_threshold - 6)
                     )
+                )
+
+            editorial_enabled = (
+                self.settings.radar.claude_editorial_enabled
+                and self.claude_editorial_review_client is not None
+                and self.claude_editorial_review_client.is_available
+            )
+
+            if not editorial_enabled:
+                for context in contexts:
+                    if context.decision is None:
+                        continue
+                    _mark_claude_editorial_not_reviewed(context, "disabled")
+
+            if editorial_enabled:
+                claude_editorial_contexts = [
+                    context
+                    for context in contexts
+                    if is_claude_editorial_eligible(context)
                 ]
                 claude_editorial_contexts.sort(
                     key=_claude_editorial_review_priority,
                     reverse=True,
                 )
-                claude_editorial_contexts = claude_editorial_contexts[
+                reviewed_contexts = claude_editorial_contexts[
                     : self.settings.radar.claude_editorial_max_candidates
                 ]
-                for context in claude_editorial_contexts:
+                reviewed_ids = {context.item.normalized_item_id for context in reviewed_contexts}
+                eligible_ids = {context.item.normalized_item_id for context in claude_editorial_contexts}
+                for context in contexts:
+                    if context.decision is None:
+                        continue
+                    if context.item.normalized_item_id in reviewed_ids:
+                        continue
+                    if context.item.normalized_item_id in eligible_ids:
+                        _mark_claude_editorial_not_reviewed(context, "over_max_candidates_cap")
+                    else:
+                        _mark_claude_editorial_not_reviewed(context, "ineligible")
+
+                for review_rank, context in enumerate(reviewed_contexts, start=1):
+                    _set_claude_editorial_diagnostics(
+                        context,
+                        reviewed=True,
+                        outcome="not_reviewed",
+                        review_rank=review_rank,
+                        confidence=None,
+                        reason=None,
+                        not_reviewed_reason=None,
+                    )
+
+                for context in reviewed_contexts:
                     if context.summary is None:
                         context.summary = summarize_candidate(context.item, context.decision, self.gemini_client)
                     increment_stage_counter("claude_editorial_attempted")
@@ -799,6 +868,15 @@ class RadarService:
                         )
                     except ClaudeEditorialReviewUnavailableError as exc:
                         fallback_reason = record_claude_editorial_fallback(exc.reason)
+                        _set_claude_editorial_diagnostics(
+                            context,
+                            reviewed=True,
+                            outcome="fallback_unavailable",
+                            review_rank=context.decision.signals.get("claude_editorial_review_rank"),
+                            confidence=None,
+                            reason=fallback_reason,
+                            not_reviewed_reason=None,
+                        )
                         LOGGER.warning(
                             'Claude editorial fallback: reason=%s%s title="%s" source="%s"',
                             fallback_reason,
@@ -809,7 +887,16 @@ class RadarService:
                         continue
                     except Exception as exc:
                         increment_stage_counter("claude_editorial_error")
-                        record_claude_editorial_fallback("unknown")
+                        fallback_reason = record_claude_editorial_fallback("unknown")
+                        _set_claude_editorial_diagnostics(
+                            context,
+                            reviewed=True,
+                            outcome="fallback_unavailable",
+                            review_rank=context.decision.signals.get("claude_editorial_review_rank"),
+                            confidence=None,
+                            reason=fallback_reason,
+                            not_reviewed_reason=None,
+                        )
                         LOGGER.warning(
                             'Claude editorial error: reason=unknown title="%s" source="%s" error=%s',
                             context.item.title,
@@ -820,6 +907,15 @@ class RadarService:
 
                     if claude_result.is_high_confidence_rejection:
                         increment_stage_counter("claude_editorial_rejected")
+                        _set_claude_editorial_diagnostics(
+                            context,
+                            reviewed=True,
+                            outcome="rejected",
+                            review_rank=context.decision.signals.get("claude_editorial_review_rank"),
+                            confidence=claude_result.confidence,
+                            reason=claude_result.reject_reason,
+                            not_reviewed_reason=None,
+                        )
                         context.decision = RankedDecision(
                             relevance_status=context.decision.relevance_status,
                             send_status="stored_only",
@@ -842,6 +938,15 @@ class RadarService:
 
                     if claude_result.is_high_confidence_promotion:
                         increment_stage_counter("claude_editorial_promoted")
+                        _set_claude_editorial_diagnostics(
+                            context,
+                            reviewed=True,
+                            outcome="promoted",
+                            review_rank=context.decision.signals.get("claude_editorial_review_rank"),
+                            confidence=claude_result.confidence,
+                            reason=None,
+                            not_reviewed_reason=None,
+                        )
                         context.decision = RankedDecision(
                             relevance_status=context.decision.relevance_status,
                             send_status=context.decision.send_status,
@@ -870,6 +975,15 @@ class RadarService:
                         continue
 
                     fallback_reason = record_claude_editorial_fallback("low_or_medium_confidence")
+                    _set_claude_editorial_diagnostics(
+                        context,
+                        reviewed=True,
+                        outcome="fallback_low_or_medium_confidence",
+                        review_rank=context.decision.signals.get("claude_editorial_review_rank"),
+                        confidence=claude_result.confidence,
+                        reason=fallback_reason,
+                        not_reviewed_reason=None,
+                    )
                     LOGGER.warning(
                         'Claude editorial fallback: reason=%s confidence=%s title="%s" source="%s"',
                         fallback_reason,

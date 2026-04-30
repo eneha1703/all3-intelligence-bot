@@ -1446,6 +1446,14 @@ def test_claude_final_card_disabled_preserves_current_behavior_without_calling_c
     assert fake_claude.call_count == 0
     assert len(fake_sender.sent_cards) == 1
     assert "<b>Kewazo raises funding for construction robot rollout</b>" in fake_sender.sent_cards[0].text
+    send_status, skip_reason, signals, _ = _load_radar_decision_for_title(
+        db_path, "Kewazo raises funding for construction robot rollout"
+    )
+    assert send_status == "sent"
+    assert skip_reason is None
+    assert signals["claude_editorial_reviewed"] is False
+    assert signals["claude_editorial_outcome"] == "not_reviewed"
+    assert signals["claude_editorial_not_reviewed_reason"] == "disabled"
     send_status, skip_reason, signals, used_gemini = _load_radar_decision_for_title(
         db_path, "Kewazo raises funding for construction robot rollout"
     )
@@ -2141,6 +2149,12 @@ def test_claude_editorial_high_confidence_promotion_sends_below_threshold_story(
     assert send_status == "sent"
     assert skip_reason is None
     assert used_gemini == 0
+    assert signals["claude_editorial_reviewed"] is True
+    assert signals["claude_editorial_review_rank"] == 1
+    assert signals["claude_editorial_outcome"] == "promoted"
+    assert signals["claude_editorial_confidence"] == "high"
+    assert signals["claude_editorial_reason"] is None
+    assert signals["claude_editorial_not_reviewed_reason"] is None
     assert signals["card_writer"] == "claude_editorial_promotion"
     assert signals["final_card_title_source"] == "claude_editorial_promotion"
     assert signals["final_card_summary_source"] == "claude_editorial_promotion"
@@ -2270,18 +2284,16 @@ def test_claude_editorial_high_confidence_rejection_blocks_subtle_false_positive
     assert captured_stage_counters["claude_editorial_attempted"] == 1
     assert captured_stage_counters["claude_editorial_rejected"] == 1
 
-    with sqlite3.connect(db_path) as connection:
-        row = connection.execute(
-            """
-            SELECT rd.send_status, rd.skip_reason
-            FROM radar_decisions rd
-            JOIN normalized_items ni ON ni.id = rd.normalized_item_id
-            WHERE ni.title = ?
-            """,
-            ("Taco Bell deploys physical AI robotics platform across restaurant kitchens",),
-        ).fetchone()
-
-    assert row == ("stored_only", "claude_editorial_rejected")
+    send_status, skip_reason, signals, _ = _load_radar_decision_for_title(
+        db_path, "Taco Bell deploys physical AI robotics platform across restaurant kitchens"
+    )
+    assert (send_status, skip_reason) == ("stored_only", "claude_editorial_rejected")
+    assert signals["claude_editorial_reviewed"] is True
+    assert signals["claude_editorial_review_rank"] == 1
+    assert signals["claude_editorial_outcome"] == "rejected"
+    assert signals["claude_editorial_confidence"] == "high"
+    assert signals["claude_editorial_reason"] == "consumer_ai_menu_personalization"
+    assert signals["claude_editorial_not_reviewed_reason"] is None
 
 
 def test_claude_editorial_unavailable_falls_back_to_old_deterministic_behavior(
@@ -2394,6 +2406,17 @@ def test_claude_editorial_unavailable_falls_back_to_old_deterministic_behavior(
         'Claude editorial fallback: reason=api_http_error status=400 title="Kewazo raises funding for construction robot rollout" source="Claude Editorial Fallback Feed"'
         in caplog.text
     )
+    send_status, skip_reason, signals, _ = _load_radar_decision_for_title(
+        db_path, "Kewazo raises funding for construction robot rollout"
+    )
+    assert send_status == "sent"
+    assert skip_reason is None
+    assert signals["claude_editorial_reviewed"] is True
+    assert signals["claude_editorial_review_rank"] == 1
+    assert signals["claude_editorial_outcome"] == "fallback_unavailable"
+    assert signals["claude_editorial_confidence"] is None
+    assert signals["claude_editorial_reason"] == "api_http_error"
+    assert signals["claude_editorial_not_reviewed_reason"] is None
 
 
 def test_claude_editorial_cap_is_respected(
@@ -2514,6 +2537,25 @@ def test_claude_editorial_cap_is_respected(
     assert captured_stage_counters["claude_editorial_fallback"] == 1
     assert captured_stage_counters["claude_editorial_fallback_low_or_medium_confidence"] == 1
     assert "Claude editorial fallback: reason=low_or_medium_confidence confidence=medium" in caplog.text
+    kewazo_status, kewazo_skip_reason, kewazo_signals, _ = _load_radar_decision_for_title(
+        db_path, "Kewazo raises funding for construction robot rollout"
+    )
+    assert kewazo_status == "sent"
+    assert kewazo_skip_reason is None
+    assert kewazo_signals["claude_editorial_reviewed"] is True
+    assert kewazo_signals["claude_editorial_review_rank"] == 1
+    assert kewazo_signals["claude_editorial_outcome"] == "fallback_low_or_medium_confidence"
+    assert kewazo_signals["claude_editorial_confidence"] == "medium"
+    assert kewazo_signals["claude_editorial_reason"] == "low_or_medium_confidence"
+    assert kewazo_signals["claude_editorial_not_reviewed_reason"] is None
+    hexagon_status, hexagon_skip_reason, hexagon_signals, _ = _load_radar_decision_for_title(
+        db_path, "Hexagon and Schaeffler to install 1,000 Aeon humanoid robots across global factory network"
+    )
+    assert hexagon_status == "sent"
+    assert hexagon_skip_reason is None
+    assert hexagon_signals["claude_editorial_reviewed"] is False
+    assert hexagon_signals["claude_editorial_outcome"] == "not_reviewed"
+    assert hexagon_signals["claude_editorial_not_reviewed_reason"] == "over_max_candidates_cap"
 
 
 def test_claude_editorial_review_pool_prioritizes_strategic_borderline_candidates(
@@ -2798,6 +2840,102 @@ def test_claude_editorial_review_pool_prioritizes_strategic_borderline_candidate
         "Robotics-led infrastructure venture targets data center buildout",
         "Omni-directional trolley positions greenhouse automation for harvesting robots",
     ):
-        send_status, skip_reason, _, _ = _load_radar_decision_for_title(db_path, title)
+        send_status, skip_reason, signals, _ = _load_radar_decision_for_title(db_path, title)
         assert send_status == "stored_only"
         assert skip_reason in {None, "editorial_not_telegram_worthy", "claude_editorial_rejected"}
+
+
+def test_claude_editorial_ineligible_candidate_records_not_reviewed_reason(
+    monkeypatch, tmp_path
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "radar_claude_editorial_ineligible.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("CLAUDE_EDITORIAL_ENABLED", "true")
+
+    now = datetime.now(timezone.utc)
+    feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Kewazo raises funding for construction robot rollout</title>
+    <link>https://example.com/kewazo</link>
+    <description>The company said the round will support factory and jobsite deployment expansion.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=1))}</pubDate>
+    <guid>a1</guid>
+  </item>
+  <item>
+    <title>Apptronik expands leadership team with new executive hires</title>
+    <link>https://example.com/apptronik-hires</link>
+    <description>The company appointed new executives and expanded the leadership team.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=1))}</pubDate>
+    <guid>b1</guid>
+  </item>
+</channel></rss>"""
+
+    registry = SourceRegistry(
+        (
+            SourceDefinition(
+                id="claude_editorial_ineligible_feed",
+                name="Claude Editorial Ineligible Feed",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://example.com/claude-editorial-ineligible.xml",
+                priority=100,
+                tags=("robotics",),
+            ),
+        )
+    )
+
+    class FakeGeminiClient:
+        is_available = True
+
+        def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
+            return (preview or title, None)
+
+    class FakeTelegramSender:
+        def __init__(self) -> None:
+            self.sent_cards = []
+
+        def send_card(self, card):
+            self.sent_cards.append(card)
+            return []
+
+    class FakeClaudeEditorialClient:
+        is_available = True
+
+        def review_candidate(self, **kwargs):
+            return ClaudeEditorialReviewResult(
+                send_ok=True,
+                reject_reason=None,
+                edited_title=None,
+                edited_summary=None,
+                confidence="medium",
+                used_claude=True,
+            )
+
+    def fake_fetch_text(url: str) -> str:
+        assert url == "https://example.com/claude-editorial-ineligible.xml"
+        return feed
+
+    service = RadarService(
+        repo_root=repo_root,
+        registry=registry,
+        fetch_text_fn=fake_fetch_text,
+        gemini_client=FakeGeminiClient(),
+        claude_editorial_review_client=FakeClaudeEditorialClient(),
+        telegram_sender=FakeTelegramSender(),
+    )
+    service.run(dry_run=False)
+
+    send_status, skip_reason, signals, _ = _load_radar_decision_for_title(
+        db_path, "Apptronik expands leadership team with new executive hires"
+    )
+    assert send_status == "skip"
+    assert skip_reason == "no_clear_all3_scope"
+    assert signals["claude_editorial_reviewed"] is False
+    assert signals["claude_editorial_outcome"] == "not_reviewed"
+    assert signals["claude_editorial_not_reviewed_reason"] == "ineligible"
