@@ -148,6 +148,132 @@ def _resolve_card_writer_diagnostics(context: CurrentRunContext) -> dict[str, ob
     }
 
 
+def _contains_any_term(haystack: str, terms: tuple[str, ...]) -> bool:
+    return any(term in haystack for term in terms)
+
+
+def _claude_editorial_review_priority(context: CurrentRunContext) -> tuple[int, int]:
+    if context.decision is None:
+        return (0, 0)
+
+    haystack = f"{context.item.title} {context.item.text_preview or ''}".lower()
+    score = context.decision.score
+    signals = context.decision.signals
+    event_flags = signals.get("event_flags", {})
+    if not isinstance(event_flags, dict):
+        event_flags = {}
+
+    robotics_business_story = _contains_any_term(
+        haystack,
+        (
+            "teradyne robotics",
+            "universal robots",
+            "mobile industrial robots",
+            " mir ",
+            "robotics revenue",
+            "robotics segment revenue",
+            "robotics segment",
+        ),
+    ) and _contains_any_term(
+        haystack,
+        ("revenue", "sales", "orders", "margin", "earnings", "quarter", "q1", "q2", "q3", "q4", "growth", "decline"),
+    )
+    automation_engineering_story = _contains_any_term(
+        haystack,
+        (
+            "manufacturing language model",
+            "industrial automation design",
+            "automation engineering",
+            "automation cell design",
+            "robotics deployment engineering",
+            "commissioning",
+            "integration",
+            "high-mix, low-volume",
+        ),
+    )
+    robotics_infrastructure_story = _contains_any_term(
+        haystack,
+        (
+            "robotics-led infrastructure",
+            "data center construction",
+            "data centre",
+            "physical ai platform",
+            "robotics company roze",
+            "roze ai",
+        ),
+    )
+    greenhouse_automation_story = _contains_any_term(
+        haystack,
+        (
+            "greenhouse",
+            "harvesting robots",
+            "robot-ready",
+            "horticulture",
+            "fully-automated greenhouses",
+        ),
+    )
+    clear_industrial_operating_signal = bool(
+        event_flags.get("industrial_robotics_signal")
+        or event_flags.get("deployment_event")
+        or event_flags.get("factory_opening_or_expansion")
+        or robotics_business_story
+    )
+
+    consumer_robotaxi_story = _contains_any_term(
+        haystack,
+        (
+            "robotaxi",
+            "self-driving",
+            "ride-hailing",
+            "waymo one",
+            "how to ride",
+            "crash record",
+            "autonomous rides",
+            "consumer cars",
+        ),
+    )
+    timber_policy_only_story = bool(event_flags.get("timber_policy_signal")) and not _contains_any_term(
+        haystack, ("robot", "automation", "factory", "construction", "housing")
+    )
+    security_automation_story = _contains_any_term(
+        haystack,
+        (
+            "access control",
+            "security automation",
+            "industrial iot",
+            "iiot",
+            "real-time security",
+        ),
+    )
+    procurement_story = _contains_any_term(
+        haystack,
+        ("procurement automation", "purchase orders", "approval history", "audit-ready supply chains"),
+    )
+    auction_story = _contains_any_term(
+        haystack,
+        ("auction", "liquidate", "liquidation", "surplus robots", "asset disposition"),
+    )
+    generic_business_explainer = _contains_any_term(
+        haystack,
+        ("here's how", "what does", "who can", "how do", "who are the competitors"),
+    )
+
+    if (
+        consumer_robotaxi_story
+        or timber_policy_only_story
+        or security_automation_story
+        or procurement_story
+        or auction_story
+        or generic_business_explainer
+    ):
+        return (0, score)
+    if robotics_business_story or automation_engineering_story or robotics_infrastructure_story or greenhouse_automation_story:
+        return (3, score)
+    if clear_industrial_operating_signal:
+        return (2, score)
+    return (1, score)
+
+
 def _settings_snapshot(settings: object) -> dict:
     snapshot = asdict(settings)
     snapshot["app"]["database_path"] = str(snapshot["app"]["database_path"])
@@ -589,7 +715,7 @@ class RadarService:
                     )
                 ]
                 claude_editorial_contexts.sort(
-                    key=lambda context: context.decision.score if context.decision else 0,
+                    key=_claude_editorial_review_priority,
                     reverse=True,
                 )
                 claude_editorial_contexts = claude_editorial_contexts[

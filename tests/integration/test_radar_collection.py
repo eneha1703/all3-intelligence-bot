@@ -2514,3 +2514,290 @@ def test_claude_editorial_cap_is_respected(
     assert captured_stage_counters["claude_editorial_fallback"] == 1
     assert captured_stage_counters["claude_editorial_fallback_low_or_medium_confidence"] == 1
     assert "Claude editorial fallback: reason=low_or_medium_confidence confidence=medium" in caplog.text
+
+
+def test_claude_editorial_review_pool_prioritizes_strategic_borderline_candidates(
+    monkeypatch, tmp_path
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "radar_claude_editorial_priority.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("CLAUDE_EDITORIAL_ENABLED", "true")
+    monkeypatch.setenv("CLAUDE_EDITORIAL_MAX_CANDIDATES", "6")
+    monkeypatch.setenv("CLAUDE_FINAL_CARD_ENABLED", "false")
+
+    now = datetime.now(timezone.utc)
+
+    def item_xml(title: str, link: str, description: str, guid: str) -> str:
+        return f"""
+  <item>
+    <title>{title}</title>
+    <link>{link}</link>
+    <description>{description}</description>
+    <pubDate>{format_datetime(now - timedelta(hours=1))}</pubDate>
+    <guid>{guid}</guid>
+  </item>"""
+
+    feeds = {
+        "https://business-insider.example/feed.xml": f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>{
+            item_xml(
+                "Waymo, Alphabet's robotaxi service, is growing fast. Here's how to ride, costs, and the self-driving cars' crash record.",
+                "https://www.businessinsider.com/waymo",
+                "Waymo is Alphabet's robotaxi service. It has partnered with Uber and DoorDash, launched public rides across cities, worked through regulation and licensing, and raised $16 billion to expand the autonomous service.",
+                "bi-waymo",
+            )
+        }
+</channel></rss>""",
+        "https://wood-central.example/feed.xml": f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>{
+            item_xml(
+                "American Loggers Helped Write Trump’s Lumber Order. Now It Wants New Markets to Match",
+                "https://woodcentral.com.au/american-loggers-helped-write-trump-lumber-order/",
+                "The timber policy and lobbying story focuses on the executive order, regulation, and trade positioning rather than automation or industrial operations.",
+                "wood-loggers",
+            )
+        }
+</channel></rss>""",
+        "https://ai-insider.example/feed.xml": f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>{
+            item_xml(
+                "China Warehouse Robotics Company HyperLeap Enters US Market",
+                "https://theaiinsider.tech/2026/04/30/china-warehouse-robotics-company-hyperleap-enters-us-market/",
+                "The warehouse robotics company is entering the US market with fulfillment automation and sorting systems.",
+                "ai-hyperleap",
+            )
+        }
+</channel></rss>""",
+        "https://robot-report.example/feed.xml": f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>{
+            item_xml(
+                "Teradyne Robotics revenue rises at the start of 2026",
+                "https://www.therobotreport.com/teradyne-robotics-revenue-rises-start-2026/",
+                "Teradyne Robotics brought in $91 million in Q1 2026, with its AI products helping to boost robotics sales.",
+                "rr-teradyne",
+            )
+        }{
+            item_xml(
+                "Launchpad Build AI offers MLM to speed industrial automation design",
+                "https://www.therobotreport.com/launchpad-build-ai-offers-manufacturing-language-model-industrial-automation/",
+                "Launchpad Build AI says its Manufacturing Language Model can democratize automation for high-mix, low-volume production with inputs from photos, videos, or CAD.",
+                "rr-launchpad",
+            )
+        }</channel></rss>""",
+        "https://robotics-automation.example/feed.xml": f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>{
+            item_xml(
+                "Surplus robots, robot welders, and support equipment to be auctioned by BTM Industrial",
+                "https://roboticsandautomationnews.com/2026/04/30/surplus-robots-robot-welders-and-support-equipment-to-be-auctioned-by-btm-industrial/101124/",
+                "BTM Industrial is liquidating surplus inventory and auctioning robot welders and support equipment to free up floor space.",
+                "ran-auction",
+            )
+        }{
+            item_xml(
+                "How Access Control Systems Integrate with Industrial IoT for Real-Time Security Automation",
+                "https://roboticsandautomationnews.com/2026/04/30/how-access-control-systems-integrate-with-industrial-iot-for-real-time-security-automation/101137/",
+                "Factories and logistics hubs are using connected sensors and access control systems for real-time security automation in industrial IoT environments.",
+                "ran-access",
+            )
+        }{
+            item_xml(
+                "How Procurement Automation Creates Audit-Ready Supply Chains in Manufacturing",
+                "https://roboticsandautomationnews.com/2026/04/30/how-procurement-automation-creates-audit-ready-supply-chains-in-manufacturing/101130/",
+                "A tier-two automotive supplier used procurement automation to improve approval history and audit-ready supply chain workflows.",
+                "ran-procurement",
+            )
+        }{
+            item_xml(
+                "Eternal.ag launches omni-directional trolley as ‘stepping stone to fully-automated greenhouses’",
+                "https://roboticsandautomationnews.com/2026/04/30/eternal-ag-launches-omni-directional-trolley-as-stepping-stone-to-fully-automated-greenhouses/101115/",
+                "The German agritech startup calls the trolley a robot-ready stepping stone to greenhouse automation, fully-automated greenhouses, and harvesting robots for industrial greenhouse operations.",
+                "ran-eternal",
+            )
+        }</channel></rss>""",
+        "https://tech-funding.example/feed.xml": f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>{
+            item_xml(
+                "SoftBank eyes $100B US IPO for Roze AI, its robotics-led infrastructure venture: report",
+                "https://techfundingnews.com/masayoshi-son-softbank-roze-ai-100bn-ipo/",
+                "SoftBank is getting ready to launch Roze AI, a robotics-led infrastructure company combining robotics, data center construction, and physical AI platform ambitions.",
+                "tfn-roze",
+            )
+        }</channel></rss>""",
+    }
+
+    registry = SourceRegistry(
+        (
+            SourceDefinition(
+                id="business_insider_feed",
+                name="Business Insider Feed",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://business-insider.example/feed.xml",
+                priority=100,
+                tags=("automation",),
+            ),
+            SourceDefinition(
+                id="wood_central_api",
+                name="Wood Central API",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://wood-central.example/feed.xml",
+                priority=95,
+                tags=("timber",),
+            ),
+            SourceDefinition(
+                id="ai_insider_rss",
+                name="AI Insider RSS",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://ai-insider.example/feed.xml",
+                priority=90,
+                tags=("robotics",),
+            ),
+            SourceDefinition(
+                id="robot_report_rss",
+                name="The Robot Report RSS",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://robot-report.example/feed.xml",
+                priority=85,
+                tags=("robotics", "industrial"),
+            ),
+            SourceDefinition(
+                id="robotics_automation_news_rss",
+                name="Robotics and Automation News RSS",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://robotics-automation.example/feed.xml",
+                priority=80,
+                tags=("automation",),
+            ),
+            SourceDefinition(
+                id="tech_funding_news_rss",
+                name="Tech Funding News RSS",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://tech-funding.example/feed.xml",
+                priority=75,
+                tags=("funding",),
+            ),
+        )
+    )
+
+    class FakeGeminiClient:
+        is_available = False
+
+    class RecordingClaudeEditorialClient:
+        is_available = True
+
+        def __init__(self) -> None:
+            self.reviewed_titles: list[str] = []
+
+        def review_candidate(self, **kwargs):
+            title = kwargs["title"]
+            self.reviewed_titles.append(title)
+            if title in {
+                "Teradyne Robotics revenue rises at the start of 2026",
+                "Launchpad Build AI offers MLM to speed industrial automation design",
+            }:
+                return ClaudeEditorialReviewResult(
+                    send_ok=True,
+                    reject_reason=None,
+                    edited_title=None,
+                    edited_summary=None,
+                    confidence="medium",
+                    used_claude=True,
+                )
+            return ClaudeEditorialReviewResult(
+                send_ok=False,
+                reject_reason="not_strategic_enough",
+                edited_title=None,
+                edited_summary=None,
+                confidence="high",
+                used_claude=True,
+            )
+
+    class FakeTelegramSender:
+        def __init__(self) -> None:
+            self.sent_cards = []
+
+        def send_card(self, card):
+            self.sent_cards.append(card)
+            return []
+
+    def fake_fetch_text(url: str) -> str:
+        return feeds[url]
+
+    fake_claude = RecordingClaudeEditorialClient()
+    fake_sender = FakeTelegramSender()
+    captured_stage_counters: dict[str, int] = {}
+
+    def fake_write_run_audit_report(*args, **kwargs):
+        nonlocal captured_stage_counters
+        captured_stage_counters = dict(args[6])
+        return tmp_path / "audit.md"
+
+    monkeypatch.setattr("all3_radar.pipeline.radar_service.write_run_audit_report", fake_write_run_audit_report)
+
+    service = RadarService(
+        repo_root=repo_root,
+        registry=registry,
+        fetch_text_fn=fake_fetch_text,
+        gemini_client=FakeGeminiClient(),
+        claude_editorial_review_client=fake_claude,
+        telegram_sender=fake_sender,
+    )
+    result = service.run(dry_run=False)
+
+    assert result.sent_items == 0
+    assert len(fake_sender.sent_cards) == 0
+    assert captured_stage_counters["claude_editorial_attempted"] == 6
+    assert captured_stage_counters["claude_editorial_rejected"] == 4
+    assert captured_stage_counters["claude_editorial_fallback"] == 2
+    assert captured_stage_counters["claude_editorial_fallback_low_or_medium_confidence"] == 2
+
+    assert {
+        "Teradyne Robotics revenue rises at the start of 2026",
+        "Launchpad Build AI offers MLM to speed industrial automation design",
+        "SoftBank eyes $100B US IPO for Roze AI, its robotics-led infrastructure venture: report",
+        "Eternal.ag launches omni-directional trolley as ‘stepping stone to fully-automated greenhouses’",
+    } == set(fake_claude.reviewed_titles[:4])
+    assert "China Warehouse Robotics Company HyperLeap Enters US Market" not in fake_claude.reviewed_titles
+    assert "How Procurement Automation Creates Audit-Ready Supply Chains in Manufacturing" not in fake_claude.reviewed_titles
+    assert "How Access Control Systems Integrate with Industrial IoT for Real-Time Security Automation" not in fake_claude.reviewed_titles
+    assert "Waymo, Alphabet's robotaxi service, is growing fast. Here's how to ride, costs, and the self-driving cars' crash record." not in fake_claude.reviewed_titles
+
+    for title in (
+        "Teradyne Robotics revenue rises at the start of 2026",
+        "Launchpad Build AI offers MLM to speed industrial automation design",
+        "SoftBank eyes $100B US IPO for Roze AI, its robotics-led infrastructure venture: report",
+        "Eternal.ag launches omni-directional trolley as ‘stepping stone to fully-automated greenhouses’",
+    ):
+        send_status, skip_reason, _, _ = _load_radar_decision_for_title(db_path, title)
+        assert send_status == "stored_only"
+        assert skip_reason in {None, "editorial_not_telegram_worthy", "claude_editorial_rejected"}
