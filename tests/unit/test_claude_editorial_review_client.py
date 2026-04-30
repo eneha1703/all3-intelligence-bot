@@ -81,10 +81,17 @@ def test_build_claude_editorial_review_prompt_includes_scope_rules() -> None:
     assert "housing industrialization or productivity" in prompt
     assert "timber adoption, scaling, economics, or policy" in prompt
     assert "robotics, automation, platform funding, deployment, or physical infrastructure automation" in prompt
+    assert "Industrial automation engineering enablement can also be in scope" in prompt
+    assert "manufacturing language models" in prompt
+    assert "automation cell design" in prompt
+    assert "designed, programmed, integrated, commissioned, or deployed" in prompt
     assert "restaurant or menu personalization AI" in prompt
     assert "generic automotive capex" in prompt
     assert "gas-car or EV-demand stories" in prompt
+    assert "generic enterprise AI, ERP, workflow, procurement, or back-office automation" in prompt
+    assert "access-control, security, or generic Industrial IoT security automation" in prompt
     assert "generic manufacturing without robotics, AI, or automation" in prompt
+    assert "prefer low or medium confidence over a high-confidence rejection" in prompt
     assert "Return only a single JSON object" in prompt
     assert "Do not use markdown" in prompt
     assert "Do not wrap the response in code fences" in prompt
@@ -345,6 +352,48 @@ def test_review_candidate_softbank_robotics_datacenter_example_is_valid_promotio
     assert "robotics" in (result.edited_title or "").lower()
 
 
+def test_review_candidate_launchpad_style_industrial_automation_design_example_can_be_valid_promotion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(
+            _payload(
+                json.dumps(
+                    {
+                        "send_ok": True,
+                        "reject_reason": None,
+                        "edited_title": "Launchpad Build AI targets industrial automation engineering bottlenecks",
+                        "edited_summary": (
+                            "Launchpad Build AI is pitching a manufacturing language model for automation cell design and "
+                            "industrial automation engineering workflows, pointing to a potentially important software layer "
+                            "for how robotics and factory automation systems are designed and integrated."
+                        ),
+                        "confidence": "high",
+                    }
+                )
+            )
+        ),
+    )
+
+    result = _client().review_candidate(
+        title="Launchpad Build AI offers MLM to speed industrial automation design",
+        url="https://www.therobotreport.com/launchpad-build-ai-offers-manufacturing-language-model-industrial-automation/",
+        source="Robot Report",
+        summary=(
+            "Launchpad Build AI says its Manufacturing Language Model can democratize automation for high-mix, "
+            "low-volume production with inputs from photos, videos, or CAD."
+        ),
+        score=33,
+        ranking_signals={"event_flags": {"industrial_robotics_signal": True}},
+        freshness="fresh",
+        relevance="keep",
+    )
+
+    assert result.is_high_confidence_promotion is True
+    assert "automation" in (result.edited_title or "").lower()
+
+
 def test_review_candidate_taco_bell_menu_ai_example_is_valid_rejection(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -378,6 +427,72 @@ def test_review_candidate_taco_bell_menu_ai_example_is_valid_rejection(
 
     assert result.is_high_confidence_rejection is True
     assert result.reject_reason == "consumer_ai_menu_personalization"
+
+
+@pytest.mark.parametrize(
+    ("title", "url", "source", "summary", "reject_reason"),
+    [
+        (
+            "How Procurement Automation Creates Audit-Ready Supply Chains in Manufacturing",
+            "https://example.com/procurement-automation",
+            "Robotics & Automation News",
+            "The article covers procurement workflow automation and audit-ready supply chain software in manufacturing organizations.",
+            "back_office_procurement_automation",
+        ),
+        (
+            "How Access Control Systems Integrate with Industrial IoT for Real-Time Security Automation",
+            "https://example.com/access-control-iot",
+            "Robotics & Automation News",
+            "The article describes access-control systems and industrial IoT security automation for facilities.",
+            "industrial_security_automation_out_of_scope",
+        ),
+        (
+            "Enterprise AI assistant helps teams summarize meetings faster",
+            "https://example.com/enterprise-ai-productivity",
+            "TechCrunch",
+            "A generic enterprise AI productivity assistant helps office teams summarize meetings and manage tasks.",
+            "generic_enterprise_ai_productivity",
+        ),
+    ],
+)
+def test_review_candidate_out_of_scope_software_automation_examples_remain_valid_rejections(
+    monkeypatch: pytest.MonkeyPatch,
+    title: str,
+    url: str,
+    source: str,
+    summary: str,
+    reject_reason: str,
+) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(
+            _payload(
+                json.dumps(
+                    {
+                        "send_ok": False,
+                        "reject_reason": reject_reason,
+                        "edited_title": None,
+                        "edited_summary": None,
+                        "confidence": "high",
+                    }
+                )
+            )
+        ),
+    )
+
+    result = _client().review_candidate(
+        title=title,
+        url=url,
+        source=source,
+        summary=summary,
+        score=25,
+        ranking_signals={"event_flags": {"funding_event": False}},
+        freshness="fresh",
+        relevance="keep",
+    )
+
+    assert result.is_high_confidence_rejection is True
+    assert result.reject_reason == reject_reason
 
 
 def test_review_candidate_http_error_is_controlled(monkeypatch: pytest.MonkeyPatch) -> None:
