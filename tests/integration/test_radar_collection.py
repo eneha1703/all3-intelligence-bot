@@ -5,8 +5,9 @@ from pathlib import Path
 
 from all3_radar.delivery.telegram import TelegramDelivery
 from all3_radar.domain.enums import SourceKind, SourceLayer
-from all3_radar.domain.models import SourceDefinition
+from all3_radar.domain.models import ClaudeFinalCardResult, SourceDefinition
 from all3_radar.pipeline.radar_service import RadarService
+from all3_radar.summarization.claude_final_card_client import ClaudeFinalCardUnavailableError
 from all3_radar.sources.registry import SourceRegistry
 
 
@@ -1301,3 +1302,437 @@ def test_radar_does_not_skip_non_deployment_strategy_article_across_runs(
         ).fetchone()
 
     assert decision_row != ("skip", "already_sent_same_deployment_event")
+
+
+def test_claude_final_card_disabled_preserves_current_behavior_without_calling_client(
+    monkeypatch, tmp_path
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "radar_claude_disabled.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("CLAUDE_FINAL_CARD_ENABLED", "false")
+
+    now = datetime.now(timezone.utc)
+    feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Kewazo raises funding for construction robot rollout</title>
+    <link>https://example.com/kewazo</link>
+    <description>The company said the round will support factory and jobsite deployment expansion.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=1))}</pubDate>
+    <guid>a1</guid>
+  </item>
+</channel></rss>"""
+
+    registry = SourceRegistry(
+        (
+            SourceDefinition(
+                id="claude_disabled_feed",
+                name="Claude Disabled Feed",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://example.com/claude-disabled.xml",
+                priority=100,
+                tags=("robotics", "construction"),
+            ),
+        )
+    )
+
+    class FakeGeminiClient:
+        is_available = True
+
+        def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
+            return ("The round supports deployment expansion across construction robotics workflows.", None)
+
+    class FakeTelegramSender:
+        def __init__(self) -> None:
+            self.sent_cards = []
+
+        def send_card(self, card):
+            self.sent_cards.append(card)
+            return [
+                TelegramDelivery(
+                    chat_id="123",
+                    status="sent",
+                    telegram_message_id="msg-1",
+                    error_text=None,
+                    payload_text=card.text,
+                )
+            ]
+
+    class FakeClaudeClient:
+        is_available = True
+
+        def __init__(self) -> None:
+            self.call_count = 0
+
+        def generate_final_card(self, **kwargs):
+            self.call_count += 1
+            raise AssertionError("Claude client should not be called when disabled")
+
+    def fake_fetch_text(url: str) -> str:
+        assert url == "https://example.com/claude-disabled.xml"
+        return feed
+
+    fake_sender = FakeTelegramSender()
+    fake_claude = FakeClaudeClient()
+    service = RadarService(
+        repo_root=repo_root,
+        registry=registry,
+        fetch_text_fn=fake_fetch_text,
+        gemini_client=FakeGeminiClient(),
+        claude_final_card_client=fake_claude,
+        telegram_sender=fake_sender,
+    )
+
+    result = service.run(dry_run=False)
+
+    assert result.sent_items == 1
+    assert fake_claude.call_count == 0
+    assert len(fake_sender.sent_cards) == 1
+    assert "<b>Kewazo raises funding for construction robot rollout</b>" in fake_sender.sent_cards[0].text
+
+
+def test_claude_final_card_success_updates_final_card_and_stage_counters(
+    monkeypatch, tmp_path
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "radar_claude_success.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("CLAUDE_FINAL_CARD_ENABLED", "true")
+
+    now = datetime.now(timezone.utc)
+    feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Kewazo raises funding for construction robot rollout</title>
+    <link>https://example.com/kewazo</link>
+    <description>The company said the round will support factory and jobsite deployment expansion.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=1))}</pubDate>
+    <guid>a1</guid>
+  </item>
+</channel></rss>"""
+
+    registry = SourceRegistry(
+        (
+            SourceDefinition(
+                id="claude_success_feed",
+                name="Claude Success Feed",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://example.com/claude-success.xml",
+                priority=100,
+                tags=("robotics", "construction"),
+            ),
+        )
+    )
+
+    class FakeGeminiClient:
+        is_available = True
+
+        def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
+            return ("The round supports deployment expansion across construction robotics workflows.", None)
+
+    class FakeTelegramSender:
+        def __init__(self) -> None:
+            self.sent_cards = []
+
+        def send_card(self, card):
+            self.sent_cards.append(card)
+            return [
+                TelegramDelivery(
+                    chat_id="123",
+                    status="sent",
+                    telegram_message_id="msg-1",
+                    error_text=None,
+                    payload_text=card.text,
+                )
+            ]
+
+    class FakeClaudeClient:
+        is_available = True
+
+        def __init__(self) -> None:
+            self.call_count = 0
+
+        def generate_final_card(self, **kwargs):
+            self.call_count += 1
+            return ClaudeFinalCardResult(
+                send_ok=True,
+                reject_reason=None,
+                title="Claude edited headline",
+                summary="Claude edited summary for the final Telegram card.",
+                why_it_matters="Internal only.",
+                duplicate_risk="low",
+                confidence="high",
+                used_claude=True,
+            )
+
+    captured_stage_counters: dict[str, int] = {}
+
+    def fake_write_run_audit_report(*args, **kwargs):
+        nonlocal captured_stage_counters
+        captured_stage_counters = dict(args[6])
+        return tmp_path / "audit.md"
+
+    def fake_fetch_text(url: str) -> str:
+        assert url == "https://example.com/claude-success.xml"
+        return feed
+
+    monkeypatch.setattr("all3_radar.pipeline.radar_service.write_run_audit_report", fake_write_run_audit_report)
+    fake_sender = FakeTelegramSender()
+    fake_claude = FakeClaudeClient()
+    service = RadarService(
+        repo_root=repo_root,
+        registry=registry,
+        fetch_text_fn=fake_fetch_text,
+        gemini_client=FakeGeminiClient(),
+        claude_final_card_client=fake_claude,
+        telegram_sender=fake_sender,
+    )
+
+    result = service.run(dry_run=False)
+
+    assert result.sent_items == 1
+    assert fake_claude.call_count == 1
+    assert len(fake_sender.sent_cards) == 1
+    assert "<b>Claude edited headline</b>" in fake_sender.sent_cards[0].text
+    assert "Claude edited summary for the final Telegram card." in fake_sender.sent_cards[0].text
+    assert captured_stage_counters["claude_final_card_attempted"] == 1
+    assert captured_stage_counters["claude_final_card_used"] == 1
+
+
+def test_claude_final_card_rejection_marks_stored_only_and_skips_send(
+    monkeypatch, tmp_path
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "radar_claude_reject.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("CLAUDE_FINAL_CARD_ENABLED", "true")
+
+    now = datetime.now(timezone.utc)
+    feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Kewazo raises funding for construction robot rollout</title>
+    <link>https://example.com/kewazo</link>
+    <description>The company said the round will support factory and jobsite deployment expansion.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=1))}</pubDate>
+    <guid>a1</guid>
+  </item>
+</channel></rss>"""
+
+    registry = SourceRegistry(
+        (
+            SourceDefinition(
+                id="claude_reject_feed",
+                name="Claude Reject Feed",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://example.com/claude-reject.xml",
+                priority=100,
+                tags=("robotics", "construction"),
+            ),
+        )
+    )
+
+    class FakeGeminiClient:
+        is_available = True
+
+        def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
+            return ("The round supports deployment expansion across construction robotics workflows.", None)
+
+    class FakeTelegramSender:
+        def __init__(self) -> None:
+            self.sent_cards = []
+
+        def send_card(self, card):
+            self.sent_cards.append(card)
+            return []
+
+    class FakeClaudeClient:
+        is_available = True
+
+        def __init__(self) -> None:
+            self.call_count = 0
+
+        def generate_final_card(self, **kwargs):
+            self.call_count += 1
+            return ClaudeFinalCardResult(
+                send_ok=False,
+                reject_reason="generic",
+                title=None,
+                summary=None,
+                why_it_matters=None,
+                duplicate_risk="medium",
+                confidence="high",
+                used_claude=True,
+            )
+
+    captured_stage_counters: dict[str, int] = {}
+
+    def fake_write_run_audit_report(*args, **kwargs):
+        nonlocal captured_stage_counters
+        captured_stage_counters = dict(args[6])
+        return tmp_path / "audit.md"
+
+    def fake_fetch_text(url: str) -> str:
+        assert url == "https://example.com/claude-reject.xml"
+        return feed
+
+    monkeypatch.setattr("all3_radar.pipeline.radar_service.write_run_audit_report", fake_write_run_audit_report)
+    fake_sender = FakeTelegramSender()
+    fake_claude = FakeClaudeClient()
+    service = RadarService(
+        repo_root=repo_root,
+        registry=registry,
+        fetch_text_fn=fake_fetch_text,
+        gemini_client=FakeGeminiClient(),
+        claude_final_card_client=fake_claude,
+        telegram_sender=fake_sender,
+    )
+
+    result = service.run(dry_run=False)
+
+    assert result.sent_items == 0
+    assert fake_claude.call_count == 1
+    assert len(fake_sender.sent_cards) == 0
+    assert captured_stage_counters["claude_final_card_attempted"] == 1
+    assert captured_stage_counters["claude_final_card_rejected"] == 1
+
+    with sqlite3.connect(db_path) as connection:
+        row = connection.execute(
+            """
+            SELECT rd.send_status, rd.skip_reason
+            FROM radar_decisions rd
+            JOIN normalized_items ni ON ni.id = rd.normalized_item_id
+            WHERE ni.title = ?
+            """,
+            ("Kewazo raises funding for construction robot rollout",),
+        ).fetchone()
+
+    assert row == ("stored_only", "claude_final_card_rejected")
+
+
+def test_claude_final_card_failure_falls_back_to_deterministic_send_and_cap(
+    monkeypatch, tmp_path
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "radar_claude_fallback_cap.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("CLAUDE_FINAL_CARD_ENABLED", "true")
+    monkeypatch.setenv("CLAUDE_FINAL_CARD_MAX_CANDIDATES", "1")
+
+    now = datetime.now(timezone.utc)
+    feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Kewazo raises funding for construction robot rollout</title>
+    <link>https://example.com/kewazo</link>
+    <description>The company said the round will support factory and jobsite deployment expansion.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=1))}</pubDate>
+    <guid>a1</guid>
+  </item>
+  <item>
+    <title>Hexagon and Schaeffler to install 1,000 Aeon humanoid robots across global factory network</title>
+    <link>https://example.com/hexagon</link>
+    <description>Hexagon and Schaeffler said the rollout will deploy 1,000 Aeon humanoid robots across factories worldwide.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=2))}</pubDate>
+    <guid>b1</guid>
+  </item>
+</channel></rss>"""
+
+    registry = SourceRegistry(
+        (
+            SourceDefinition(
+                id="claude_fallback_feed",
+                name="Claude Fallback Feed",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://example.com/claude-fallback.xml",
+                priority=100,
+                tags=("robotics", "construction"),
+            ),
+        )
+    )
+
+    class FakeGeminiClient:
+        is_available = True
+
+        def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
+            return (preview or title, None)
+
+    class FakeTelegramSender:
+        def __init__(self) -> None:
+            self.sent_cards = []
+
+        def send_card(self, card):
+            self.sent_cards.append(card)
+            return [
+                TelegramDelivery(
+                    chat_id="123",
+                    status="sent",
+                    telegram_message_id=f"msg-{len(self.sent_cards)}",
+                    error_text=None,
+                    payload_text=card.text,
+                )
+            ]
+
+    class FakeClaudeClient:
+        is_available = True
+
+        def __init__(self) -> None:
+            self.call_count = 0
+
+        def generate_final_card(self, **kwargs):
+            self.call_count += 1
+            raise ClaudeFinalCardUnavailableError("invalid_json")
+
+    captured_stage_counters: dict[str, int] = {}
+
+    def fake_write_run_audit_report(*args, **kwargs):
+        nonlocal captured_stage_counters
+        captured_stage_counters = dict(args[6])
+        return tmp_path / "audit.md"
+
+    def fake_fetch_text(url: str) -> str:
+        assert url == "https://example.com/claude-fallback.xml"
+        return feed
+
+    monkeypatch.setattr("all3_radar.pipeline.radar_service.write_run_audit_report", fake_write_run_audit_report)
+    fake_sender = FakeTelegramSender()
+    fake_claude = FakeClaudeClient()
+    service = RadarService(
+        repo_root=repo_root,
+        registry=registry,
+        fetch_text_fn=fake_fetch_text,
+        gemini_client=FakeGeminiClient(),
+        claude_final_card_client=fake_claude,
+        telegram_sender=fake_sender,
+    )
+
+    result = service.run(dry_run=False)
+
+    assert result.sent_items == 2
+    assert fake_claude.call_count == 1
+    assert len(fake_sender.sent_cards) == 2
+    assert "<b>Kewazo raises funding for construction robot rollout</b>" in fake_sender.sent_cards[0].text
+    assert "<b>Hexagon and Schaeffler to install 1,000 Aeon humanoid robots across global factory network</b>" in fake_sender.sent_cards[1].text
+    assert captured_stage_counters["claude_final_card_attempted"] == 1
+    assert captured_stage_counters["claude_final_card_fallback"] == 1

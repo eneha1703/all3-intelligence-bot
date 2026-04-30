@@ -105,9 +105,9 @@ def load_settings(repo_root: Path, env: Mapping[str, str] | None = None) -> Sett
             ),
             claude_final_card_enabled=_parse_bool(env.get("CLAUDE_FINAL_CARD_ENABLED", "false")),
             claude_final_card_max_candidates=_parse_int(
-                env.get("CLAUDE_FINAL_CARD_MAX_CANDIDATES", "3"),
+                env.get("CLAUDE_FINAL_CARD_MAX_CANDIDATES", "10"),
                 "radar.claude_final_card_max_candidates",
-                default=3,
+                default=10,
             ),
         ),
         digest=DigestConfig(

@@ -72,7 +72,7 @@ def test_empty_claude_final_card_integer_envs_use_defaults() -> None:
         },
     )
 
-    assert settings.radar.claude_final_card_max_candidates == 3
+    assert settings.radar.claude_final_card_max_candidates == 10
     assert settings.integrations.claude_final_card_timeout_seconds == 12
     assert settings.integrations.claude_final_card_max_tokens == 300
 
@@ -104,7 +104,7 @@ def test_whitespace_claude_final_card_integer_envs_use_defaults() -> None:
         },
     )
 
-    assert settings.radar.claude_final_card_max_candidates == 3
+    assert settings.radar.claude_final_card_max_candidates == 10
     assert settings.integrations.claude_final_card_timeout_seconds == 12
     assert settings.integrations.claude_final_card_max_tokens == 300
 

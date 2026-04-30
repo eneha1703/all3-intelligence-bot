@@ -40,6 +40,10 @@ from all3_radar.sources.registry import SourceRegistry, load_source_registry
 from all3_radar.storage.db import initialize_database
 from all3_radar.storage.repositories import RadarRepository
 from all3_radar.summarization.gemini_client import GeminiClient
+from all3_radar.summarization.claude_final_card_client import (
+    ClaudeFinalCardClient,
+    ClaudeFinalCardUnavailableError,
+)
 from all3_radar.summarization.radar_summary import summarize_candidate
 
 LOGGER = logging.getLogger(__name__)
@@ -55,6 +59,8 @@ class CurrentRunContext:
     decision: RankedDecision | None = None
     summary: SummaryResult | None = None
     already_sent: bool = False
+    final_headline: str | None = None
+    final_summary_text: str | None = None
 
 
 def _settings_snapshot(settings: object) -> dict:
@@ -93,6 +99,7 @@ class RadarService:
         repository: RadarRepository | None = None,
         fetch_text_fn: FetchText | None = None,
         gemini_client: GeminiClient | None = None,
+        claude_final_card_client: ClaudeFinalCardClient | None = None,
         telegram_sender: TelegramSender | None = None,
     ) -> None:
         self.repo_root = repo_root
@@ -105,6 +112,18 @@ class RadarService:
             api_key=self.settings.integrations.gemini_api_key,
             model=self.settings.integrations.gemini_model,
         )
+        if claude_final_card_client is not None:
+            self.claude_final_card_client = claude_final_card_client
+        elif self.settings.radar.claude_final_card_enabled:
+            self.claude_final_card_client = ClaudeFinalCardClient(
+                enabled=self.settings.radar.claude_final_card_enabled,
+                api_key=self.settings.integrations.anthropic_api_key,
+                model=self.settings.integrations.claude_final_card_model,
+                timeout_seconds=self.settings.integrations.claude_final_card_timeout_seconds,
+                max_tokens=self.settings.integrations.claude_final_card_max_tokens,
+            )
+        else:
+            self.claude_final_card_client = None
         self.telegram_sender = telegram_sender or TelegramSender(
             bot_token=self.settings.integrations.telegram_alert_bot_token,
             chat_ids=self.settings.integrations.telegram_alert_chat_ids,
@@ -137,6 +156,9 @@ class RadarService:
 
         def record_stage_timing(label: str, started: float) -> None:
             stage_timings[label] = stage_timings.get(label, 0.0) + (perf_counter() - started)
+
+        def increment_stage_counter(label: str, amount: int = 1) -> None:
+            stage_counters[label] = stage_counters.get(label, 0) + amount
 
         try:
             for source in selected_sources:
@@ -524,6 +546,88 @@ class RadarService:
             sendable_contexts = sendable_contexts[: self.settings.radar.max_cards_per_run]
             record_stage_timing("editorial_and_late_dedupe", editorial_and_late_dedupe_started)
 
+            if (
+                sendable_contexts
+                and self.settings.radar.claude_final_card_enabled
+                and self.claude_final_card_client is not None
+                and self.claude_final_card_client.is_available
+            ):
+                claude_contexts = sendable_contexts[: self.settings.radar.claude_final_card_max_candidates]
+                filtered_sendable_contexts: list[CurrentRunContext] = []
+                for context in sendable_contexts:
+                    if context not in claude_contexts:
+                        filtered_sendable_contexts.append(context)
+                        continue
+                    increment_stage_counter("claude_final_card_attempted")
+                    try:
+                        claude_result = self.claude_final_card_client.generate_final_card(
+                            title=context.item.title,
+                            source=context.source.name,
+                            url=context.item.canonical_url,
+                            text_preview=context.item.text_preview,
+                            score=context.decision.score,
+                            event_flags=context.decision.signals.get("event_flags", {}),
+                            signals=context.decision.signals,
+                            existing_summary=context.summary.summary_text if context.summary else None,
+                        )
+                    except ClaudeFinalCardUnavailableError as exc:
+                        increment_stage_counter("claude_final_card_fallback")
+                        LOGGER.warning(
+                            "Claude final-card fallback: item=%s reason=%s",
+                            context.item.normalized_item_id,
+                            exc,
+                        )
+                        filtered_sendable_contexts.append(context)
+                        continue
+                    except Exception as exc:
+                        increment_stage_counter("claude_final_card_error")
+                        LOGGER.warning(
+                            "Claude final-card error: item=%s reason=%s",
+                            context.item.normalized_item_id,
+                            exc,
+                        )
+                        filtered_sendable_contexts.append(context)
+                        continue
+
+                    if not claude_result.send_ok:
+                        increment_stage_counter("claude_final_card_rejected")
+                        context.decision = RankedDecision(
+                            relevance_status=context.decision.relevance_status,
+                            send_status="stored_only",
+                            skip_reason="claude_final_card_rejected",
+                            score=context.decision.score,
+                            signals={
+                                **context.decision.signals,
+                                "claude_final_card_reject_reason": claude_result.reject_reason,
+                                "claude_final_card_duplicate_risk": claude_result.duplicate_risk,
+                                "claude_final_card_confidence": claude_result.confidence,
+                            },
+                            is_shortlisted=context.decision.is_shortlisted,
+                            is_borderline=context.decision.is_borderline,
+                        )
+                        LOGGER.info(
+                            "Claude final-card rejected candidate: item=%s reason=%s",
+                            context.item.normalized_item_id,
+                            claude_result.reject_reason or "claude_final_card_rejected",
+                        )
+                        continue
+
+                    if claude_result.confidence == "low" or not claude_result.title or not claude_result.summary:
+                        increment_stage_counter("claude_final_card_fallback")
+                        LOGGER.warning(
+                            "Claude final-card fallback: item=%s reason=%s",
+                            context.item.normalized_item_id,
+                            "low_confidence_or_missing_fields",
+                        )
+                        filtered_sendable_contexts.append(context)
+                        continue
+
+                    context.final_headline = claude_result.title
+                    context.final_summary_text = claude_result.summary
+                    increment_stage_counter("claude_final_card_used")
+                    filtered_sendable_contexts.append(context)
+                sendable_contexts = filtered_sendable_contexts
+
             summary_generation_started = perf_counter()
             for context in contexts:
                 if context.summary is None and context.decision and context.decision.is_shortlisted:
@@ -533,8 +637,8 @@ class RadarService:
             delivery_started = perf_counter()
             for context in sendable_contexts:
                 card = build_news_card(
-                    headline=context.item.title,
-                    summary_text=context.summary.summary_text if context.summary else None,
+                    headline=context.final_headline or context.item.title,
+                    summary_text=context.final_summary_text or (context.summary.summary_text if context.summary else None),
                     url=context.item.canonical_url,
                 )
                 if card is None:
