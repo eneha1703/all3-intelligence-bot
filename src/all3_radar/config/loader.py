@@ -65,6 +65,14 @@ def _parse_chat_ids(value: str | None) -> tuple[str, ...]:
     return tuple(part.strip() for part in value.split(",") if part.strip())
 
 
+def _env_str_with_default(env: Mapping[str, str], env_name: str, default: str) -> str:
+    value = env.get(env_name)
+    if value is None:
+        return default
+    normalized = value.strip()
+    return normalized or default
+
+
 def load_settings(repo_root: Path, env: Mapping[str, str] | None = None) -> Settings:
     env = env or os.environ
     config = load_yaml(repo_root / "config" / "settings.yaml")
@@ -108,6 +116,12 @@ def load_settings(repo_root: Path, env: Mapping[str, str] | None = None) -> Sett
                 env.get("CLAUDE_FINAL_CARD_MAX_CANDIDATES", "10"),
                 "radar.claude_final_card_max_candidates",
                 default=10,
+            ),
+            claude_editorial_enabled=_parse_bool(env.get("CLAUDE_EDITORIAL_ENABLED", "false")),
+            claude_editorial_max_candidates=_parse_int(
+                env.get("CLAUDE_EDITORIAL_MAX_CANDIDATES", "6"),
+                "radar.claude_editorial_max_candidates",
+                default=6,
             ),
         ),
         digest=DigestConfig(
@@ -154,6 +168,21 @@ def load_settings(repo_root: Path, env: Mapping[str, str] | None = None) -> Sett
                 env.get("CLAUDE_FINAL_CARD_MAX_TOKENS", "300"),
                 "integrations.claude_final_card_max_tokens",
                 default=300,
+            ),
+            claude_editorial_model=_env_str_with_default(
+                env,
+                "CLAUDE_EDITORIAL_MODEL",
+                _env_str_with_default(env, "CLAUDE_FINAL_CARD_MODEL", "claude-3-5-sonnet-latest"),
+            ),
+            claude_editorial_timeout_seconds=_parse_int(
+                env.get("CLAUDE_EDITORIAL_TIMEOUT_SECONDS", "30"),
+                "integrations.claude_editorial_timeout_seconds",
+                default=30,
+            ),
+            claude_editorial_max_tokens=_parse_int(
+                env.get("CLAUDE_EDITORIAL_MAX_TOKENS", "700"),
+                "integrations.claude_editorial_max_tokens",
+                default=700,
             ),
             telegram_alert_bot_token=env.get("TELEGRAM_ALERT_BOT_TOKEN") or None,
             telegram_alert_chat_ids=_parse_chat_ids(env.get("TELEGRAM_ALERT_CHAT_IDS")),

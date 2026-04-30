@@ -24,6 +24,8 @@ class RadarConfig:
     google_competitor_send_enabled: bool
     claude_final_card_enabled: bool
     claude_final_card_max_candidates: int
+    claude_editorial_enabled: bool
+    claude_editorial_max_candidates: int
 
 
 @dataclass(frozen=True)
@@ -52,6 +54,9 @@ class IntegrationsConfig:
     claude_final_card_model: str | None
     claude_final_card_timeout_seconds: int
     claude_final_card_max_tokens: int
+    claude_editorial_model: str | None
+    claude_editorial_timeout_seconds: int
+    claude_editorial_max_tokens: int
     telegram_alert_bot_token: str | None
     telegram_alert_chat_ids: tuple[str, ...]
 

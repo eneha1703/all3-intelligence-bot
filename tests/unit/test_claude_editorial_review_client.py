@@ -1,0 +1,317 @@
+import json
+from urllib.error import HTTPError
+
+import pytest
+
+from all3_radar.summarization.claude_editorial_review_client import (
+    ClaudeEditorialReviewClient,
+    ClaudeEditorialReviewUnavailableError,
+    build_claude_editorial_review_prompt,
+)
+
+
+class _FakeResponse:
+    def __init__(self, payload: dict) -> None:
+        self._payload = payload
+
+    def read(self) -> bytes:
+        return json.dumps(self._payload).encode("utf-8")
+
+    def __enter__(self) -> "_FakeResponse":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        return None
+
+
+def _client(**overrides: object) -> ClaudeEditorialReviewClient:
+    defaults = {
+        "enabled": True,
+        "api_key": "test-key",
+        "model": "claude-sonnet-4-6",
+        "timeout_seconds": 30,
+        "max_tokens": 700,
+    }
+    defaults.update(overrides)
+    return ClaudeEditorialReviewClient(**defaults)
+
+
+def _payload(text: str) -> dict:
+    return {"content": [{"type": "text", "text": text}]}
+
+
+def _review(client: ClaudeEditorialReviewClient) -> object:
+    return client.review_candidate(
+        title="SoftBank is creating a robotics company that builds data centers",
+        url="https://example.com/softbank-robotics-datacenter",
+        source="TechCrunch",
+        summary=(
+            "SoftBank is forming a robotics company focused on automated data-center construction and "
+            "physical infrastructure execution."
+        ),
+        score=24,
+        ranking_signals={
+            "event_flags": {
+                "funding_event": True,
+                "industrial_robotics_signal": True,
+                "construction_innovation_signal": True,
+            }
+        },
+        freshness="fresh",
+        relevance="keep",
+    )
+
+
+def test_build_claude_editorial_review_prompt_includes_scope_rules() -> None:
+    prompt = build_claude_editorial_review_prompt(
+        title="Taco Bell expands AI menu recommendations",
+        url="https://example.com/taco-bell-ai",
+        source="TechCrunch",
+        summary="Taco Bell is using AI for menu personalization in drive-through ordering.",
+        score=18,
+        ranking_signals={"event_flags": {"funding_event": False}},
+        freshness="fresh",
+        relevance="keep",
+    )
+
+    assert "physical AI" in prompt
+    assert "industrial robotics" in prompt
+    assert "factory automation tied to robotics, AI, or autonomous systems" in prompt
+    assert "construction automation" in prompt
+    assert "housing industrialization or productivity" in prompt
+    assert "timber adoption, scaling, economics, or policy" in prompt
+    assert "robotics, automation, platform funding, deployment, or physical infrastructure automation" in prompt
+    assert "restaurant or menu personalization AI" in prompt
+    assert "generic automotive capex" in prompt
+    assert "gas-car or EV-demand stories" in prompt
+    assert "generic manufacturing without robotics, AI, or automation" in prompt
+
+
+def test_review_candidate_parses_high_confidence_promotion(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(
+            _payload(
+                json.dumps(
+                    {
+                        "send_ok": True,
+                        "reject_reason": None,
+                        "edited_title": "SoftBank forms robotics company for automated data-center buildout",
+                        "edited_summary": (
+                            "SoftBank is creating a robotics company focused on automated data-center "
+                            "construction and physical infrastructure execution."
+                        ),
+                        "confidence": "high",
+                    }
+                )
+            )
+        ),
+    )
+
+    result = _review(_client())
+
+    assert result.send_ok is True
+    assert result.confidence == "high"
+    assert result.edited_title is not None
+    assert result.edited_summary is not None
+    assert result.is_high_confidence_promotion is True
+    assert result.is_high_confidence_rejection is False
+
+
+def test_review_candidate_parses_high_confidence_rejection(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(
+            _payload(
+                json.dumps(
+                    {
+                        "send_ok": False,
+                        "reject_reason": "consumer_ai_not_operational",
+                        "edited_title": None,
+                        "edited_summary": None,
+                        "confidence": "high",
+                    }
+                )
+            )
+        ),
+    )
+
+    result = _review(_client())
+
+    assert result.send_ok is False
+    assert result.reject_reason == "consumer_ai_not_operational"
+    assert result.confidence == "high"
+    assert result.is_high_confidence_rejection is True
+    assert result.is_high_confidence_promotion is False
+
+
+@pytest.mark.parametrize("confidence", ["low", "medium"])
+def test_review_candidate_keeps_low_or_medium_confidence_result(
+    monkeypatch: pytest.MonkeyPatch, confidence: str
+) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(
+            _payload(
+                json.dumps(
+                    {
+                        "send_ok": True,
+                        "reject_reason": None,
+                        "edited_title": "Borderline automation signal",
+                        "edited_summary": "The story may matter, but deterministic review should keep control.",
+                        "confidence": confidence,
+                    }
+                )
+            )
+        ),
+    )
+
+    result = _review(_client())
+
+    assert result.confidence == confidence
+    assert result.is_high_confidence_promotion is False
+    assert result.is_high_confidence_rejection is False
+
+
+def test_review_candidate_invalid_json_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(_payload("not-json")),
+    )
+
+    with pytest.raises(ClaudeEditorialReviewUnavailableError, match="not valid JSON"):
+        _review(_client())
+
+
+def test_review_candidate_missing_send_ok_raises(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(
+            _payload(json.dumps({"edited_title": "A", "edited_summary": "B", "confidence": "high"}))
+        ),
+    )
+
+    with pytest.raises(ClaudeEditorialReviewUnavailableError, match="send_ok"):
+        _review(_client())
+
+
+def test_review_candidate_high_confidence_rejection_requires_reason(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(
+            _payload(
+                json.dumps(
+                    {
+                        "send_ok": False,
+                        "reject_reason": "   ",
+                        "edited_title": None,
+                        "edited_summary": None,
+                        "confidence": "high",
+                    }
+                )
+            )
+        ),
+    )
+
+    with pytest.raises(ClaudeEditorialReviewUnavailableError, match="reject_reason"):
+        _review(_client())
+
+
+def test_review_candidate_high_confidence_promotion_requires_title_and_summary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(
+            _payload(
+                json.dumps(
+                    {
+                        "send_ok": True,
+                        "reject_reason": None,
+                        "edited_title": "   ",
+                        "edited_summary": "",
+                        "confidence": "high",
+                    }
+                )
+            )
+        ),
+    )
+
+    with pytest.raises(ClaudeEditorialReviewUnavailableError, match="usable title"):
+        _review(_client())
+
+
+def test_review_candidate_softbank_robotics_datacenter_example_is_valid_promotion(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(
+            _payload(
+                json.dumps(
+                    {
+                        "send_ok": True,
+                        "reject_reason": None,
+                        "edited_title": "SoftBank robotics venture targets automated data-center construction",
+                        "edited_summary": (
+                            "SoftBank is creating a robotics venture centered on automated data-center "
+                            "construction and physical infrastructure execution."
+                        ),
+                        "confidence": "high",
+                    }
+                )
+            )
+        ),
+    )
+
+    result = _review(_client())
+
+    assert result.is_high_confidence_promotion is True
+    assert "robotics" in (result.edited_title or "").lower()
+
+
+def test_review_candidate_taco_bell_menu_ai_example_is_valid_rejection(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(
+            _payload(
+                json.dumps(
+                    {
+                        "send_ok": False,
+                        "reject_reason": "consumer_ai_menu_personalization",
+                        "edited_title": None,
+                        "edited_summary": None,
+                        "confidence": "high",
+                    }
+                )
+            )
+        ),
+    )
+
+    result = _client().review_candidate(
+        title="Taco Bell expands AI menu recommendations",
+        url="https://example.com/taco-bell-ai",
+        source="TechCrunch",
+        summary="Taco Bell is using AI for menu personalization in drive-through ordering.",
+        score=19,
+        ranking_signals={"event_flags": {"funding_event": False}},
+        freshness="fresh",
+        relevance="keep",
+    )
+
+    assert result.is_high_confidence_rejection is True
+    assert result.reject_reason == "consumer_ai_menu_personalization"
+
+
+def test_review_candidate_http_error_is_controlled(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _raise(request, timeout):
+        raise HTTPError("https://api.anthropic.com/v1/messages", 429, "Too Many Requests", {}, None)
+
+    monkeypatch.setattr("urllib.request.urlopen", _raise)
+
+    with pytest.raises(ClaudeEditorialReviewUnavailableError, match="Claude request failed"):
+        _review(_client())
