@@ -33,7 +33,7 @@ def _make_item(title: str, preview: str, broad_feed: bool) -> StoredNormalizedIt
 def test_broad_feed_requires_clear_all3_scope() -> None:
     item = _make_item(
         "Google to invest up to $40B in Anthropic in cash and compute",
-        "Generic AI infrastructure financing story unrelated to buildings, factories, or site operations.",
+        "Generic AI financing story about enterprise software, chat assistants, and office productivity.",
         broad_feed=True,
     )
 
@@ -223,6 +223,96 @@ def test_broad_feed_major_industrial_ai_funding_story_survives_scope_gate() -> N
         "Project Prometheus raises funding at $38B valuation for physics AI",
         "The company says the round will expand AI systems for engineering, manufacturing and production workflows across physical industries.",
         broad_feed=True,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "keep"
+    assert reason is None
+
+
+def test_bioorbit_style_space_drug_manufacturing_story_is_dropped() -> None:
+    item = _make_item(
+        "BioOrbit zips £9.8M to make cancer drugs in orbit in the largest-ever in-space manufacturing seed round",
+        "The company says the funding will scale in-space drug manufacturing and therapeutic production for cancer medicines.",
+        broad_feed=True,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "drop"
+    assert reason == "obvious_off_scope"
+
+
+def test_generic_pharma_drug_manufacturing_funding_story_is_dropped() -> None:
+    item = _make_item(
+        "Biotech startup raises $60M to expand pharmaceutical manufacturing for clinical therapies",
+        "The funding will support therapeutic production, clinical manufacturing capacity, and biopharma scale-up.",
+        broad_feed=True,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "drop"
+    assert reason == "obvious_off_scope"
+
+
+def test_valid_industrial_robotics_funding_story_still_keeps_scope() -> None:
+    item = _make_item(
+        "Industrial robotics startup raises $120M to expand factory automation deployments",
+        "The company says the funding will support robotics systems, robot cells, and automation rollouts across factories.",
+        broad_feed=True,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "keep"
+    assert reason is None
+
+
+def test_valid_construction_automation_story_still_keeps_scope() -> None:
+    item = _make_item(
+        "Construction automation startup launches robotic system for jobsite material handling",
+        "The company says the system will improve worksite productivity and support industrialized construction workflows.",
+        broad_feed=False,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "keep"
+    assert reason is None
+
+
+def test_valid_timber_industrialized_construction_story_still_keeps_scope() -> None:
+    item = _make_item(
+        "Mass timber platform expands modular housing production with factory-built system",
+        "The company says the rollout will scale industrialized construction, modular housing delivery, and mass timber production.",
+        broad_feed=False,
     )
 
     status, reason = compute_relevance_status(

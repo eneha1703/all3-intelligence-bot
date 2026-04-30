@@ -86,6 +86,38 @@ MEDICAL_CONTEXT_TERMS = {
     "medtech",
     "skin cancer",
 }
+PHARMA_BIOTECH_PRODUCTION_TERMS = {
+    "cancer drug",
+    "cancer drugs",
+    "drug manufacturing",
+    "pharmaceutical manufacturing",
+    "pharma manufacturing",
+    "pharmaceutical",
+    "pharmaceuticals",
+    "pharma",
+    "biotech",
+    "biotech therapeutics",
+    "therapeutic production",
+    "clinical production",
+    "medical production",
+    "drug production",
+    "pharmaceutical production",
+    "therapeutic manufacturing",
+    "biopharma",
+    "biopharmaceutical",
+    "biopharmaceuticals",
+    "therapeutics",
+    "drug discovery",
+}
+SPACE_BIOTECH_TERMS = {
+    "in-space drug manufacturing",
+    "orbital pharma",
+    "space biotech",
+    "space pharma",
+    "microgravity drug",
+    "microgravity pharmaceutical",
+    "microgravity therapeutics",
+}
 INDUSTRIAL_CONTEXT_TERMS = {
     "construction",
     "industrial",
@@ -355,6 +387,22 @@ def has_any_term(text: str, terms: set[str]) -> bool:
 def is_obvious_off_scope(item: StoredNormalizedItem) -> bool:
     haystack = _normalize_text(f"{item.title} {item.text_preview or ''}")
     if has_any_term(haystack, MILITARY_ROBOTICS_TERMS):
+        return True
+    if (
+        (
+            has_any_term(haystack, PHARMA_BIOTECH_PRODUCTION_TERMS)
+            or (
+                has_any_term(haystack, MEDICAL_CONTEXT_TERMS)
+                and has_any_term(haystack, {"manufacturing", "production", "seed round", "funding", "raises", "raised"})
+            )
+            or (
+                has_any_term(haystack, {"space", "orbit", "orbital", "in-space", "microgravity"})
+                and has_any_term(haystack, PHARMA_BIOTECH_PRODUCTION_TERMS | MEDICAL_CONTEXT_TERMS)
+            )
+            or has_any_term(haystack, SPACE_BIOTECH_TERMS)
+        )
+        and not has_any_term(haystack, {"robot", "robots", "robotics", "factory automation", "construction automation"})
+    ):
         return True
     if (
         has_any_term(haystack, MEDICAL_CONTEXT_TERMS)
