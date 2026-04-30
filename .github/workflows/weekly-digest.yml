@@ -12,6 +12,11 @@ on:
         required: false
         default: false
         type: boolean
+      manual_curated_week18:
+        description: Send curated Week 18 digest instead of generated digest
+        required: false
+        default: "false"
+        type: string
 
 jobs:
   digest:
@@ -54,7 +59,55 @@ jobs:
       - name: Initialize database
         run: python -m all3_radar.app.admin_cli db init
       - name: Build digest
+        if: ${{ github.event.inputs.manual_curated_week18 != 'true' }}
         run: python -m all3_radar.app.digest_cli build --week "${{ github.event.inputs.week_key || 'latest' }}"
+      - name: Write curated Week 18 digest
+        if: ${{ github.event.inputs.manual_curated_week18 == 'true' }}
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          message = """Top 5 News Highlights | 23-30 April 2026 | Week 18
+
+          1. <b>Sereact shows physical AI moving from demos to production metrics</b>
+          Sereact raised USD 110M to scale Cortex 2 and expand into the U.S., but the stronger part is not the funding itself. The company already has 200+ systems live across Europe, more than 1B real production picks and only one remote human intervention per roughly 53,000 picks. That makes this less of a “robot brain” story and more of a production proof story: physical AI is starting to be judged by reliability, data volume and how often humans still need to step in. <a href="https://www.therobotreport.com/sereact-gets-series-b-funding-expand-cortex-2-robot-brain-enter-u-s-market/">Link</a>
+
+          2. <b>Mass timber finds a way into tight urban sites</b>
+          WallÉ-X, a three-storey office building in Nelson, shows how mass timber can work in dense urban conditions where fire rules often make timber difficult. The project uses LVL posts and beams with CLT floors, while keeping concrete sidewalls where fire protection requires them, and saved around 500 tonnes of CO2-equivalent versus a concrete-and-steel baseline. The useful part is the typology: timber is not forced everywhere, but combined with concrete and setbacks so the building still works on a tight city plot. <a href="https://woodcentral.com.au/nelson-three-storey-office-brace-steel-to-timber/">Link</a>
+
+          3. <b>Project Prometheus shows how big the physical AI bet is becoming</b>
+          Project Prometheus raised USD 10B at a USD 38B valuation, bringing total funding to more than USD 16B only five months after launch. The company is building AI systems for physical industries such as aerospace, automotive, advanced manufacturing and drug discovery. The size of the round is the point: investors are starting to treat physical AI not as a robotics niche, but as a major platform opportunity for industries shaped by physics, reliability and production constraints. <a href="https://techfundingnews.com/project-prometheus-bezos-funding-38b-valuation-physics-ai/">Link</a>
+
+          4. <b>SoftBank wants to turn AI infrastructure into a robotics platform</b>
+          SoftBank is reportedly planning a U.S.-listed AI and robotics company called Roze, targeting a valuation of around USD 100B. The company could combine energy, land and infrastructure assets with ABB Robotics to support data center buildout. The plan is still uncertain, but the direction matters: AI infrastructure is becoming a physical delivery problem, where robotics and automation may become part of how capacity gets built and operated. <a href="https://theaiinsider.tech/2026/04/30/report-softbank-plans-to-list-ai-and-robotics-company-roze-in-us/">Link</a>
+
+          5. <b>All3 raises USD 25M for robotic construction</b>
+          All3 raised USD 25M in seed funding led by RTP Global to bring its robotic construction platform to market. The company combines AI-assisted design, off-site robotic fabrication and on-site assembly with its autonomous legged robot, Mantis. All3 says the system can cut project costs by up to 30%, shorten timelines by up to 50% and reduce embodied carbon by up to 25%. The funding will support R&D in London and Belgrade and robot deployment on active construction sites in Germany. <a href="https://techfundingnews.com/all3-25m-seed-rtp-global-construction-robotics-ai/">Link</a>"""
+
+          normalized_lines = [line[10:] if line.startswith("          ") else line for line in message.splitlines()]
+          digest_text = "\n".join(normalized_lines).strip() + "\n"
+          if not digest_text.startswith("Top 5 News Highlights |"):
+              raise SystemExit("Curated digest does not start with the required title prefix.")
+          if len(digest_text.strip()) >= 4096:
+              raise SystemExit("Curated digest is too long for a single Telegram message.")
+          if len(re.findall(r"(?m)^\d+\. <b>", digest_text)) != 5:
+              raise SystemExit("Curated digest must contain exactly 5 numbered items.")
+          if '<a href="' not in digest_text or '>Link</a>' not in digest_text:
+              raise SystemExit("Curated digest is missing embedded HTML Link anchors.")
+          if "example.com" in digest_text:
+              raise SystemExit("Curated digest still contains example.com placeholder links.")
+          visible_text = re.sub(r'<a href="[^"]+">Link</a>', "Link", digest_text)
+          if re.search(r"https?://", visible_text):
+              raise SystemExit("Curated digest contains raw visible URLs outside href attributes.")
+
+          output_path = Path("data/weekly_digest_2026-W18.md")
+          output_path.write_text(digest_text, encoding="utf-8")
+          Path("data/weekly_digest_2026-W18.report.md").write_text(
+              "Curated Week 18 digest path selected for manual Bot 2 send.\n",
+              encoding="utf-8",
+          )
+          print(f"Wrote curated digest to {output_path}")
       - name: Send digest to Bot 2
         shell: python
         run: |
