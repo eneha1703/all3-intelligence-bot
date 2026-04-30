@@ -13,6 +13,7 @@ from all3_radar.summarization.fallback_summary import sanitize_summary_text
 
 VALID_CONFIDENCE_LEVELS = {"low", "medium", "high"}
 WHITESPACE_RE = re.compile(r"\s+")
+FENCED_JSON_RE = re.compile(r"^\s*```(?:json)?\s*(?P<body>.*?)\s*```\s*$", re.IGNORECASE | re.DOTALL)
 MAX_TITLE_LENGTH = 110
 MAX_SUMMARY_LENGTH = 280
 
@@ -65,6 +66,79 @@ def _sanitize_summary(headline: str, value: str | None) -> str | None:
     return _truncate(sanitized, MAX_SUMMARY_LENGTH)
 
 
+def _parse_json_object(candidate: str) -> dict[str, Any] | None:
+    try:
+        parsed = json.loads(candidate)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(parsed, dict):
+        return parsed
+    return None
+
+
+def _extract_balanced_json_object(text: str) -> str | None:
+    start = text.find("{")
+    while start != -1:
+        depth = 0
+        in_string = False
+        escape = False
+        for index in range(start, len(text)):
+            character = text[index]
+            if in_string:
+                if escape:
+                    escape = False
+                elif character == "\\":
+                    escape = True
+                elif character == '"':
+                    in_string = False
+                continue
+
+            if character == '"':
+                in_string = True
+            elif character == "{":
+                depth += 1
+            elif character == "}":
+                depth -= 1
+                if depth == 0:
+                    return text[start : index + 1]
+        start = text.find("{", start + 1)
+    return None
+
+
+def _extract_json_object(text: str) -> dict[str, Any]:
+    parsed = _parse_json_object(text)
+    if parsed is not None:
+        return parsed
+
+    fenced_match = FENCED_JSON_RE.match(text)
+    if fenced_match is not None:
+        parsed = _parse_json_object(fenced_match.group("body").strip())
+        if parsed is not None:
+            return parsed
+
+    candidate = _extract_balanced_json_object(text)
+    if candidate is None:
+        raise ClaudeEditorialReviewUnavailableError(
+            "response_not_json",
+            "Claude editorial review response was not valid JSON.",
+        )
+
+    trailing = text[text.index(candidate) + len(candidate) :]
+    if "{" in trailing:
+        raise ClaudeEditorialReviewUnavailableError(
+            "response_not_json",
+            "Claude editorial review response contained multiple JSON objects.",
+        )
+
+    parsed = _parse_json_object(candidate)
+    if parsed is None:
+        raise ClaudeEditorialReviewUnavailableError(
+            "response_not_json",
+            "Claude editorial review response was not valid JSON.",
+        )
+    return parsed
+
+
 def build_claude_editorial_review_prompt(
     *,
     title: str,
@@ -97,7 +171,9 @@ def build_claude_editorial_review_prompt(
         "Reject consumer AI, restaurant or menu personalization AI, generic automotive capex, gas-car or EV-demand stories, "
         "tariff or trade-policy stories, generic manufacturing without robotics, AI, or automation, "
         "and generic finance, profile, or executive stories. "
-        "Return JSON only with this exact schema: "
+        "Return only a single JSON object with this exact schema. Do not use markdown. "
+        "Do not wrap the response in code fences. Do not include explanation outside JSON. "
+        "Use this exact schema: "
         '{"send_ok": boolean, "reject_reason": string|null, "edited_title": string|null, '
         '"edited_summary": string|null, "confidence": "low|medium|high"}. '
         "Use high confidence only when the candidate is clearly promotable or clearly rejectable. "
@@ -217,13 +293,7 @@ class ClaudeEditorialReviewClient:
             ) from exc
 
         content = self._extract_text(body)
-        try:
-            parsed = json.loads(content)
-        except json.JSONDecodeError as exc:
-            raise ClaudeEditorialReviewUnavailableError(
-                "response_not_json",
-                "Claude editorial review response was not valid JSON.",
-            ) from exc
+        parsed = _extract_json_object(content)
         return self._validate_result(parsed)
 
     @staticmethod

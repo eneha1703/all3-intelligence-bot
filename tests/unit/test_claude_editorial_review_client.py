@@ -85,6 +85,10 @@ def test_build_claude_editorial_review_prompt_includes_scope_rules() -> None:
     assert "generic automotive capex" in prompt
     assert "gas-car or EV-demand stories" in prompt
     assert "generic manufacturing without robotics, AI, or automation" in prompt
+    assert "Return only a single JSON object" in prompt
+    assert "Do not use markdown" in prompt
+    assert "Do not wrap the response in code fences" in prompt
+    assert "Do not include explanation outside JSON" in prompt
 
 
 def test_review_candidate_parses_high_confidence_promotion(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -116,6 +120,55 @@ def test_review_candidate_parses_high_confidence_promotion(monkeypatch: pytest.M
     assert result.edited_summary is not None
     assert result.is_high_confidence_promotion is True
     assert result.is_high_confidence_rejection is False
+
+
+def test_review_candidate_parses_fenced_json_block(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(
+            _payload(
+                """```json
+{"send_ok": true, "reject_reason": null, "edited_title": "SoftBank forms robotics company for automated data-center buildout", "edited_summary": "SoftBank is creating a robotics company focused on automated data-center construction and physical infrastructure execution.", "confidence": "high"}
+```"""
+            )
+        ),
+    )
+
+    result = _review(_client())
+
+    assert result.is_high_confidence_promotion is True
+
+
+def test_review_candidate_parses_plain_fenced_json_block(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(
+            _payload(
+                """```
+{"send_ok": false, "reject_reason": "consumer_ai_not_operational", "edited_title": null, "edited_summary": null, "confidence": "high"}
+```"""
+            )
+        ),
+    )
+
+    result = _review(_client())
+
+    assert result.is_high_confidence_rejection is True
+
+
+def test_review_candidate_parses_json_object_wrapped_in_prose(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(
+            _payload(
+                'Here is the decision:\n{"send_ok": true, "reject_reason": null, "edited_title": "SoftBank forms robotics company for automated data-center buildout", "edited_summary": "SoftBank is creating a robotics company focused on automated data-center construction and physical infrastructure execution.", "confidence": "high"}\nThanks.'
+            )
+        ),
+    )
+
+    result = _review(_client())
+
+    assert result.is_high_confidence_promotion is True
 
 
 def test_review_candidate_parses_high_confidence_rejection(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -180,6 +233,22 @@ def test_review_candidate_invalid_json_raises(monkeypatch: pytest.MonkeyPatch) -
     )
 
     with pytest.raises(ClaudeEditorialReviewUnavailableError, match="not valid JSON") as exc_info:
+        _review(_client())
+    assert exc_info.value.reason == "response_not_json"
+
+
+def test_review_candidate_multiple_json_objects_raise(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(
+            _payload(
+                '{"send_ok": true, "reject_reason": null, "edited_title": "A", "edited_summary": "B", "confidence": "high"} '
+                '{"send_ok": false, "reject_reason": "consumer_ai_not_operational", "edited_title": null, "edited_summary": null, "confidence": "high"}'
+            )
+        ),
+    )
+
+    with pytest.raises(ClaudeEditorialReviewUnavailableError, match="multiple JSON objects") as exc_info:
         _review(_client())
     assert exc_info.value.reason == "response_not_json"
 
