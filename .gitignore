@@ -14,3 +14,4 @@ data/*.db-journal
 data/*.sqlite
 data/*.sqlite3
 data/runtime/
+data/radar-run-audit-*.md
