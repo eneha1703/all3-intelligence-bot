@@ -52,6 +52,54 @@ def _generate(client: ClaudeFinalCardClient) -> object:
     )
 
 
+def _generate_for_story(
+    client: ClaudeFinalCardClient,
+    *,
+    title: str,
+    source: str,
+    url: str,
+    text_preview: str | None,
+    score: int = 70,
+    event_flags: dict | None = None,
+    signals: dict | None = None,
+    existing_summary: str | None = None,
+) -> object:
+    return client.generate_final_card(
+        title=title,
+        source=source,
+        url=url,
+        text_preview=text_preview,
+        score=score,
+        event_flags=event_flags or {},
+        signals=signals or {},
+        existing_summary=existing_summary,
+    )
+
+
+def test_prompt_includes_explicit_scope_and_rejection_instructions() -> None:
+    from all3_radar.summarization.claude_final_card_client import build_claude_final_card_prompt
+
+    prompt = build_claude_final_card_prompt(
+        title="GM to invest $340 million in gas cars as EV demand plummets",
+        source="Tech Funding News",
+        url="https://example.com/gm-gas-cars",
+        text_preview="GM will invest in gas-car production while EV demand slows.",
+        score=72,
+        event_flags={"funding_event": True},
+        signals={"broad_feed": True},
+        existing_summary="GM will invest in gas-car production while EV demand slows.",
+    )
+
+    assert "physical AI" in prompt
+    assert "industrial robotics" in prompt
+    assert "construction automation" in prompt
+    assert "timber adoption" in prompt
+    assert "generic automotive capex" in prompt
+    assert "gas-car production investment" in prompt
+    assert "EV demand or sales slowdown" in prompt
+    assert "tariff refund or trade policy stories" in prompt
+
+
 def test_client_parses_valid_send_ok_json(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "urllib.request.urlopen",
@@ -108,6 +156,124 @@ def test_client_parses_valid_rejection_json(monkeypatch: pytest.MonkeyPatch) -> 
     assert result.reject_reason == "generic"
     assert result.title is None
     assert result.summary is None
+
+
+def test_client_validates_gm_style_gas_car_investment_rejection(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(
+            _payload(
+                json.dumps(
+                    {
+                        "send_ok": False,
+                        "reject_reason": "off_scope",
+                        "title": None,
+                        "summary": None,
+                        "why_it_matters": None,
+                        "duplicate_risk": "low",
+                        "confidence": "high",
+                    }
+                )
+            )
+        ),
+    )
+
+    result = _generate_for_story(
+        _client(),
+        title="GM to invest $340 million in gas cars as EV demand plummets",
+        source="Tech Funding News",
+        url="https://example.com/gm-gas-cars",
+        text_preview=(
+            "GM plans a $340 million gas-car production investment as EV demand cools. "
+            "The move focuses on conventional vehicle output rather than robotics or factory automation systems."
+        ),
+        score=78,
+        event_flags={"funding_event": True},
+        signals={"broad_feed": True},
+        existing_summary="GM plans a gas-car production investment as EV demand cools.",
+    )
+
+    assert result.send_ok is False
+    assert result.reject_reason == "off_scope"
+    assert result.title is None
+    assert result.summary is None
+
+
+def test_client_validates_robotics_or_physical_ai_send(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(
+            _payload(
+                json.dumps(
+                    {
+                        "send_ok": True,
+                        "reject_reason": None,
+                        "title": "Physical AI platform expands humanoid warehouse deployment",
+                        "summary": "The company said its physical AI stack will support a larger humanoid warehouse rollout across multiple sites.",
+                        "why_it_matters": "This ties physical AI directly to a real robotics deployment program.",
+                        "duplicate_risk": "low",
+                        "confidence": "high",
+                    }
+                )
+            )
+        ),
+    )
+
+    result = _generate_for_story(
+        _client(),
+        title="Physical AI platform expands humanoid warehouse deployment",
+        source="The Robot Report",
+        url="https://example.com/physical-ai",
+        text_preview="The company said its physical AI stack will support a larger humanoid warehouse rollout across multiple sites.",
+        score=88,
+        event_flags={"deployment_event": True},
+        signals={"robotics_signal": True},
+        existing_summary="The platform supports a larger humanoid warehouse rollout.",
+    )
+
+    assert result.send_ok is True
+    assert result.title == "Physical AI platform expands humanoid warehouse deployment"
+    assert result.summary is not None
+
+
+def test_client_validates_construction_automation_or_timber_send(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(
+            _payload(
+                json.dumps(
+                    {
+                        "send_ok": True,
+                        "reject_reason": None,
+                        "title": "Builder funds timber automation platform for housing productivity",
+                        "summary": "The funding will scale timber automation tools aimed at faster housing delivery and factory-backed construction workflows.",
+                        "why_it_matters": "The story connects timber scaling with housing productivity and construction automation.",
+                        "duplicate_risk": "low",
+                        "confidence": "high",
+                    }
+                )
+            )
+        ),
+    )
+
+    result = _generate_for_story(
+        _client(),
+        title="Builder funds timber automation platform for housing productivity",
+        source="Construction Dive",
+        url="https://example.com/timber-automation",
+        text_preview=(
+            "The funding will scale timber automation tools aimed at faster housing delivery "
+            "and factory-backed construction workflows."
+        ),
+        score=84,
+        event_flags={"funding_event": True},
+        signals={"construction_signal": True},
+        existing_summary="The funding will scale timber automation tools for housing delivery.",
+    )
+
+    assert result.send_ok is True
+    assert result.title == "Builder funds timber automation platform for housing productivity"
+    assert result.summary is not None
 
 
 def test_invalid_json_raises_controlled_error(monkeypatch: pytest.MonkeyPatch) -> None:
