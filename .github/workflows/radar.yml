@@ -2,6 +2,12 @@ name: News Radar
 
 on:
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Collect and score news without sending Telegram cards"
+        required: false
+        default: false
+        type: boolean
   schedule:
     - cron: "15 */3 * * *"
 
@@ -31,6 +37,7 @@ jobs:
       ALLOW_COLLECTED_AT_FALLBACK: "false"
       GOOGLE_COMPETITOR_CHECK_ENABLED: "true"
       GOOGLE_COMPETITOR_SEND_ENABLED: "false"
+      RADAR_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -84,7 +91,12 @@ jobs:
           fi
 
       - name: Run radar
-        run: python -m all3_radar.app.radar_cli run
+        run: |
+          if [ "${RADAR_DRY_RUN}" = "true" ]; then
+            python -m all3_radar.app.radar_cli run --dry-run
+          else
+            python -m all3_radar.app.radar_cli run
+          fi
 
       - name: Check DB file for persistence steps
         if: always()
