@@ -1,0 +1,136 @@
+name: Claude Final Card Preview
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_run_id:
+        description: "GitHub Actions run id from which to download the radar DB artifact"
+        required: true
+        type: string
+      artifact_name:
+        description: "Optional artifact name; defaults to radar-db-${source_run_id} when empty"
+        required: false
+        default: ""
+        type: string
+      preview_run_id:
+        description: "Optional DB run_id filter passed to the preview script"
+        required: false
+        default: ""
+        type: string
+      title_filters:
+        description: "Multiline title filters; each non-empty line becomes a repeated --title argument"
+        required: true
+        default: "Teradyne\nLaunchpad\nSoftBank\nWaymo"
+        type: string
+      send_telegram:
+        description: "Send preview cards to the preview Telegram bot/chat"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      TELEGRAM_CLAUDE_PREVIEW_BOT_TOKEN: ${{ secrets.TELEGRAM_CLAUDE_PREVIEW_BOT_TOKEN }}
+      TELEGRAM_CLAUDE_PREVIEW_CHAT_IDS: ${{ secrets.TELEGRAM_CLAUDE_PREVIEW_CHAT_IDS }}
+      PREVIEW_ARTIFACT_NAME: ${{ github.event.inputs.artifact_name }}
+      SOURCE_RUN_ID: ${{ github.event.inputs.source_run_id }}
+      PREVIEW_RUN_ID: ${{ github.event.inputs.preview_run_id }}
+      TITLE_FILTERS: ${{ github.event.inputs.title_filters }}
+      SEND_TELEGRAM: ${{ github.event.inputs.send_telegram == 'true' && 'true' || 'false' }}
+      PYTHONPATH: src
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -e .[dev]
+
+      - name: Resolve artifact name
+        id: artifact-name
+        shell: bash
+        run: |
+          if [ -n "${PREVIEW_ARTIFACT_NAME}" ]; then
+            echo "name=${PREVIEW_ARTIFACT_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=radar-db-${SOURCE_RUN_ID}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download radar DB artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ env.SOURCE_RUN_ID }}
+          name: ${{ steps.artifact-name.outputs.name }}
+          path: preview-source
+
+      - name: Locate artifact payload
+        id: artifact-path
+        shell: bash
+        run: |
+          DB_PATH="$(find preview-source -type f -name 'all3_radar.db' | head -n 1 || true)"
+          if [ -n "${DB_PATH}" ]; then
+            echo "path=${DB_PATH}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          ZIP_PATH="$(find preview-source -type f -name '*.zip' | head -n 1 || true)"
+          if [ -n "${ZIP_PATH}" ]; then
+            echo "path=${ZIP_PATH}" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Expected either all3_radar.db or a .zip artifact under preview-source"
+          find preview-source -maxdepth 3 -type f | sort
+          exit 1
+
+      - name: Run Claude final-card preview
+        shell: python
+        run: |
+          import os
+          import subprocess
+          import sys
+
+          command = [
+              sys.executable,
+              "scripts/claude_final_card_preview.py",
+              "--artifact",
+              os.environ["ARTIFACT_PATH"],
+              "--output",
+              "tmp_claude_final_card_preview.md",
+          ]
+
+          preview_run_id = os.environ.get("PREVIEW_RUN_ID", "").strip()
+          if preview_run_id:
+              command.extend(["--run-id", preview_run_id])
+
+          for line in os.environ.get("TITLE_FILTERS", "").splitlines():
+              title = line.strip()
+              if title:
+                  command.extend(["--title", title])
+
+          if os.environ.get("SEND_TELEGRAM") == "true":
+              command.append("--send-telegram")
+
+          subprocess.run(command, check=True)
+        env:
+          ARTIFACT_PATH: ${{ steps.artifact-path.outputs.path }}
+
+      - name: Upload preview markdown
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-final-card-preview-${{ github.run_id }}
+          path: tmp_claude_final_card_preview.md
+          if-no-files-found: ignore
+          retention-days: 7
