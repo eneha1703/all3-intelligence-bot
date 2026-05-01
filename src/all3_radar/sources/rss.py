@@ -18,6 +18,8 @@ DEFAULT_USER_AGENT = "new_all3_radar_bot/0.1 (+https://github.com/togetherwithyo
 HTML_TAG_RE = re.compile(r"<[^>]+>")
 WHITESPACE_RE = re.compile(r"\s+")
 BARE_AMPERSAND_RE = re.compile(r"&(?!#?[A-Za-z0-9]+;)")
+INVALID_XML_CHAR_RE = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F]")
+ITEM_BLOCK_RE = re.compile(r"<(?:item|entry)\b.*?>.*?</(?:item|entry)>", re.IGNORECASE | re.DOTALL)
 
 
 def fetch_text(url: str, timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS) -> str:
@@ -62,39 +64,13 @@ def _clean_text(value: str | None) -> str | None:
     return normalized or None
 
 
-def parse_published_timestamp(value: str | None) -> datetime | None:
-    if not value:
-        return None
-    raw_value = value.strip()
-    if not raw_value:
-        return None
-
-    for candidate in (raw_value, raw_value.replace("Z", "+00:00")):
-        try:
-            parsed = datetime.fromisoformat(candidate)
-            if parsed.tzinfo is None:
-                return parsed.replace(tzinfo=timezone.utc)
-            return parsed.astimezone(timezone.utc)
-        except ValueError:
-            continue
-
-    try:
-        parsed = parsedate_to_datetime(raw_value)
-    except (TypeError, ValueError, IndexError):
-        return None
-
-    if parsed.tzinfo is None:
-        return parsed.replace(tzinfo=timezone.utc)
-    return parsed.astimezone(timezone.utc)
+def _repair_xml_text(value: str) -> str:
+    repaired = INVALID_XML_CHAR_RE.sub("", value)
+    repaired = BARE_AMPERSAND_RE.sub("&amp;", repaired)
+    return repaired
 
 
-def parse_rss_items(feed_text: str, source: SourceDefinition, collected_at: datetime) -> list[CollectedRawItem]:
-    try:
-        root = ET.fromstring(feed_text)
-    except ET.ParseError:
-        repaired_feed_text = BARE_AMPERSAND_RE.sub("&amp;", feed_text)
-        root = ET.fromstring(repaired_feed_text)
-    entries = [element for element in root.iter() if _local_name(element.tag) in {"item", "entry"}]
+def _collect_entry_items(entries: list[ET.Element], source: SourceDefinition, collected_at: datetime) -> list[CollectedRawItem]:
     items: list[CollectedRawItem] = []
 
     for entry in entries:
@@ -132,6 +108,58 @@ def parse_rss_items(feed_text: str, source: SourceDefinition, collected_at: date
             )
         )
     return items
+
+
+def _parse_rss_items_lenient(feed_text: str, source: SourceDefinition, collected_at: datetime) -> list[CollectedRawItem]:
+    entries: list[ET.Element] = []
+    for match in ITEM_BLOCK_RE.finditer(feed_text):
+        block = _repair_xml_text(match.group(0))
+        try:
+            wrapper = ET.fromstring(f"<root>{block}</root>")
+        except ET.ParseError:
+            continue
+        if len(wrapper):
+            entries.append(wrapper[0])
+    return _collect_entry_items(entries, source, collected_at)
+
+
+def parse_published_timestamp(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    raw_value = value.strip()
+    if not raw_value:
+        return None
+
+    for candidate in (raw_value, raw_value.replace("Z", "+00:00")):
+        try:
+            parsed = datetime.fromisoformat(candidate)
+            if parsed.tzinfo is None:
+                return parsed.replace(tzinfo=timezone.utc)
+            return parsed.astimezone(timezone.utc)
+        except ValueError:
+            continue
+
+    try:
+        parsed = parsedate_to_datetime(raw_value)
+    except (TypeError, ValueError, IndexError):
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def parse_rss_items(feed_text: str, source: SourceDefinition, collected_at: datetime) -> list[CollectedRawItem]:
+    try:
+        root = ET.fromstring(feed_text)
+    except ET.ParseError:
+        repaired_feed_text = _repair_xml_text(feed_text)
+        try:
+            root = ET.fromstring(repaired_feed_text)
+        except ET.ParseError:
+            return _parse_rss_items_lenient(feed_text, source, collected_at)
+    entries = [element for element in root.iter() if _local_name(element.tag) in {"item", "entry"}]
+    return _collect_entry_items(entries, source, collected_at)
 
 
 class RssSourceAdapter:

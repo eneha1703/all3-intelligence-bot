@@ -41,3 +41,31 @@ def test_parse_rss_items_recovers_from_bare_ampersands() -> None:
     assert len(items) == 1
     assert items[0].title == "Timber & modular housing project moves ahead"
     assert items[0].snippet == "New modular project pairs CLT & off-site construction."
+
+
+def test_parse_rss_items_leniently_skips_invalid_token_and_keeps_valid_item() -> None:
+    feed_text = """<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <item>
+      <title>Broken control \x0b character item</title>
+      <link>https://example.com/broken</link>
+      <description>Broken item with invalid xml token.</description>
+      <pubDate>Fri, 02 May 2026 10:00:00 GMT</pubDate>
+      <guid>broken-1</guid>
+    </item>
+    <item>
+      <title>Mass timber housing project secures planning approval</title>
+      <link>https://example.com/valid</link>
+      <description>Planning approval clears the way for a timber-led housing project.</description>
+      <pubDate>Fri, 02 May 2026 11:00:00 GMT</pubDate>
+      <guid>valid-1</guid>
+    </item>
+  </channel>
+</rss>
+"""
+
+    items = parse_rss_items(feed_text=feed_text, source=_rss_source(), collected_at=datetime(2026, 5, 2, tzinfo=timezone.utc))
+
+    assert len(items) == 2
+    assert items[-1].title == "Mass timber housing project secures planning approval"
