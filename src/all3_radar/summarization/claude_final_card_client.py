@@ -15,6 +15,7 @@ from all3_radar.summarization.fallback_summary import sanitize_summary_text
 VALID_RISK_LEVELS = {"low", "medium", "high"}
 VALID_CONFIDENCE_LEVELS = {"low", "medium", "high"}
 WHITESPACE_RE = re.compile(r"\s+")
+FENCED_JSON_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL | re.IGNORECASE)
 MAX_TITLE_LENGTH = 110
 MAX_SUMMARY_LENGTH = 280
 MAX_WHY_IT_MATTERS_LENGTH = 140
@@ -64,6 +65,58 @@ def _sanitize_why_it_matters(value: str | None) -> str | None:
     return _truncate(normalized, MAX_WHY_IT_MATTERS_LENGTH)
 
 
+def _extract_balanced_json_object(text: str) -> str | None:
+    start = text.find("{")
+    if start < 0:
+        return None
+
+    depth = 0
+    in_string = False
+    escape = False
+    for index in range(start, len(text)):
+        char = text[index]
+        if in_string:
+            if escape:
+                escape = False
+            elif char == "\\":
+                escape = True
+            elif char == '"':
+                in_string = False
+            continue
+        if char == '"':
+            in_string = True
+            continue
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : index + 1]
+    return None
+
+
+def _extract_json_object(content: str) -> str:
+    stripped = content.strip()
+    if not stripped:
+        raise ClaudeFinalCardUnavailableError("Claude final-card response was not valid JSON.")
+
+    fenced_match = FENCED_JSON_RE.search(stripped)
+    if fenced_match:
+        return fenced_match.group(1).strip()
+
+    if stripped.startswith("{") and stripped.endswith("}"):
+        return stripped
+
+    balanced = _extract_balanced_json_object(stripped)
+    if balanced is None:
+        raise ClaudeFinalCardUnavailableError("Claude final-card response was not valid JSON.")
+
+    trailing = stripped[stripped.find(balanced) + len(balanced) :].strip()
+    if "{" in trailing:
+        raise ClaudeFinalCardUnavailableError("Claude final-card response was not valid JSON.")
+    return balanced
+
+
 def build_claude_final_card_prompt(
     *,
     title: str,
@@ -94,6 +147,8 @@ def build_claude_final_card_prompt(
         "timber adoption, scaling, economics, or policy, or strategically relevant robotics, automation, or platform funding or deployment. "
         "Reject generic automotive capex, gas-car production investment, EV demand or sales slowdown, tariff refund or trade policy stories, "
         "ordinary vehicle production investment, generic manufacturing investment without a robotics, AI, or automation signal, and generic executive, profile, or finance stories. "
+        "Return only a single JSON object. Do not use markdown. Do not wrap the response in code fences. "
+        "Do not include explanation outside JSON. "
         "Return JSON only with this exact schema: "
         '{"send_ok": boolean, "reject_reason": string|null, "title": string|null, "summary": string|null, '
         '"why_it_matters": string|null, "duplicate_risk": "low|medium|high"|null, "confidence": "low|medium|high"|null}. '
@@ -168,7 +223,7 @@ class ClaudeFinalCardClient:
 
         content = self._extract_text(body)
         try:
-            parsed = json.loads(content)
+            parsed = json.loads(_extract_json_object(content))
         except json.JSONDecodeError as exc:
             raise ClaudeFinalCardUnavailableError("Claude final-card response was not valid JSON.") from exc
         return self._validate_result(parsed)

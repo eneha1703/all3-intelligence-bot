@@ -98,6 +98,10 @@ def test_prompt_includes_explicit_scope_and_rejection_instructions() -> None:
     assert "gas-car production investment" in prompt
     assert "EV demand or sales slowdown" in prompt
     assert "tariff refund or trade policy stories" in prompt
+    assert "Return only a single JSON object." in prompt
+    assert "Do not use markdown." in prompt
+    assert "Do not wrap the response in code fences." in prompt
+    assert "Do not include explanation outside JSON." in prompt
 
 
 def test_client_parses_valid_send_ok_json(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -128,6 +132,90 @@ def test_client_parses_valid_send_ok_json(monkeypatch: pytest.MonkeyPatch) -> No
     assert result.duplicate_risk == "low"
     assert result.confidence == "high"
     assert result.used_claude is True
+
+
+def test_client_parses_fenced_json_block(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(
+            _payload(
+                "```json\n"
+                + json.dumps(
+                    {
+                        "send_ok": True,
+                        "reject_reason": None,
+                        "title": "Acme launches warehouse robot pilot in Germany",
+                        "summary": "Acme launched a warehouse robot pilot across three German facilities. The company said expansion is planned next quarter.",
+                        "why_it_matters": "The rollout shows a real multi-site warehouse deployment, not just a demo.",
+                        "duplicate_risk": "low",
+                        "confidence": "high",
+                    }
+                )
+                + "\n```"
+            )
+        ),
+    )
+
+    result = _generate(_client())
+
+    assert result.send_ok is True
+    assert result.title == "Acme launches warehouse robot pilot in Germany"
+
+
+def test_client_parses_fenced_plain_code_block(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(
+            _payload(
+                "```\n"
+                + json.dumps(
+                    {
+                        "send_ok": False,
+                        "reject_reason": "generic",
+                        "title": None,
+                        "summary": None,
+                        "why_it_matters": None,
+                        "duplicate_risk": "medium",
+                        "confidence": "high",
+                    }
+                )
+                + "\n```"
+            )
+        ),
+    )
+
+    result = _generate(_client())
+
+    assert result.send_ok is False
+    assert result.reject_reason == "generic"
+
+
+def test_client_parses_prose_around_exactly_one_json_object(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(
+            _payload(
+                "Here is the result.\n"
+                + json.dumps(
+                    {
+                        "send_ok": True,
+                        "reject_reason": None,
+                        "title": "Acme launches warehouse robot pilot in Germany",
+                        "summary": "Acme launched a warehouse robot pilot across three German facilities. The company said expansion is planned next quarter.",
+                        "why_it_matters": "The rollout shows a real multi-site warehouse deployment, not just a demo.",
+                        "duplicate_risk": "low",
+                        "confidence": "high",
+                    }
+                )
+                + "\nThanks."
+            )
+        ),
+    )
+
+    result = _generate(_client())
+
+    assert result.send_ok is True
+    assert result.title == "Acme launches warehouse robot pilot in Germany"
 
 
 def test_client_parses_valid_rejection_json(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -286,6 +374,38 @@ def test_invalid_json_raises_controlled_error(monkeypatch: pytest.MonkeyPatch) -
         _generate(_client())
 
 
+def test_multiple_json_objects_are_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    first = json.dumps(
+        {
+            "send_ok": True,
+            "reject_reason": None,
+            "title": "Acme launches warehouse robot pilot in Germany",
+            "summary": "Acme launched a warehouse robot pilot across three German facilities. The company said expansion is planned next quarter.",
+            "why_it_matters": "The rollout shows a real multi-site warehouse deployment, not just a demo.",
+            "duplicate_risk": "low",
+            "confidence": "high",
+        }
+    )
+    second = json.dumps(
+        {
+            "send_ok": False,
+            "reject_reason": "duplicate",
+            "title": None,
+            "summary": None,
+            "why_it_matters": None,
+            "duplicate_risk": "high",
+            "confidence": "high",
+        }
+    )
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(_payload(f"{first}\n{second}")),
+    )
+
+    with pytest.raises(ClaudeFinalCardUnavailableError, match="not valid JSON"):
+        _generate(_client())
+
+
 def test_missing_send_ok_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "urllib.request.urlopen",
@@ -319,6 +439,30 @@ def test_send_ok_requires_usable_title_and_summary(monkeypatch: pytest.MonkeyPat
     )
 
     with pytest.raises(ClaudeFinalCardUnavailableError, match="usable title"):
+        _generate(_client())
+
+
+def test_send_ok_false_requires_reject_reason(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(
+            _payload(
+                json.dumps(
+                    {
+                        "send_ok": False,
+                        "reject_reason": None,
+                        "title": None,
+                        "summary": None,
+                        "why_it_matters": None,
+                        "duplicate_risk": "low",
+                        "confidence": "high",
+                    }
+                )
+            )
+        ),
+    )
+
+    with pytest.raises(ClaudeFinalCardUnavailableError, match="reject_reason"):
         _generate(_client())
 
 
