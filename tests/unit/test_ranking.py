@@ -81,6 +81,22 @@ def test_modular_quantified_construction_story_reaches_send_threshold() -> None:
     assert decision.score >= 28
 
 
+def test_humanoid_factory_opening_sets_factory_signal_and_stays_in_scope() -> None:
+    item = _make_item(
+        "1X Opens NEO Factory in Hayward, CA",
+        "Spanning 58,000 square feet the NEO Factory features fully vertically integrated hardware manufacturing and production lines.",
+        broad_feed=False,
+    )
+    item = StoredNormalizedItem(**{**item.__dict__, "metadata": {"tags": ["robotics", "humanoid", "industrial"], "broad_feed": False}})
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["factory_opening_or_expansion"] is True
+    assert decision.relevance_status == "keep"
+    assert decision.score >= 58
+
+
 def test_destatis_statistics_story_now_survives() -> None:
     item = _make_item(
         "Auftragseingang im Bauhauptgewerbe im Februar 2026: +7,3 % zum Vormonat",

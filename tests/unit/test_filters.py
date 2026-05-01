@@ -326,6 +326,44 @@ def test_valid_timber_industrialized_construction_story_still_keeps_scope() -> N
     assert reason is None
 
 
+def test_humanoid_robotics_factory_opening_story_keeps_scope() -> None:
+    item = _make_item(
+        "1X Opens NEO Factory in Hayward, CA",
+        "Spanning 58,000 square feet the NEO Factory features fully vertically integrated hardware manufacturing and production lines.",
+        broad_feed=False,
+    )
+    item = StoredNormalizedItem(**{**item.__dict__, "metadata": {"tags": ["robotics", "humanoid", "industrial"], "broad_feed": False}})
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "keep"
+    assert reason is None
+
+
+def test_timber_terminal_logistics_story_is_dropped_as_obvious_off_scope() -> None:
+    item = _make_item(
+        "Portland Marine Terminal Emerges as One-Stop-Shop for Mass Timber",
+        "Work has started on redevelopment of a marine terminal as a one-stop-shop logistics hub for mass timber supply chain operations.",
+        broad_feed=False,
+    )
+    item = StoredNormalizedItem(**{**item.__dict__, "source_id": "wood_central_api"})
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "drop"
+    assert reason == "obvious_off_scope"
+
+
 def test_teradyne_robotics_revenue_story_keeps_scope() -> None:
     item = _make_item(
         "Teradyne Robotics revenue rises at the start of 2026",

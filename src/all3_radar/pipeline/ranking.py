@@ -40,6 +40,20 @@ FACTORY_TERMS = (
     "plant expansion",
     "capacity expansion",
 )
+FACTORY_OPENING_VERBS = ("opens", "opened", "opening", "launches", "launched", "announces", "announced", "expands", "expanded")
+FACTORY_CONTEXT_TERMS = (
+    "factory",
+    "factories",
+    "production line",
+    "production lines",
+    "manufacturing facility",
+    "manufacturing facilities",
+    "manufacturing plant",
+    "manufacturing plants",
+    "hardware manufacturing",
+    "production capacity",
+    "capacity to build",
+)
 POLICY_TERMS = (
     "permitting",
     "permit",
@@ -304,13 +318,16 @@ def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
             or (partnership_event and quantified_scale and _contains_any(haystack, ("strategic",)))
         )
     )
+    factory_opening_or_expansion = _contains_any(haystack, FACTORY_TERMS) or (
+        _contains_any(haystack, FACTORY_OPENING_VERBS) and _contains_any(haystack, FACTORY_CONTEXT_TERMS)
+    )
     return {
         "funding_event": funding_event,
         "partnership_event": partnership_event,
         "product_launch_event": product_launch_event,
         "acquisition_event": acquisition_event,
         "deployment_event": _contains_any(haystack, DEPLOYMENT_TERMS),
-        "factory_opening_or_expansion": _contains_any(haystack, FACTORY_TERMS),
+        "factory_opening_or_expansion": factory_opening_or_expansion,
         "permitting_or_code_signal": _contains_any(haystack, POLICY_TERMS),
         "quantified_scale_signal": quantified_scale,
         "timber_strategic_signal": timber_strategic,

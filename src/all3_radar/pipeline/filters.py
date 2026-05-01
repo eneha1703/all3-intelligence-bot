@@ -163,6 +163,20 @@ INDUSTRIAL_CONTEXT_TERMS = {
     "permitting",
     "code",
 }
+ROBOTICS_FACTORY_SIGNAL_TERMS = {
+    "factory",
+    "factories",
+    "manufacturing",
+    "production line",
+    "production lines",
+    "manufacturing line",
+    "manufacturing lines",
+    "manufacturing facility",
+    "manufacturing facilities",
+    "hardware manufacturing",
+    "vertically integrated",
+    "capacity to build",
+}
 INDUSTRIAL_AUTONOMY_EXCEPTION_TERMS = INDUSTRIAL_CONTEXT_TERMS | {
     "warehouse",
     "warehousing",
@@ -453,6 +467,42 @@ WOOD_CENTRAL_TIMBER_COMMERCIAL_BARRIER_TERMS = {
     "higher than",
     "lower than",
 }
+TIMBER_LOGISTICS_OFF_SCOPE_TERMS = {
+    "marine terminal",
+    "port",
+    "ports",
+    "terminal",
+    "timber terminal",
+    "one-stop-shop",
+    "one-stop shop",
+    "logistics",
+    "distribution",
+    "shipping",
+    "export hub",
+    "import hub",
+    "supply chain",
+}
+TIMBER_CONSTRUCTION_KEEP_TERMS = {
+    "construction",
+    "building",
+    "buildings",
+    "project",
+    "projects",
+    "development",
+    "developments",
+    "housing",
+    "homes",
+    "apartment",
+    "apartments",
+    "tower",
+    "campus",
+    "jobsite",
+    "worksite",
+    "site",
+    "new homes",
+    "modular housing",
+    "factory-built housing",
+}
 WHITESPACE_RE = re.compile(r"\s+")
 
 
@@ -513,6 +563,12 @@ def is_obvious_off_scope(item: StoredNormalizedItem) -> bool:
         INDUSTRIAL_CONTEXT_TERMS | BUILT_ENVIRONMENT_TERMS,
     ):
         return True
+    if (
+        has_any_term(haystack, {"timber", "mass timber", "clt", "glulam"})
+        and has_any_term(haystack, TIMBER_LOGISTICS_OFF_SCOPE_TERMS)
+        and not has_any_term(haystack, TIMBER_CONSTRUCTION_KEEP_TERMS)
+    ):
+        return True
     return False
 
 
@@ -558,6 +614,7 @@ def is_wood_central_timber_economics_signal(item: StoredNormalizedItem) -> bool:
 
 def has_clear_all3_scope(item: StoredNormalizedItem, competitor_count: int, event_flags: dict[str, bool]) -> bool:
     haystack = _normalize_text(f"{item.title} {item.text_preview or ''}")
+    source_tags = _source_tags(item)
     if competitor_count > 0:
         return True
     if event_flags.get("strategic_ai_major_deal_signal"):
@@ -581,6 +638,12 @@ def has_clear_all3_scope(item: StoredNormalizedItem, competitor_count: int, even
     if has_any_term(haystack, ROBOTICS_TERMS) and has_any_term(haystack, STRATEGIC_WORK_ENV_TERMS):
         return True
     if has_any_term(haystack, ROBOTICS_TERMS) and has_any_term(haystack, INDUSTRIAL_ROBOTICS_CONTEXT_TERMS):
+        return True
+    if event_flags.get("factory_opening_or_expansion") and (
+        has_any_term(haystack, ROBOTICS_TERMS)
+        or bool(source_tags & {"robotics", "robot", "humanoid", "industrial"})
+        or has_any_term(haystack, ROBOTICS_FACTORY_SIGNAL_TERMS)
+    ):
         return True
     if has_any_term(haystack, AUTOMATION_TERMS) and has_any_term(haystack, {"industrial", "manufacturing", "factory"}):
         return True
