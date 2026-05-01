@@ -130,6 +130,25 @@ def _mark_claude_editorial_not_reviewed(context: CurrentRunContext, reason: str)
     )
 
 
+def _record_claude_editorial_result_signals(
+    context: CurrentRunContext,
+    *,
+    send_ok: bool,
+    edited_title: str | None,
+    edited_summary: str | None,
+    reject_reason: str | None,
+) -> None:
+    updates: dict[str, object] = {
+        "claude_editorial_send_ok": send_ok,
+        "claude_editorial_has_edited_title": edited_title is not None,
+        "claude_editorial_has_edited_summary": edited_summary is not None,
+        "claude_editorial_has_reject_reason": reject_reason is not None,
+    }
+    if reject_reason is not None:
+        updates["claude_editorial_reject_reason"] = reject_reason
+    _with_context_signals(context, **updates)
+
+
 def _resolve_card_writer_diagnostics(context: CurrentRunContext) -> dict[str, object]:
     if context.decision is None:
         return {}
@@ -904,6 +923,14 @@ class RadarService:
                             type(exc).__name__,
                         )
                         continue
+
+                    _record_claude_editorial_result_signals(
+                        context,
+                        send_ok=claude_result.send_ok,
+                        edited_title=claude_result.edited_title,
+                        edited_summary=claude_result.edited_summary,
+                        reject_reason=claude_result.reject_reason,
+                    )
 
                     if claude_result.is_high_confidence_rejection:
                         increment_stage_counter("claude_editorial_rejected")

@@ -2154,6 +2154,10 @@ def test_claude_editorial_high_confidence_promotion_sends_below_threshold_story(
     assert signals["claude_editorial_outcome"] == "promoted"
     assert signals["claude_editorial_confidence"] == "high"
     assert signals["claude_editorial_reason"] is None
+    assert signals["claude_editorial_send_ok"] is True
+    assert signals["claude_editorial_has_edited_title"] is True
+    assert signals["claude_editorial_has_edited_summary"] is True
+    assert signals["claude_editorial_has_reject_reason"] is False
     assert signals["claude_editorial_not_reviewed_reason"] is None
     assert signals["card_writer"] == "claude_editorial_promotion"
     assert signals["final_card_title_source"] == "claude_editorial_promotion"
@@ -2293,6 +2297,11 @@ def test_claude_editorial_high_confidence_rejection_blocks_subtle_false_positive
     assert signals["claude_editorial_outcome"] == "rejected"
     assert signals["claude_editorial_confidence"] == "high"
     assert signals["claude_editorial_reason"] == "consumer_ai_menu_personalization"
+    assert signals["claude_editorial_send_ok"] is False
+    assert signals["claude_editorial_has_edited_title"] is False
+    assert signals["claude_editorial_has_edited_summary"] is False
+    assert signals["claude_editorial_has_reject_reason"] is True
+    assert signals["claude_editorial_reject_reason"] == "consumer_ai_menu_personalization"
     assert signals["claude_editorial_not_reviewed_reason"] is None
 
 
@@ -2547,6 +2556,10 @@ def test_claude_editorial_cap_is_respected(
     assert kewazo_signals["claude_editorial_outcome"] == "fallback_low_or_medium_confidence"
     assert kewazo_signals["claude_editorial_confidence"] == "medium"
     assert kewazo_signals["claude_editorial_reason"] == "low_or_medium_confidence"
+    assert kewazo_signals["claude_editorial_send_ok"] is True
+    assert kewazo_signals["claude_editorial_has_edited_title"] is True
+    assert kewazo_signals["claude_editorial_has_edited_summary"] is True
+    assert kewazo_signals["claude_editorial_has_reject_reason"] is False
     assert kewazo_signals["claude_editorial_not_reviewed_reason"] is None
     hexagon_status, hexagon_skip_reason, hexagon_signals, _ = _load_radar_decision_for_title(
         db_path, "Hexagon and Schaeffler to install 1,000 Aeon humanoid robots across global factory network"
@@ -2556,6 +2569,116 @@ def test_claude_editorial_cap_is_respected(
     assert hexagon_signals["claude_editorial_reviewed"] is False
     assert hexagon_signals["claude_editorial_outcome"] == "not_reviewed"
     assert hexagon_signals["claude_editorial_not_reviewed_reason"] == "over_max_candidates_cap"
+
+
+def test_claude_editorial_medium_rejection_records_send_ok_and_reject_reason(
+    monkeypatch, tmp_path, caplog
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "radar_claude_editorial_medium_reject.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("CLAUDE_EDITORIAL_ENABLED", "true")
+
+    now = datetime.now(timezone.utc)
+    feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Industrial robotics startup raises new funding for deployment</title>
+    <link>https://example.com/robotics-medium-reject</link>
+    <description>The company raised new funding for robotics deployment across industrial sites.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=1))}</pubDate>
+    <guid>medium-reject-1</guid>
+  </item>
+</channel></rss>"""
+
+    registry = SourceRegistry(
+        (
+            SourceDefinition(
+                id="claude_editorial_medium_reject_feed",
+                name="Claude Editorial Medium Reject Feed",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://example.com/claude-editorial-medium-reject.xml",
+                priority=100,
+                tags=("robotics", "industrial"),
+            ),
+        )
+    )
+
+    class FakeGeminiClient:
+        is_available = True
+
+        def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
+            return (
+                "The funding supports industrial robotics deployment across production sites.",
+                None,
+            )
+
+    class FakeClaudeEditorialClient:
+        is_available = True
+
+        def review_candidate(self, **kwargs):
+            return ClaudeEditorialReviewResult(
+                send_ok=False,
+                reject_reason="interesting_but_not_strong_enough",
+                edited_title=None,
+                edited_summary=None,
+                confidence="medium",
+                used_claude=True,
+            )
+
+    class FakeTelegramSender:
+        def __init__(self) -> None:
+            self.sent_cards = []
+
+        def send_card(self, card):
+            self.sent_cards.append(card)
+            return [
+                TelegramDelivery(
+                    chat_id="123",
+                    status="sent",
+                    telegram_message_id="msg-1",
+                    error_text=None,
+                    payload_text=card.text,
+                )
+            ]
+
+    def fake_fetch_text(url: str) -> str:
+        assert url == "https://example.com/claude-editorial-medium-reject.xml"
+        return feed
+
+    fake_sender = FakeTelegramSender()
+    caplog.set_level("INFO")
+    service = RadarService(
+        repo_root=repo_root,
+        registry=registry,
+        fetch_text_fn=fake_fetch_text,
+        gemini_client=FakeGeminiClient(),
+        claude_editorial_review_client=FakeClaudeEditorialClient(),
+        telegram_sender=fake_sender,
+    )
+
+    result = service.run(dry_run=False)
+
+    assert result.sent_items == 1
+    assert len(fake_sender.sent_cards) == 1
+    send_status, skip_reason, signals, _ = _load_radar_decision_for_title(
+        db_path, "Industrial robotics startup raises new funding for deployment"
+    )
+    assert send_status == "sent"
+    assert skip_reason is None
+    assert signals["claude_editorial_reviewed"] is True
+    assert signals["claude_editorial_outcome"] == "fallback_low_or_medium_confidence"
+    assert signals["claude_editorial_confidence"] == "medium"
+    assert signals["claude_editorial_send_ok"] is False
+    assert signals["claude_editorial_has_edited_title"] is False
+    assert signals["claude_editorial_has_edited_summary"] is False
+    assert signals["claude_editorial_has_reject_reason"] is True
+    assert signals["claude_editorial_reject_reason"] == "interesting_but_not_strong_enough"
 
 
 def test_claude_editorial_review_pool_prioritizes_strategic_borderline_candidates(
