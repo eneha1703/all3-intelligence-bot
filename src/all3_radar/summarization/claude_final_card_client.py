@@ -10,15 +10,69 @@ from dataclasses import dataclass
 from typing import Any
 
 from all3_radar.domain.models import ClaudeFinalCardResult
-from all3_radar.summarization.fallback_summary import sanitize_summary_text
 
 VALID_RISK_LEVELS = {"low", "medium", "high"}
 VALID_CONFIDENCE_LEVELS = {"low", "medium", "high"}
 WHITESPACE_RE = re.compile(r"\s+")
 FENCED_JSON_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL | re.IGNORECASE)
+WORD_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9'./-]*")
+URL_RE = re.compile(r"https?://|www\.", re.IGNORECASE)
 MAX_TITLE_LENGTH = 110
-MAX_SUMMARY_LENGTH = 280
+MAX_SUMMARY_LENGTH = 700
 MAX_WHY_IT_MATTERS_LENGTH = 140
+MIN_RICH_SUMMARY_WORDS = 30
+TITLE_REPEAT_OVERLAP_RATIO = 0.8
+RICH_DETAIL_TERMS = (
+    "launch",
+    "launched",
+    "debut",
+    "debuted",
+    "opened",
+    "headquarters",
+    "product",
+    "platform",
+    "model",
+    "system",
+    "software",
+    "cad",
+    "photo",
+    "video",
+    "customer",
+    "customers",
+    "partner",
+    "partners",
+    "investor",
+    "investors",
+    "facility",
+    "facilities",
+    "factory",
+    "factories",
+    "deployment",
+    "pilot",
+    "production",
+    "manufacturing",
+    "timeline",
+    "quarter",
+    "q1",
+    "q2",
+    "q3",
+    "q4",
+    "u.s.",
+    "el segundo",
+    "data center",
+    "data centres",
+    "data centers",
+)
+FUNDING_BLURB_TERMS = ("raised", "raise", "closed", "secure", "secured", "series", "funding", "round")
+HYPE_TERMS = (
+    "revolutionary",
+    "game-changing",
+    "transformative",
+    "pivotal",
+    "cutting-edge",
+    "poised to disrupt",
+    "significant milestone",
+)
 
 
 class ClaudeFinalCardUnavailableError(RuntimeError):
@@ -52,10 +106,7 @@ def _sanitize_summary(headline: str, value: str | None) -> str | None:
     normalized = _normalize_text(value)
     if not normalized:
         return None
-    sanitized = sanitize_summary_text(headline, normalized)
-    if not sanitized:
-        return None
-    return _truncate(sanitized, MAX_SUMMARY_LENGTH)
+    return _truncate(normalized, MAX_SUMMARY_LENGTH)
 
 
 def _sanitize_why_it_matters(value: str | None) -> str | None:
@@ -63,6 +114,85 @@ def _sanitize_why_it_matters(value: str | None) -> str | None:
     if not normalized:
         return None
     return _truncate(normalized, MAX_WHY_IT_MATTERS_LENGTH)
+
+
+def _count_words(value: str | None) -> int:
+    if not value:
+        return 0
+    return len(WORD_RE.findall(value))
+
+
+def _contains_any_term(haystack: str, terms: tuple[str, ...]) -> bool:
+    return any(term in haystack for term in terms)
+
+
+def _token_set(value: str | None) -> set[str]:
+    if not value:
+        return set()
+    return {token.lower() for token in WORD_RE.findall(value.lower()) if len(token) > 2}
+
+
+def _mostly_repeats_headline(headline: str, summary: str) -> bool:
+    headline_tokens = _token_set(headline)
+    summary_tokens = _token_set(summary)
+    if not headline_tokens or not summary_tokens:
+        return False
+    overlap = len(headline_tokens & summary_tokens) / max(1, len(headline_tokens))
+    return overlap >= TITLE_REPEAT_OVERLAP_RATIO
+
+
+def _source_has_richer_facts(text_preview: str | None, existing_summary: str | None) -> bool:
+    source_text = (text_preview or existing_summary or "").lower()
+    if not source_text:
+        return False
+    detail_score = 0
+    if any(char.isdigit() for char in source_text):
+        detail_score += 1
+    if _contains_any_term(source_text, RICH_DETAIL_TERMS):
+        detail_score += 1
+    if source_text.count(".") >= 2 or len(source_text.split()) >= 25:
+        detail_score += 1
+    return detail_score >= 2
+
+
+def _looks_like_thin_funding_blurb(summary: str) -> bool:
+    lowered = summary.lower()
+    return _contains_any_term(lowered, FUNDING_BLURB_TERMS) and _count_words(summary) < 22
+
+
+def _summary_detail_score(summary: str) -> int:
+    lowered = summary.lower()
+    detail_score = 0
+    if any(char.isdigit() for char in summary):
+        detail_score += 1
+    if _contains_any_term(lowered, RICH_DETAIL_TERMS):
+        detail_score += 1
+    if summary.count(".") >= 2 or len(summary.split()) >= 25:
+        detail_score += 1
+    return detail_score
+
+
+def _validate_summary_richness(
+    *,
+    input_title: str,
+    summary: str,
+    text_preview: str | None,
+    existing_summary: str | None,
+) -> None:
+    if URL_RE.search(summary):
+        raise ClaudeFinalCardUnavailableError("Claude final-card response summary must not contain raw URLs.")
+    if _contains_any_term(summary.lower(), HYPE_TERMS):
+        raise ClaudeFinalCardUnavailableError("Claude final-card response summary used hype language.")
+    if _mostly_repeats_headline(input_title, summary):
+        raise ClaudeFinalCardUnavailableError("Claude final-card response summary mostly repeated the headline.")
+    if _source_has_richer_facts(text_preview, existing_summary):
+        summary_words = _count_words(summary)
+        if _looks_like_thin_funding_blurb(summary):
+            raise ClaudeFinalCardUnavailableError(
+                "Claude final-card response summary reduced a richer story to a funding blurb."
+            )
+        if summary_words < MIN_RICH_SUMMARY_WORDS and _summary_detail_score(summary) < 2:
+            raise ClaudeFinalCardUnavailableError("Claude final-card response summary was too thin for the source detail.")
 
 
 def _extract_balanced_json_object(text: str) -> str | None:
@@ -142,18 +272,28 @@ def build_claude_final_card_prompt(
         "You are reviewing one already-selected Bot 1 News Radar candidate. "
         "Do not select news from scratch. Do not broaden scope. Do not invent facts. "
         "You may only improve wording for a final Telegram card or reject the candidate when it is clearly duplicate, off-scope, generic, or insufficiently specific. "
+        "Write in English. Write a Telegram-ready daily news card, not a weekly digest memo. "
         "Approve only when the story has a concrete All3-relevant operational signal such as physical AI, industrial robotics, "
         "factory automation directly tied to robotics, AI, or autonomous systems, construction automation, housing industrialization or productivity, "
         "timber adoption, scaling, economics, or policy, or strategically relevant robotics, automation, or platform funding or deployment. "
         "Reject generic automotive capex, gas-car production investment, EV demand or sales slowdown, tariff refund or trade policy stories, "
         "ordinary vehicle production investment, generic manufacturing investment without a robotics, AI, or automation signal, and generic executive, profile, or finance stories. "
+        "Do not add a separate why-it-matters paragraph. Do not explain why the story matters to All3, the radar, or the industry. "
+        "Do not use labels like Why it matters, Signal, Context, or Takeaway. "
+        "Prefer one dense factual paragraph. Use two short paragraphs only if the article has several distinct factual points. "
+        "Target about 45 to 90 words for the summary body, or about 35 to 60 words if the source is thin. Avoid one-line blurbs when the source has richer facts. "
+        "Summarize the actual news by extracting the strongest two to four factual takeaways from the article. Prioritize key numbers, named companies, product or platform names, "
+        "launch or deployment details, customers, partners, investors, geography, timelines, manufacturing or production scale, technical capabilities, business terms, and official statistics when present. "
+        "If the article has a funding round plus a product launch, include both. If the title already states the main event, the body should add concrete details rather than repeat the title. "
+        "Do not mostly repeat the headline. Do not reduce a rich article to a funding blurb when product, launch, customer, deployment, technical, location, timeline, or business details are present. "
+        "Do not add broad industry analysis. Do not mention this article. Do not use hype language such as revolutionary, game-changing, transformative, pivotal, cutting-edge, or poised to disrupt. "
         "Return only a single JSON object. Do not use markdown. Do not wrap the response in code fences. "
         "Do not include explanation outside JSON. "
         "Return JSON only with this exact schema: "
         '{"send_ok": boolean, "reject_reason": string|null, "title": string|null, "summary": string|null, '
         '"why_it_matters": string|null, "duplicate_risk": "low|medium|high"|null, "confidence": "low|medium|high"|null}. '
-        "Keep title short and factual. Keep summary short and factual. "
-        "why_it_matters must be one short factual sentence, not hype.\n\n"
+        "Keep title concrete and news-like, usually about 8 to 16 words. Keep summary factual, compact, and detail-rich. "
+        "Set why_it_matters to null unless a brief factual note is truly necessary, and never use it for broad analysis.\n\n"
         f"Candidate JSON:\n{json.dumps(payload, ensure_ascii=True, sort_keys=True)}"
     )
 
@@ -226,7 +366,12 @@ class ClaudeFinalCardClient:
             parsed = json.loads(_extract_json_object(content))
         except json.JSONDecodeError as exc:
             raise ClaudeFinalCardUnavailableError("Claude final-card response was not valid JSON.") from exc
-        return self._validate_result(parsed)
+        return self._validate_result(
+            parsed,
+            input_title=title,
+            text_preview=text_preview,
+            existing_summary=existing_summary,
+        )
 
     @staticmethod
     def _extract_text(body: dict[str, Any]) -> str:
@@ -244,7 +389,13 @@ class ClaudeFinalCardClient:
         return text
 
     @staticmethod
-    def _validate_result(parsed: Any) -> ClaudeFinalCardResult:
+    def _validate_result(
+        parsed: Any,
+        *,
+        input_title: str | None = None,
+        text_preview: str | None = None,
+        existing_summary: str | None = None,
+    ) -> ClaudeFinalCardResult:
         if not isinstance(parsed, dict):
             raise ClaudeFinalCardUnavailableError("Claude final-card response must be a JSON object.")
         if "send_ok" not in parsed or not isinstance(parsed["send_ok"], bool):
@@ -269,6 +420,12 @@ class ClaudeFinalCardClient:
             summary = _sanitize_summary(title, parsed.get("summary"))
             if summary is None:
                 raise ClaudeFinalCardUnavailableError("Claude final-card response was missing a usable summary.")
+            _validate_summary_richness(
+                input_title=input_title or title,
+                summary=summary,
+                text_preview=text_preview,
+                existing_summary=existing_summary,
+            )
         else:
             if reject_reason is None:
                 raise ClaudeFinalCardUnavailableError(
