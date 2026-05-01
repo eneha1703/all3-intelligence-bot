@@ -533,7 +533,15 @@ class DigestService:
                     LOGGER.warning("Claude digest writing unavailable for week=%s reason=%s", normalized_week_key, exc)
 
             output_path.write_text(final_markdown, encoding="utf-8")
-            report_output_path.write_text(build_digest_markdown(normalized_week_key, selected_candidates), encoding="utf-8")
+            report_output_path.write_text(
+                build_digest_markdown(
+                    normalized_week_key,
+                    selected_candidates,
+                    claude_used=claude_used,
+                    fallback_reason=fallback_reason,
+                ),
+                encoding="utf-8",
+            )
             self.repository.finish_weekly_digest_run(
                 digest_run_id=digest_run_id,
                 status=PipelineStatus.COMPLETED,

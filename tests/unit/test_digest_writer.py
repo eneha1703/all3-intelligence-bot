@@ -21,10 +21,15 @@ def test_build_digest_markdown_includes_deterministic_sections() -> None:
         "2026-W18",
         [candidate],
         claude_section="## Claude Synthesis\n- Robotics partnerships clustered around manufacturing execution.\n",
+        claude_used=True,
+        fallback_reason=None,
     )
 
     assert "# Bot 1 Weekly Digest — 2026-W18" in markdown
     assert "## Claude Synthesis" in markdown
+    assert "## Claude Digest Status" in markdown
+    assert "- Claude used: yes" in markdown
+    assert "- Fallback reason: none" in markdown
     assert "## Signals Snapshot" in markdown
     assert "## Top Stories" in markdown
     assert "[Flex and Teradyne expand partnership to scale physical AI](https://example.com/flex-teradyne)" in markdown

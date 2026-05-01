@@ -361,6 +361,9 @@ def test_digest_build_generates_telegram_ready_artifact_with_claude(monkeypatch,
     report_path = tmp_path / "weekly_digest_2026-W18.report.md"
     assert report_path.exists()
     report_text = report_path.read_text(encoding="utf-8")
+    assert "## Claude Digest Status" in report_text
+    assert "- Claude used: yes" in report_text
+    assert "- Fallback reason: none" in report_text
     assert "## Top Stories" in report_text
     assert "Sereact scales physical AI reliability after fresh funding" in report_text
     assert PROMETHEUS_TITLE in report_text
@@ -416,6 +419,10 @@ def test_digest_build_falls_back_to_deterministic_artifact_without_claude(monkey
     assert digest_row[0] == "completed"
     assert digest_row[1].startswith("Top 5 News Highlights | 23-30 April 2026 | Week 18")
     assert candidate_count == 8
+    report_text = (tmp_path / "weekly_digest_2026-W18.report.md").read_text(encoding="utf-8")
+    assert "## Claude Digest Status" in report_text
+    assert "- Claude used: no" in report_text
+    assert "- Fallback reason: timeout" in report_text
 
 
 def test_digest_build_dedupes_duplicate_story_candidates(monkeypatch, tmp_path) -> None:

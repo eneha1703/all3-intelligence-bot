@@ -82,6 +82,9 @@ def build_digest_markdown(
     week_key: str,
     candidates: list[DigestCandidate],
     claude_section: str | None = None,
+    *,
+    claude_used: bool = False,
+    fallback_reason: str | None = None,
 ) -> str:
     generated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
     lines = [
@@ -94,6 +97,15 @@ def build_digest_markdown(
 
     if claude_section:
         lines.extend([claude_section.strip(), ""])
+
+    lines.extend(["## Claude Digest Status", ""])
+    lines.append(f"- Claude used: {'yes' if claude_used else 'no'}")
+    lines.append(f"- Fallback reason: {fallback_reason or 'none'}")
+    if candidates:
+        lines.append("- Final selected titles:")
+        for candidate in candidates:
+            lines.append(f"  - {candidate.title}")
+    lines.append("")
 
     lines.extend(["## Signals Snapshot", ""])
     lines.extend(_build_signal_snapshot(candidates))
