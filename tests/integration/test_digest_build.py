@@ -100,6 +100,39 @@ def _seed_digest_db(db_path: Path, schema_path: Path) -> None:
                 "The update focused on consumer menu recommendations rather than operational automation.",
                 '{"event_flags":{"partnership_event":true}}',
             ),
+            (
+                "raw-7",
+                "item-7",
+                "event-7",
+                "Waymo, Alphabet's robotaxi service, is growing fast. Here's how to ride, costs, and the self-driving cars' crash record.",
+                "https://example.com/waymo-guide",
+                "robot_report_rss",
+                98,
+                "Waymo is Alphabet's robotaxi service, and the story explains where it operates, how to ride it, costs, and the crash record.",
+                '{"event_flags":{"deployment_event":true}}',
+            ),
+            (
+                "raw-8",
+                "item-8",
+                "event-8",
+                "2 chefs share how generative AI helps them manage menu changes and event logistics on their own",
+                "https://example.com/ai-chefs",
+                "robot_report_rss",
+                88,
+                "Two solo cooking-company operators said AI helps them plan events, research ingredients, and develop social strategy.",
+                '{"event_flags":{"partnership_event":true}}',
+            ),
+            (
+                "raw-9",
+                "item-9",
+                "event-9",
+                "Amazon pushes AI use and closely tracks adoption, as some employees push back",
+                "https://example.com/amazon-ai-friction",
+                "robot_report_rss",
+                87,
+                "The company is tracking how often engineers use AI tools while facing internal friction and employee pushback.",
+                '{"event_flags":{"partnership_event":true}}',
+            ),
         ]
         for raw_id, item_id, event_id, title, url, source_id, score, summary_text, signals_json in raw_rows:
             connection.execute(
@@ -142,7 +175,7 @@ def _seed_digest_db(db_path: Path, schema_path: Path) -> None:
                     event_id,
                     "fresh",
                     "keep",
-                    "sent" if item_id in {"item-1", "item-2"} else "stored_only",
+                    "sent" if item_id in {"item-1", "item-2", "item-7"} else "stored_only",
                     None,
                     score,
                     signals_json,
@@ -239,6 +272,9 @@ def test_digest_build_generates_telegram_ready_artifact_with_claude(monkeypatch,
         '<a href="https://example.com/destatis-orders">Link</a>', ""
     )
     assert "Taco Bell adds AI menu personalization" not in digest_text
+    assert "Waymo, Alphabet's robotaxi service" not in digest_text
+    assert "2 chefs share how generative AI helps" not in digest_text
+    assert "Amazon pushes AI use and closely tracks adoption" not in digest_text
     assert "Destatis suggests that order intake is recovering" in digest_text
 
     report_path = tmp_path / "weekly_digest_2026-W18.report.md"
@@ -246,6 +282,9 @@ def test_digest_build_generates_telegram_ready_artifact_with_claude(monkeypatch,
     report_text = report_path.read_text(encoding="utf-8")
     assert "## Top Stories" in report_text
     assert "German construction orders recover before capacity does" in report_text
+    assert "Waymo, Alphabet's robotaxi service" not in report_text
+    assert "2 chefs share how generative AI helps" not in report_text
+    assert "Amazon pushes AI use and closely tracks adoption" not in report_text
 
     assert len(fake_client.selection_prompts) == 1
     assert len(fake_client.writer_prompts) == 1
@@ -271,6 +310,9 @@ def test_digest_build_falls_back_to_deterministic_artifact_without_claude(monkey
     assert digest_text.startswith("Top 5 News Highlights | 23-30 April 2026 | Week 18")
     assert '<a href="https://example.com/destatis-orders">Link</a>' in digest_text
     assert "Taco Bell adds AI menu personalization" not in digest_text
+    assert "Waymo, Alphabet's robotaxi service" not in digest_text
+    assert "2 chefs share how generative AI helps" not in digest_text
+    assert "Amazon pushes AI use and closely tracks adoption" not in digest_text
 
     with sqlite3.connect(db_path) as connection:
         digest_row = connection.execute(
@@ -293,8 +335,8 @@ def test_digest_build_dedupes_duplicate_story_candidates(monkeypatch, tmp_path) 
 
     with sqlite3.connect(db_path) as connection:
         duplicate_rows = [
-            ("raw-7", "item-7", "event-7"),
-            ("raw-8", "item-8", "event-8"),
+            ("raw-10", "item-10", "event-10"),
+            ("raw-11", "item-11", "event-11"),
         ]
         for raw_id, item_id, event_id in duplicate_rows:
             connection.execute(

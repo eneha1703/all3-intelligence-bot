@@ -26,6 +26,7 @@ from all3_radar.storage.repositories import RadarRepository
 
 LOGGER = logging.getLogger(__name__)
 WHITESPACE_RE = re.compile(r"\s+")
+NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
 
 
 @dataclass(frozen=True)
@@ -52,6 +53,97 @@ def _settings_snapshot(settings: object) -> dict:
 
 def _normalize_digest_title(value: str) -> str:
     return WHITESPACE_RE.sub(" ", value).strip().lower()
+
+
+def _normalize_digest_text(value: str | None) -> str:
+    if not value:
+        return ""
+    normalized = NON_ALNUM_RE.sub(" ", value.lower())
+    return WHITESPACE_RE.sub(" ", normalized).strip()
+
+
+def _row_signal_score(row: dict[str, object]) -> int:
+    try:
+        signals = json.loads(str(row.get("signals_json") or "{}"))
+    except json.JSONDecodeError:
+        return 0
+    event_flags = signals.get("event_flags", {}) if isinstance(signals, dict) else {}
+    if not isinstance(event_flags, dict):
+        return 0
+    weighted_flags = (
+        "industrial_robotics_signal",
+        "construction_innovation_signal",
+        "timber_strategic_signal",
+        "construction_statistics_signal",
+        "deployment_event",
+        "partnership_event",
+        "funding_event",
+    )
+    return sum(1 for key in weighted_flags if event_flags.get(key))
+
+
+def _is_obvious_weekly_noise(row: dict[str, object]) -> bool:
+    title = _normalize_digest_text(str(row.get("title") or ""))
+    summary = _normalize_digest_text(str(row.get("summary_text") or ""))
+    combined = f"{title} {summary}".strip()
+    if not combined:
+        return False
+
+    if (
+        "waymo" in combined
+        and ("how to ride" in combined or "crash record" in combined or "robotaxi service" in combined)
+    ):
+        return True
+
+    if any(
+        phrase in combined
+        for phrase in (
+            "chefs share",
+            "menu changes",
+            "event logistics",
+            "solo cooking companies",
+            "social strategy",
+        )
+    ):
+        return True
+
+    if any(
+        phrase in combined
+        for phrase in (
+            "tracks ai use",
+            "internal friction",
+            "employees push back",
+            "engineers use ai",
+            "parts of its workforce",
+        )
+    ):
+        return True
+
+    return False
+
+
+def _sort_digest_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    return sorted(
+        rows,
+        key=lambda row: (
+            0 if str(row.get("send_status") or "") == "sent" else 1,
+            -_row_signal_score(row),
+            -int(row.get("score") or 0),
+            str(row.get("canonical_event_id") or ""),
+        ),
+    )
+
+
+def _prepare_digest_rows(rows: list[dict[str, object]], *, limit: int) -> list[dict[str, object]]:
+    non_noise_rows = [row for row in rows if not _is_obvious_weekly_noise(row)]
+    prepared = _sort_digest_rows(non_noise_rows)
+    if len(prepared) >= min(limit, 5):
+        return prepared[:limit]
+
+    seen_ids = {str(row["canonical_event_id"]) for row in prepared}
+    backfill_rows = [row for row in rows if str(row["canonical_event_id"]) not in seen_ids]
+    prepared.extend(_sort_digest_rows(backfill_rows))
+    return prepared[:limit]
 
 
 def _candidate_identity_keys(candidate: DigestCandidate) -> tuple[str, ...]:
@@ -163,6 +255,7 @@ class DigestService:
                 require_canonical_events=self.settings.digest.require_canonical_events,
             )
             rows = _dedupe_candidate_rows(rows)
+            rows = _prepare_digest_rows(rows, limit=self.settings.digest.shortlist_size_before_claude)
             candidates = hydrate_digest_candidates(rows)
             shortlist_payload = json.dumps(
                 [
