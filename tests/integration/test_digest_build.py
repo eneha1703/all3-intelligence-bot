@@ -281,3 +281,120 @@ def test_digest_build_falls_back_to_deterministic_artifact_without_claude(monkey
     assert digest_row[0] == "completed"
     assert digest_row[1].startswith("Top 5 News Highlights | 23-30 April 2026 | Week 18")
     assert candidate_count == 6
+
+
+def test_digest_build_dedupes_duplicate_story_candidates(monkeypatch, tmp_path) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "digest.db"
+    output_path = tmp_path / "weekly_digest_2026-W18.md"
+    schema_path = repo_root / "src" / "all3_radar" / "storage" / "schema.sql"
+    _seed_digest_db(db_path, schema_path)
+    now = datetime(2026, 4, 30, 12, 0, tzinfo=timezone.utc).isoformat()
+
+    with sqlite3.connect(db_path) as connection:
+        duplicate_rows = [
+            ("raw-7", "item-7", "event-7"),
+            ("raw-8", "item-8", "event-8"),
+        ]
+        for raw_id, item_id, event_id in duplicate_rows:
+            connection.execute(
+                """
+                INSERT INTO raw_items (id, run_id, source_id, external_id, url, title, snippet, author, published_ts, collected_ts, raw_payload_json, fetch_status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    raw_id,
+                    "radar-run-1",
+                    "robot_report_rss",
+                    None,
+                    "https://example.com/trade-estate-anthropic",
+                    "A banker wants to trade his $4.8 million California estate for shares in Anthropic. He's already gotten offers.",
+                    None,
+                    None,
+                    now,
+                    now,
+                    "{}",
+                    "collected",
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO normalized_items (id, raw_item_id, source_id, canonical_url, domain, title, dek, text_preview, published_ts, collected_ts, language, layer, is_wrapper, directness_rank, metadata_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    item_id,
+                    raw_id,
+                    "robot_report_rss",
+                    "https://example.com/trade-estate-anthropic",
+                    "example.com",
+                    "A banker wants to trade his $4.8 million California estate for shares in Anthropic. He's already gotten offers.",
+                    None,
+                    "Duplicate estate-for-shares profile story.",
+                    now,
+                    now,
+                    "en",
+                    "direct",
+                    0,
+                    100,
+                    "{}",
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO radar_decisions (normalized_item_id, canonical_event_id, freshness_status, relevance_status, send_status, skip_reason, score, signals_json, summary_text, used_gemini, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    item_id,
+                    event_id,
+                    "fresh",
+                    "keep",
+                    "stored_only",
+                    None,
+                    81,
+                    '{"event_flags":{"funding_event":true}}',
+                    "The banker says he has received multiple offers from employees since posting the deal this week.",
+                    0,
+                    now,
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO canonical_events (id, representative_item_id, event_key, cluster_title, first_published_ts, last_published_ts, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    event_id,
+                    item_id,
+                    event_id,
+                    "A banker wants to trade his $4.8 million California estate for shares in Anthropic. He's already gotten offers.",
+                    now,
+                    now,
+                    now,
+                    now,
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO event_members (canonical_event_id, normalized_item_id, is_representative)
+                VALUES (?, ?, ?)
+                """,
+                (event_id, item_id, 1),
+            )
+        connection.commit()
+
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("CLAUDE_DIGEST_ENABLED", "false")
+
+    service = DigestService(repo_root=repo_root)
+    result = service.build_digest("2026-W18", output_path=output_path)
+
+    assert result.candidate_count == 7
+    digest_text = output_path.read_text(encoding="utf-8")
+    assert digest_text.count("A banker wants to trade his $4.8 million California estate for shares in Anthropic") <= 1
+    assert digest_text.count("1. <b>") == 1
+    assert digest_text.count("<b>") == 5
+
+    report_text = (tmp_path / "weekly_digest_2026-W18.report.md").read_text(encoding="utf-8")
+    assert report_text.count("[A banker wants to trade his $4.8 million California estate for shares in Anthropic. He's already gotten offers.]") <= 1

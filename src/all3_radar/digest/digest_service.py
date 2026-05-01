@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from all3_radar.config.loader import load_settings
 from all3_radar.digest.claude_client import ClaudeDigestClient, ClaudeDigestUnavailableError
 from all3_radar.digest.corpus import (
+    DigestCandidate,
     build_claude_selection_prompt,
     build_claude_writer_prompt,
     build_default_output_path,
@@ -23,6 +25,7 @@ from all3_radar.storage.db import initialize_database
 from all3_radar.storage.repositories import RadarRepository
 
 LOGGER = logging.getLogger(__name__)
+WHITESPACE_RE = re.compile(r"\s+")
 
 
 @dataclass(frozen=True)
@@ -45,6 +48,77 @@ def _settings_snapshot(settings: object) -> dict:
         "***" if snapshot["integrations"]["telegram_alert_bot_token"] else None
     )
     return snapshot
+
+
+def _normalize_digest_title(value: str) -> str:
+    return WHITESPACE_RE.sub(" ", value).strip().lower()
+
+
+def _candidate_identity_keys(candidate: DigestCandidate) -> tuple[str, ...]:
+    keys = [f"event:{candidate.canonical_event_id}"]
+    if candidate.canonical_url:
+        keys.append(f"url:{candidate.canonical_url.strip().lower()}")
+    if candidate.title:
+        keys.append(f"title:{_normalize_digest_title(candidate.title)}")
+    return tuple(keys)
+
+
+def _dedupe_candidates(candidates: list[DigestCandidate]) -> list[DigestCandidate]:
+    deduped: list[DigestCandidate] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        identity_keys = _candidate_identity_keys(candidate)
+        if any(key in seen for key in identity_keys):
+            continue
+        deduped.append(candidate)
+        seen.update(identity_keys)
+    return deduped
+
+
+def _dedupe_candidate_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    deduped: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for row in rows:
+        candidate = DigestCandidate(
+            canonical_event_id=str(row["canonical_event_id"]),
+            normalized_item_id=str(row["normalized_item_id"]),
+            source_id=str(row["source_id"]),
+            title=str(row["title"]),
+            canonical_url=str(row["canonical_url"]),
+            published_ts=None,
+            score=int(row["score"]),
+            summary_text=row.get("summary_text") if isinstance(row, dict) else None,
+            event_flags={},
+        )
+        identity_keys = _candidate_identity_keys(candidate)
+        if any(key in seen for key in identity_keys):
+            continue
+        deduped.append(row)
+        seen.update(identity_keys)
+    return deduped
+
+
+def _select_distinct_candidates(
+    all_candidates: list[DigestCandidate],
+    selected_candidates: list[DigestCandidate],
+    limit: int,
+) -> list[DigestCandidate]:
+    distinct_selected = _dedupe_candidates(selected_candidates)
+    if len(distinct_selected) >= limit:
+        return distinct_selected[:limit]
+
+    seen: set[str] = set()
+    for candidate in distinct_selected:
+        seen.update(_candidate_identity_keys(candidate))
+
+    for candidate in all_candidates:
+        if any(key in seen for key in _candidate_identity_keys(candidate)):
+            continue
+        distinct_selected.append(candidate)
+        seen.update(_candidate_identity_keys(candidate))
+        if len(distinct_selected) >= limit:
+            break
+    return distinct_selected
 
 
 class DigestService:
@@ -88,6 +162,7 @@ class DigestService:
                 limit=self.settings.digest.shortlist_size_before_claude,
                 require_canonical_events=self.settings.digest.require_canonical_events,
             )
+            rows = _dedupe_candidate_rows(rows)
             candidates = hydrate_digest_candidates(rows)
             shortlist_payload = json.dumps(
                 [
@@ -106,7 +181,7 @@ class DigestService:
             )
             self.repository.replace_weekly_digest_candidates(digest_run_id, rows)
 
-            selected_candidates = candidates[:5]
+            selected_candidates = _select_distinct_candidates(candidates, candidates[:5], limit=5)
             if candidates and self.claude_client.is_available:
                 selection_prompt = build_claude_selection_prompt(
                     window,
@@ -123,6 +198,7 @@ class DigestService:
                         candidate for candidate in candidates if candidate.canonical_event_id in set(selected_ids)
                     ]
                     selected_candidates.sort(key=lambda candidate: selected_ids.index(candidate.canonical_event_id))
+                    selected_candidates = _select_distinct_candidates(candidates, selected_candidates, limit=5)
                 except ClaudeDigestUnavailableError as exc:
                     fallback_reason = str(exc)
                     LOGGER.warning("Claude digest selection unavailable for week=%s reason=%s", normalized_week_key, exc)
