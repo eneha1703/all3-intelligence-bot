@@ -17,6 +17,8 @@ WHITESPACE_RE = re.compile(r"\s+")
 FENCED_JSON_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL | re.IGNORECASE)
 WORD_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9'./-]*")
 URL_RE = re.compile(r"https?://|www\.", re.IGNORECASE)
+BROKEN_DECIMAL_RE = re.compile(r"(?<=\d)\.\s+(?=\d)")
+SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9<])")
 MAX_TITLE_LENGTH = 110
 MAX_SUMMARY_LENGTH = 700
 MAX_WHY_IT_MATTERS_LENGTH = 140
@@ -106,6 +108,7 @@ def _sanitize_summary(headline: str, value: str | None) -> str | None:
     normalized = _normalize_text(value)
     if not normalized:
         return None
+    normalized = BROKEN_DECIMAL_RE.sub(".", normalized)
     return _truncate(normalized, MAX_SUMMARY_LENGTH)
 
 
@@ -172,6 +175,19 @@ def _summary_detail_score(summary: str) -> int:
     return detail_score
 
 
+def _has_trailing_fragment(summary: str) -> bool:
+    sentences = [sentence.strip() for sentence in SENTENCE_SPLIT_RE.split(summary.strip()) if sentence.strip()]
+    if len(sentences) < 2:
+        return False
+    last_sentence = sentences[-1]
+    last_words = _count_words(last_sentence)
+    if last_words <= 2:
+        return True
+    if last_words <= 4 and not any(char.isdigit() for char in last_sentence) and ":" not in last_sentence:
+        return True
+    return False
+
+
 def _validate_summary_richness(
     *,
     input_title: str,
@@ -185,6 +201,8 @@ def _validate_summary_richness(
         raise ClaudeFinalCardUnavailableError("Claude final-card response summary used hype language.")
     if _mostly_repeats_headline(input_title, summary):
         raise ClaudeFinalCardUnavailableError("Claude final-card response summary mostly repeated the headline.")
+    if _has_trailing_fragment(summary):
+        raise ClaudeFinalCardUnavailableError("Claude final-card response summary ended in an incomplete fragment.")
     if _source_has_richer_facts(text_preview, existing_summary):
         summary_words = _count_words(summary)
         if _looks_like_thin_funding_blurb(summary):

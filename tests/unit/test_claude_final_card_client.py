@@ -620,6 +620,90 @@ def test_summary_that_mostly_repeats_headline_is_rejected(monkeypatch: pytest.Mo
         )
 
 
+def test_summary_with_trailing_fragment_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(
+            _payload(
+                json.dumps(
+                    {
+                        "send_ok": True,
+                        "reject_reason": None,
+                        "title": "JuliaHub Raises $65M Series B and Ships Dyad 3.0 Agentic AI for Industrial Digital Twins",
+                        "summary": (
+                            "JuliaHub closed a $65M Series B led by Dorilton Capital, with General Catalyst and AE Ventures participating, "
+                            "alongside the launch of Dyad 3. 0, its agentic AI platform for designing and simulating physical industrial systems. "
+                            "Dyad 3."
+                        ),
+                        "why_it_matters": None,
+                        "duplicate_risk": "low",
+                        "confidence": "high",
+                    }
+                )
+            )
+        ),
+    )
+
+    with pytest.raises(ClaudeFinalCardUnavailableError, match="incomplete fragment"):
+        _generate_for_story(
+            _client(),
+            title="JuliaHub Raises $65M Series B, Launched Dyad 3.0, Agentic AI for Industrial Digital Twins",
+            source="The AI Insider",
+            url="https://example.com/juliahub",
+            text_preview=(
+                "JuliaHub closed a $65M Series B led by Dorilton Capital, with General Catalyst, AE Ventures, and Bob Muglia participating. "
+                "The company also launched Dyad 3.0, an agentic AI platform for designing and simulating physical industrial systems."
+            ),
+            score=58,
+            event_flags={"funding_event": True, "product_launch_event": True},
+            signals={"industrial_robotics_signal": True},
+            existing_summary="JuliaHub announced Dyad 3.0 and a $65M Series B.",
+        )
+
+
+def test_summary_normalizes_decimal_spacing_when_otherwise_valid(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(
+            _payload(
+                json.dumps(
+                    {
+                        "send_ok": True,
+                        "reject_reason": None,
+                        "title": "JuliaHub raises $65M and launches Dyad 3.0 for industrial digital twins",
+                        "summary": (
+                            "JuliaHub closed a $65M Series B led by Dorilton Capital and launched Dyad 3. 0 for industrial digital twins. "
+                            "The platform helps engineering teams design and simulate physical systems and expands JuliaHub's work with manufacturers in the U.S. and Europe."
+                        ),
+                        "why_it_matters": None,
+                        "duplicate_risk": "low",
+                        "confidence": "high",
+                    }
+                )
+            )
+        ),
+    )
+
+    result = _generate_for_story(
+        _client(),
+        title="JuliaHub raises $65M and launches Dyad 3.0 for industrial digital twins",
+        source="The AI Insider",
+        url="https://example.com/juliahub",
+        text_preview=(
+            "JuliaHub closed a $65M Series B led by Dorilton Capital and launched Dyad 3.0 for industrial digital twins. "
+            "The release adds model-based simulation tools for engineering teams and expands deployment work with manufacturers in the U.S. and Europe."
+        ),
+        score=77,
+        event_flags={"funding_event": True, "product_launch_event": True},
+        signals={"platform": True},
+        existing_summary="JuliaHub closed a $65M Series B and launched Dyad 3.0 for industrial digital twins.",
+    )
+
+    assert result.send_ok is True
+    assert result.summary is not None
+    assert "Dyad 3.0" in result.summary
+
+
 def test_send_ok_false_requires_reject_reason(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "urllib.request.urlopen",
