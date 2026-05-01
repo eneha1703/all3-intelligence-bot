@@ -5,11 +5,15 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
 WEEK_KEY_RE = re.compile(r"^(?P<year>\d{4})-W(?P<week>\d{2})$")
+MODULE_DIR = Path(__file__).resolve().parent
+WEEKLY_STYLE_GUIDE_PATH = MODULE_DIR / "weekly_style_guide.md"
+WEEKLY_WRITER_EXAMPLES_PATH = MODULE_DIR / "weekly_writer_examples.json"
 
 
 @dataclass(frozen=True)
@@ -118,6 +122,24 @@ def hydrate_digest_candidates(rows: list[dict[str, Any]]) -> list[DigestCandidat
     return candidates
 
 
+@lru_cache(maxsize=1)
+def _load_weekly_style_guide() -> str:
+    return WEEKLY_STYLE_GUIDE_PATH.read_text(encoding="utf-8").strip()
+
+
+@lru_cache(maxsize=1)
+def _load_weekly_writer_examples() -> list[dict[str, Any]]:
+    payload = json.loads(WEEKLY_WRITER_EXAMPLES_PATH.read_text(encoding="utf-8"))
+    if not isinstance(payload, list):
+        raise ValueError("Weekly writer examples payload must be a list.")
+    examples: list[dict[str, Any]] = []
+    for entry in payload:
+        if not isinstance(entry, dict):
+            continue
+        examples.append(entry)
+    return examples
+
+
 def build_claude_corpus_prompt(week_key: str, candidates: list[DigestCandidate], max_items: int) -> str:
     selected = candidates[:max_items]
     lines = [
@@ -195,19 +217,42 @@ def build_claude_writer_prompt(window: DigestWindow, candidates: list[DigestCand
         }
         for candidate in candidates
     ]
+    style_guide = _load_weekly_style_guide()
+    examples = _load_weekly_writer_examples()
     return "\n".join(
         [
             "Write the final Weekly Digest Bot 2 message in Telegram HTML.",
             "English only, even when a source is non-English.",
-            "Be concise, analytical, and non-hyped. Explain what happened, why it matters, and the strategic signal.",
-            "Use exactly 5 items and keep each item to one dense paragraph.",
+            "Write like a smart human editor producing a short weekly strategic note.",
+            "Be concise, analytical, natural, and non-hyped.",
+            "Do not sound like an AI assistant, a press release, or a database recap.",
+            "Use exactly 5 items and keep each item to one compact paragraph.",
+            "Aim for roughly 55 to 90 words per item.",
+            "Prefer 2 to 4 sentences per item.",
             "The first line must be the digest title exactly as provided.",
             "For each item use this structure:",
             "1. <b>Headline</b>",
             'Paragraph ending with <a href="SOURCE_URL">Link</a>',
             "Do not show raw URLs in visible text.",
             "Do not invent facts beyond the provided input.",
+            "Lead each paragraph with the strongest fact, then add one concise implication.",
+            "Vary the framing across items instead of repeating the same conclusion formula.",
+            "Use currency formatting like USD 120B, USD 25M, and EUR 100M.",
+            "Do not use first-person company framing such as 'we', 'our', 'our need', 'our goals', or 'our strategy'.",
+            "The implication can be about All3, the sector, physical AI, robotics, timber adoption, industrial systems, infrastructure, or construction more broadly.",
+            "Do not force every item to explain why it matters specifically to All3.",
+            "Do not simply restate the source headline in either the bold headline or the first sentence.",
+            "Do not write bland summaries like 'Company X raised money for Y' unless the deeper point is made clear.",
+            "Do not end every item with generic phrases like 'the signal is', 'this highlights', or 'this underscores'.",
+            "Mix the editorial voice across items so the digest reads like it was written by a person, not a template.",
+            "If an item does not support a strong interpretive angle from the provided facts, stay concrete and restrained rather than inventing significance.",
             f"Title: {window.title}",
+            "",
+            "House style guide:",
+            style_guide,
+            "",
+            "Reference examples:",
+            json.dumps(examples, ensure_ascii=False, sort_keys=True),
             "",
             "Selected items JSON:",
             json.dumps(payload, ensure_ascii=False, sort_keys=True),

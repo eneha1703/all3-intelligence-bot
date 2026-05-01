@@ -1,0 +1,83 @@
+[
+  {
+    "label": "good",
+    "notes": [
+      "Compact weekly note",
+      "Interpretive but grounded",
+      "Strong fact first",
+      "Natural industry implication"
+    ],
+    "headline": "Germany’s housing delivery is slowing as the system loses speed",
+    "body_html": "Colliers residential market report shows completions fell to the lowest level in nine years, reaching 251,900 units in 2024 (-14% y-o-y), while the time from permit to completion has stretched to 26 months. Colliers also expects completions to decline by up to 35% by 2027, against a backdrop of an estimated 955,000-unit social housing shortfall by 2030. Germany is not running out of projects. It is running into a delivery system that is taking longer and producing less. <a href=\"SOURCE_URL\">Link</a>"
+  },
+  {
+    "label": "good",
+    "notes": [
+      "Compact weekly note",
+      "Human editorial phrasing",
+      "Industry implication without hype"
+    ],
+    "headline": "Data centers may become the next robotics construction site",
+    "body_html": "SoftBank is reportedly exploring Roze, a new AI and robotics company focused on data center construction, with a possible future listing discussed at around USD 100B. The details are still thin and the valuation should be treated cautiously, but the direction is interesting: data centers are repeatable, capital-heavy and under extreme delivery pressure. That makes them a natural place to test whether construction can be treated more like an industrial process than a one-off project. <a href=\"SOURCE_URL\">Link</a>"
+  },
+  {
+    "label": "good",
+    "notes": [
+      "Compact",
+      "Clear contrast between access and deployment",
+      "Natural conclusion"
+    ],
+    "headline": "Low-cost humanoids are scaling access faster than productive use",
+    "body_html": "Unitree has begun selling humanoid robots globally, with its R1 model listed at USD 6,800, far below most western peers. The move matters because it pushes robotic hardware into a much broader market and lowers the entry point for experimentation. But lower-cost access does not solve deployment by itself. The harder part remains turning general-purpose hardware into reliable industrial workflows. <a href=\"SOURCE_URL\">Link</a>"
+  },
+  {
+    "label": "good",
+    "notes": [
+      "Grounded in technical facts",
+      "Short editorial implication",
+      "No hype"
+    ],
+    "headline": "Low-carbon timber is still invisible where decisions are made",
+    "body_html": "Early-stage design tools and LCA databases still do not fully capture newer low-carbon materials. A new Imperial College London study shows engineered wood products such as glulam and CLT can reach just 3-5% of steel’s embodied carbon, while timber’s low density makes structural sections 60-95% lighter than comparable concrete and steel by mass. However, if a material is missing from the tools used at the start of design, it can lose before the real decision is made. <a href=\"SOURCE_URL\">Link</a>"
+  },
+  {
+    "label": "bad",
+    "notes": [
+      "Too generic",
+      "Weak factual density",
+      "Just a bland funding recap"
+    ],
+    "headline": "The founders behind a USD 1.5B food delivery exit just raised USD 25M from RTP Global for a construction robotics startup",
+    "body_html": "All3, a construction robotics company, has raised USD 25M in seed funding to bring its robotic construction platform. <a href=\"SOURCE_URL\">Link</a>"
+  },
+  {
+    "label": "bad",
+    "notes": [
+      "Off-thesis example",
+      "Lifestyle AI noise",
+      "Should not shape the digest voice"
+    ],
+    "headline": "2 chefs share how generative AI helps them manage menu changes and event logistics on their own",
+    "body_html": "Two solo cooking-business operators said AI helps them research ingredients, plan events, and develop social strategy. <a href=\"SOURCE_URL\">Link</a>"
+  },
+  {
+    "label": "bad",
+    "notes": [
+      "AI-like corporate summary",
+      "Broad and generic",
+      "No concrete editorial angle"
+    ],
+    "headline": "AI Systems Debut at Hannover Messe 2026",
+    "body_html": "Nvidia and partners are showcasing AI-driven manufacturing advances at Hannover Messe 2026, highlighting a shift towards AI for engineering, operations, and robotics. This signals a broad industry move to leverage AI for faster production cycles, improved efficiency, and addressing skilled labor shortages. <a href=\"SOURCE_URL\">Link</a>"
+  },
+  {
+    "label": "bad",
+    "notes": [
+      "Writes from first-person perspective",
+      "Too obviously tailored to 'our goals'",
+      "Feels like an AI justification, not an editor"
+    ],
+    "headline": "Mercer Mass Timber Offers Free CLT Design Tool",
+    "body_html": "Mercer Mass Timber has released BuildSpec, a free browser-based tool for prototyping CLT and CFS building designs with real-time cost, embodied carbon, and quantity takeoffs. This tool aims to accelerate feasibility for mid-rise timber projects, potentially streamlining the design phase and encouraging wider adoption of mass timber construction, which aligns with our material efficiency goals. <a href=\"SOURCE_URL\">Link</a>"
+  }
+]
