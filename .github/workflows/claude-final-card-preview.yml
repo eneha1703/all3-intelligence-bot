@@ -39,6 +39,9 @@ jobs:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       TELEGRAM_CLAUDE_PREVIEW_BOT_TOKEN: ${{ secrets.TELEGRAM_CLAUDE_PREVIEW_BOT_TOKEN }}
       TELEGRAM_CLAUDE_PREVIEW_CHAT_IDS: ${{ secrets.TELEGRAM_CLAUDE_PREVIEW_CHAT_IDS }}
+      CLAUDE_FINAL_CARD_MODEL: "claude-sonnet-4-6"
+      CLAUDE_FINAL_CARD_TIMEOUT_SECONDS: "30"
+      CLAUDE_FINAL_CARD_MAX_TOKENS: "700"
       PREVIEW_ARTIFACT_NAME: ${{ github.event.inputs.artifact_name }}
       SOURCE_RUN_ID: ${{ github.event.inputs.source_run_id }}
       PREVIEW_RUN_ID: ${{ github.event.inputs.preview_run_id }}
