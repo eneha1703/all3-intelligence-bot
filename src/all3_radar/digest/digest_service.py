@@ -6,6 +6,7 @@ import json
 import logging
 import re
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from pathlib import Path
 
 from all3_radar.config.loader import load_settings
@@ -21,6 +22,7 @@ from all3_radar.digest.corpus import (
 from all3_radar.digest.writer import build_digest_html, build_digest_markdown
 from all3_radar.domain.enums import PipelineName, PipelineStatus
 from all3_radar.observability.logging import configure_logging
+from all3_radar.pipeline.funding_sent_history import funding_key_from_text
 from all3_radar.storage.db import initialize_database
 from all3_radar.storage.repositories import RadarRepository
 
@@ -82,6 +84,36 @@ def _row_signal_score(row: dict[str, object]) -> int:
     return sum(1 for key in weighted_flags if event_flags.get(key))
 
 
+def _row_event_flags(row: dict[str, object]) -> dict[str, object]:
+    try:
+        signals = json.loads(str(row.get("signals_json") or "{}"))
+    except json.JSONDecodeError:
+        return {}
+    event_flags = signals.get("event_flags", {}) if isinstance(signals, dict) else {}
+    return event_flags if isinstance(event_flags, dict) else {}
+
+
+def _row_funding_identity(row: dict[str, object]) -> str | None:
+    published_ts_raw = row.get("published_ts")
+    if not published_ts_raw:
+        return None
+    try:
+        published_ts = datetime.fromisoformat(str(published_ts_raw))
+    except ValueError:
+        return None
+    semantic_key = funding_key_from_text(
+        title=str(row.get("title") or ""),
+        preview=str(row.get("summary_text") or ""),
+        published_ts=published_ts,
+        event_flags=_row_event_flags(row),
+    )
+    if semantic_key is None:
+        return None
+    currency, value, scale = semantic_key.amount
+    round_marker = (semantic_key.round_marker or "").replace(" round", "")
+    return f"funding:{semantic_key.entity}|{currency}{value}{scale}|{round_marker}"
+
+
 def _is_obvious_weekly_noise(row: dict[str, object]) -> bool:
     title = _normalize_digest_text(str(row.get("title") or ""))
     summary = _normalize_digest_text(str(row.get("summary_text") or ""))
@@ -119,6 +151,19 @@ def _is_obvious_weekly_noise(row: dict[str, object]) -> bool:
     ):
         return True
 
+    if any(
+        phrase in combined
+        for phrase in (
+            "want to hire",
+            "talent pool",
+            "industry night",
+            "autonomous vehicle industry is ripe for picking",
+            "experience transfers well",
+            "startup CEOs told Business Insider",
+        )
+    ):
+        return True
+
     return False
 
 
@@ -134,16 +179,29 @@ def _sort_digest_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
     )
 
 
+def _dedupe_semantic_digest_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
+    deduped: list[dict[str, object]] = []
+    seen_keys: set[str] = set()
+    for row in rows:
+        funding_key = _row_funding_identity(row)
+        if funding_key and funding_key in seen_keys:
+            continue
+        deduped.append(row)
+        if funding_key:
+            seen_keys.add(funding_key)
+    return deduped
+
+
 def _prepare_digest_rows(rows: list[dict[str, object]], *, limit: int) -> list[dict[str, object]]:
     non_noise_rows = [row for row in rows if not _is_obvious_weekly_noise(row)]
-    prepared = _sort_digest_rows(non_noise_rows)
+    prepared = _dedupe_semantic_digest_rows(_sort_digest_rows(non_noise_rows))
     if len(prepared) >= min(limit, 5):
         return prepared[:limit]
 
     seen_ids = {str(row["canonical_event_id"]) for row in prepared}
     backfill_rows = [row for row in rows if str(row["canonical_event_id"]) not in seen_ids]
-    prepared.extend(_sort_digest_rows(backfill_rows))
-    return prepared[:limit]
+    prepared.extend(_dedupe_semantic_digest_rows(_sort_digest_rows(backfill_rows)))
+    return _dedupe_semantic_digest_rows(prepared)[:limit]
 
 
 def _candidate_identity_keys(candidate: DigestCandidate) -> tuple[str, ...]:

@@ -7,6 +7,10 @@ from all3_radar.digest.digest_service import DigestService
 from all3_radar.storage.db import initialize_database
 
 
+ALL3_TITLE_A = "The founders behind a $1.5B food delivery exit just raised $25M from RTP Global for a construction robotics startup"
+ALL3_TITLE_B = "UK Robotic Construction Company All3 Raises $25M in Seed Round Funding"
+
+
 def _seed_digest_db(db_path: Path, schema_path: Path) -> None:
     initialize_database(db_path, schema_path)
     now = datetime(2026, 4, 30, 12, 0, tzinfo=timezone.utc).isoformat()
@@ -133,6 +137,39 @@ def _seed_digest_db(db_path: Path, schema_path: Path) -> None:
                 "The company is tracking how often engineers use AI tools while facing internal friction and employee pushback.",
                 '{"event_flags":{"partnership_event":true}}',
             ),
+            (
+                "raw-12",
+                "item-12",
+                "event-12",
+                "The founders behind a $1.5B food delivery exit just raised $25M from RTP Global for a construction robotics startup",
+                "https://example.com/all3-techfundingnews",
+                "robot_report_rss",
+                91,
+                "All3 has raised $25 million in seed funding from RTP Global to bring its robotic construction platform to market.",
+                '{"event_flags":{"funding_event":true,"construction_innovation_signal":true,"industrial_robotics_signal":true}}',
+            ),
+            (
+                "raw-13",
+                "item-13",
+                "event-13",
+                "UK Robotic Construction Company All3 Raises $25M in Seed Round Funding",
+                "https://example.com/all3-aiinsider",
+                "robot_report_rss",
+                90,
+                "UK construction robotics startup All3 has raised $25 million in seed funding led by RTP Global for its autonomous building platform.",
+                '{"event_flags":{"funding_event":true,"construction_innovation_signal":true,"industrial_robotics_signal":true}}',
+            ),
+            (
+                "raw-14",
+                "item-14",
+                "event-14",
+                "Want to hire for your robotics startup? The autonomous vehicle industry is ripe for picking.",
+                "https://example.com/robotics-hiring-commentary",
+                "robot_report_rss",
+                85,
+                "Startup CEOs told Business Insider that autonomous-vehicle veterans are a strong talent pool for robotics hiring.",
+                '{"event_flags":{"industrial_robotics_signal":true}}',
+            ),
         ]
         for raw_id, item_id, event_id, title, url, source_id, score, summary_text, signals_json in raw_rows:
             connection.execute(
@@ -175,7 +212,7 @@ def _seed_digest_db(db_path: Path, schema_path: Path) -> None:
                     event_id,
                     "fresh",
                     "keep",
-                    "sent" if item_id in {"item-1", "item-2", "item-7"} else "stored_only",
+                    "sent" if item_id in {"item-1", "item-2", "item-7", "item-12"} else "stored_only",
                     None,
                     score,
                     signals_json,
@@ -261,7 +298,7 @@ def test_digest_build_generates_telegram_ready_artifact_with_claude(monkeypatch,
     service = DigestService(repo_root=repo_root, claude_client=fake_client)
     result = service.build_digest("2026-W18", output_path=output_path)
 
-    assert result.candidate_count == 6
+    assert result.candidate_count == 7
     assert result.claude_used is True
     assert result.fallback_reason is None
 
@@ -275,6 +312,8 @@ def test_digest_build_generates_telegram_ready_artifact_with_claude(monkeypatch,
     assert "Waymo, Alphabet's robotaxi service" not in digest_text
     assert "2 chefs share how generative AI helps" not in digest_text
     assert "Amazon pushes AI use and closely tracks adoption" not in digest_text
+    assert "Want to hire for your robotics startup" not in digest_text
+    assert sum(title in digest_text for title in (ALL3_TITLE_A, ALL3_TITLE_B)) <= 1
     assert "Destatis suggests that order intake is recovering" in digest_text
 
     report_path = tmp_path / "weekly_digest_2026-W18.report.md"
@@ -285,6 +324,8 @@ def test_digest_build_generates_telegram_ready_artifact_with_claude(monkeypatch,
     assert "Waymo, Alphabet's robotaxi service" not in report_text
     assert "2 chefs share how generative AI helps" not in report_text
     assert "Amazon pushes AI use and closely tracks adoption" not in report_text
+    assert "Want to hire for your robotics startup" not in report_text
+    assert sum(title in report_text for title in (ALL3_TITLE_A, ALL3_TITLE_B)) <= 1
 
     assert len(fake_client.selection_prompts) == 1
     assert len(fake_client.writer_prompts) == 1
@@ -303,7 +344,7 @@ def test_digest_build_falls_back_to_deterministic_artifact_without_claude(monkey
     service = DigestService(repo_root=repo_root, claude_client=_FailingClaudeClient())
     result = service.build_digest("2026-W18", output_path=output_path)
 
-    assert result.candidate_count == 6
+    assert result.candidate_count == 7
     assert result.claude_used is False
     assert result.fallback_reason == "timeout"
     digest_text = output_path.read_text(encoding="utf-8")
@@ -313,6 +354,8 @@ def test_digest_build_falls_back_to_deterministic_artifact_without_claude(monkey
     assert "Waymo, Alphabet's robotaxi service" not in digest_text
     assert "2 chefs share how generative AI helps" not in digest_text
     assert "Amazon pushes AI use and closely tracks adoption" not in digest_text
+    assert "Want to hire for your robotics startup" not in digest_text
+    assert sum(title in digest_text for title in (ALL3_TITLE_A, ALL3_TITLE_B)) == 1
 
     with sqlite3.connect(db_path) as connection:
         digest_row = connection.execute(
@@ -322,7 +365,7 @@ def test_digest_build_falls_back_to_deterministic_artifact_without_claude(monkey
 
     assert digest_row[0] == "completed"
     assert digest_row[1].startswith("Top 5 News Highlights | 23-30 April 2026 | Week 18")
-    assert candidate_count == 6
+    assert candidate_count == 7
 
 
 def test_digest_build_dedupes_duplicate_story_candidates(monkeypatch, tmp_path) -> None:
@@ -432,7 +475,7 @@ def test_digest_build_dedupes_duplicate_story_candidates(monkeypatch, tmp_path) 
     service = DigestService(repo_root=repo_root)
     result = service.build_digest("2026-W18", output_path=output_path)
 
-    assert result.candidate_count == 7
+    assert result.candidate_count == 8
     digest_text = output_path.read_text(encoding="utf-8")
     assert digest_text.count("A banker wants to trade his $4.8 million California estate for shares in Anthropic") <= 1
     assert digest_text.count("1. <b>") == 1
