@@ -69,6 +69,20 @@ POLICY_TERMS = (
 )
 TIMBER_TERMS = ("timber", "mass timber", "glulam", "clt")
 TIMBER_STRATEGIC_TERMS = ("demand", "adoption", "floor area", "square metre", "sq m", "growth", "capacity")
+TIMBER_PERFORMANCE_TERMS = (
+    "heat loss",
+    "thermal bridges",
+    "thermal bridge",
+    "building performance",
+    "energy performance",
+    "operational energy",
+    "cold zones",
+    "identical typology",
+    "embodied carbon",
+    "concrete and steel",
+    "concrete vs mass timber",
+    "steel vs timber",
+)
 SHOWCASE_TIMBER_TERMS = ("showcase", "design", "architecture", "pavilion", "residence", "award")
 CONSTRUCTION_INNOVATION_TERMS = ("modular", "prefab", "prefabrication", "offsite", "off-site", "factory-built")
 INDUSTRIAL_ROBOTICS_TERMS = (
@@ -269,6 +283,7 @@ def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
     quantified_scale = bool(QUANTIFIED_SCALE_RE.search(haystack))
     billion_scale = bool(BILLION_SCALE_RE.search(haystack))
     timber_strategic = timber_present and (_contains_any(haystack, TIMBER_STRATEGIC_TERMS) or quantified_scale)
+    timber_performance = timber_present and _contains_any(haystack, TIMBER_PERFORMANCE_TERMS)
     adjacent_logistics_only = _contains_any(haystack, WAREHOUSE_LOGISTICS_TERMS) and not _contains_any(haystack, STRATEGIC_CONTEXT_TERMS)
     industrial_robotics_signal = (
         (_contains_any(haystack, ("robot", "robots", "robotics", "humanoid", "automation", "autonomous")) and _contains_any(haystack, INDUSTRIAL_ROBOTICS_TERMS))
@@ -330,7 +345,8 @@ def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
         "factory_opening_or_expansion": factory_opening_or_expansion,
         "permitting_or_code_signal": _contains_any(haystack, POLICY_TERMS),
         "quantified_scale_signal": quantified_scale,
-        "timber_strategic_signal": timber_strategic,
+       "timber_strategic_signal": timber_strategic,
+        "timber_performance_signal": timber_performance,
         "industrial_robotics_signal": industrial_robotics_signal,
         "construction_innovation_signal": construction_innovation_signal,
         "construction_statistics_signal": construction_statistics_signal,

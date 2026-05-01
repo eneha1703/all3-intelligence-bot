@@ -207,6 +207,25 @@ def test_wood_central_timber_economics_signal_is_detected() -> None:
     assert is_wood_central_timber_economics_signal(item) is True
 
 
+def test_timber_performance_comparison_story_keeps_scope() -> None:
+    item = _make_item(
+        "Concrete Loses 32% More Heat Than Mass Timber in Chile's Cold Zones",
+        "Concrete buildings lose between 26 and 32 per cent more heat than mass timber buildings of identical typology when thermal bridges are included in the calculation.",
+        broad_feed=False,
+    )
+    item = StoredNormalizedItem(**{**item.__dict__, "source_id": "wood_central_api"})
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "keep"
+    assert reason is None
+
+
 def test_soft_wood_central_timber_economics_commentary_does_not_trigger_signal() -> None:
     item = _make_item(
         "Why mass timber economics deserve a broader conversation",

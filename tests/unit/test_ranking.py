@@ -39,6 +39,7 @@ RANKING_RULES = {
         "permitting_or_code_signal": 18,
         "quantified_scale_signal": 15,
         "timber_strategic_signal": 15,
+        "timber_performance_signal": 12,
         "industrial_robotics_signal": 8,
         "construction_innovation_signal": 6,
         "construction_statistics_signal": 18,
@@ -143,9 +144,26 @@ def test_wood_central_timber_economics_story_now_survives() -> None:
 
     assert flags["timber_economics_signal"] is True
     assert flags["timber_strategic_signal"] is True
+    assert flags["timber_performance_signal"] is True
     assert decision.relevance_status == "keep"
     assert decision.send_status == "stored_only"
-    assert decision.score == 66
+    assert decision.score == 78
+
+
+def test_wood_central_timber_performance_story_gets_signal_and_score_lift() -> None:
+    item = _make_item(
+        "Concrete Loses 32% More Heat Than Mass Timber in Chile's Cold Zones",
+        "Concrete buildings lose between 26 and 32 per cent more heat than mass timber buildings of identical typology when thermal bridges are included in the calculation.",
+        broad_feed=False,
+    )
+    item = StoredNormalizedItem(**{**item.__dict__, "source_id": "wood_central_api"})
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["timber_performance_signal"] is True
+    assert decision.relevance_status == "keep"
+    assert decision.score == 45
 
 
 def test_major_industrial_ai_funding_story_from_broad_feed_reaches_send_path() -> None:
