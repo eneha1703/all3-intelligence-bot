@@ -17,6 +17,7 @@ DEFAULT_TIMEOUT_SECONDS = 30
 DEFAULT_USER_AGENT = "new_all3_radar_bot/0.1 (+https://github.com/togetherwithyouapi-commits/new_all3_radar_bot)"
 HTML_TAG_RE = re.compile(r"<[^>]+>")
 WHITESPACE_RE = re.compile(r"\s+")
+BARE_AMPERSAND_RE = re.compile(r"&(?!#?[A-Za-z0-9]+;)")
 
 
 def fetch_text(url: str, timeout_seconds: int = DEFAULT_TIMEOUT_SECONDS) -> str:
@@ -88,7 +89,11 @@ def parse_published_timestamp(value: str | None) -> datetime | None:
 
 
 def parse_rss_items(feed_text: str, source: SourceDefinition, collected_at: datetime) -> list[CollectedRawItem]:
-    root = ET.fromstring(feed_text)
+    try:
+        root = ET.fromstring(feed_text)
+    except ET.ParseError:
+        repaired_feed_text = BARE_AMPERSAND_RE.sub("&amp;", feed_text)
+        root = ET.fromstring(repaired_feed_text)
     entries = [element for element in root.iter() if _local_name(element.tag) in {"item", "entry"}]
     items: list[CollectedRawItem] = []
 

@@ -93,11 +93,13 @@ sources:
     layer: direct
     is_direct_source: true
     is_wrapper: false
-    enabled: false
+    enabled: true
     parser: generic_rss
     url: https://constructionbriefing.com/rss
     priority: 85
-    disabled_reason: malformed_live_feed_xml
+    broad_feed: true
+    strict_scope: construction_timber_innovation
+    market_scope: uk_housing_market
     tags: [construction, industry]
 
   - id: ieee_spectrum_robotics_rss
@@ -138,6 +140,9 @@ sources:
     priority: 60
     disabled_reason: feed_url_returns_404
     broad_feed: true
+    origin_language: de
+    delivery_language: en
+    market_scope: germany_housing_market
     tags: [construction, germany]
 
   - id: telegraph_feed
@@ -151,6 +156,7 @@ sources:
     url: https://www.telegraph.co.uk/rss.xml
     priority: 55
     broad_feed: true
+    market_scope: uk_housing_market
     tags: [news, industry]
 
   - id: business_insider_feed
@@ -176,6 +182,9 @@ sources:
     parser: destatis_press
     url: https://www.destatis.de/DE/Presse/Pressemitteilungen/_inhalt_2.html
     priority: 75
+    origin_language: de
+    delivery_language: en
+    market_scope: germany_housing_market
     tags: [policy, statistics]
 
   - id: ifo_press_listing
@@ -189,6 +198,7 @@ sources:
     url: https://www.ifo.de/en/press-release
     priority: 70
     disabled_reason: listing_adapter_not_implemented_yet
+    market_scope: germany_housing_market
     tags: [economy, germany]
 
   - id: ifo_home_listing
@@ -202,7 +212,22 @@ sources:
     url: https://www.ifo.de/en
     priority: 60
     disabled_reason: listing_adapter_not_implemented_yet
+    market_scope: germany_housing_market
     tags: [economy, germany]
+
+  - id: interesting_engineering_rss
+    name: Interesting Engineering
+    kind: rss
+    layer: direct
+    is_direct_source: true
+    is_wrapper: false
+    enabled: true
+    parser: generic_rss
+    url: https://interestingengineering.com/feed
+    priority: 58
+    broad_feed: true
+    strict_scope: industrial_robotics_physical_ai
+    tags: [engineering, robotics, ai]
 
   - id: wcn_robotics_listing
     name: World Construction Network Robotics

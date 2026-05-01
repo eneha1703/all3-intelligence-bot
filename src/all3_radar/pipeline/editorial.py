@@ -136,6 +136,39 @@ DESTATIS_CONSTRUCTION_MARKET_TERMS = (
     "approvals",
     "output",
 )
+HOUSING_MARKET_CONTEXT_TERMS = (
+    "housing market",
+    "wohnungsmarkt",
+    "housebuilding",
+    "wohnungsbau",
+    "rents",
+    "mieten",
+    "house prices",
+    "kaufpreise",
+    "affordable housing",
+    "build-to-rent",
+    "btr",
+    "residential demand",
+    "housing supply",
+    "building permits",
+    "housing approvals",
+    "energieeffizienz",
+)
+HOUSING_MARKET_QUANTIFIED_TERMS = (
+    "%",
+    "index",
+    "study",
+    "report",
+    "forecast",
+    "shortfall",
+    "shortage",
+    "higher",
+    "lower",
+    "increase",
+    "decrease",
+    "rise",
+    "fall",
+)
 WOOD_CENTRAL_HARD_CONSTRAINT_TERMS = (
     "cap",
     "height cap",
@@ -257,6 +290,14 @@ def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
     return any(_term_pattern(term).search(normalized) for term in terms)
 
 
+def _source_extra(item: StoredNormalizedItem, key: str) -> str | None:
+    value = item.metadata.get(key)
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
+
+
 @dataclass(frozen=True)
 class EditorialDecision:
     allow_send: bool
@@ -304,6 +345,12 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         and event_flags.get("construction_statistics_signal", False)
         and _contains_any(haystack, DESTATIS_CONSTRUCTION_MARKET_TERMS)
     )
+    housing_market_alert_signal = (
+        _source_extra(item, "market_scope") in {"germany_housing_market", "uk_housing_market"}
+        and event_flags.get("housing_market_signal", False)
+        and _contains_any(haystack, HOUSING_MARKET_CONTEXT_TERMS)
+        and _contains_any(haystack, HOUSING_MARKET_QUANTIFIED_TERMS)
+    )
     timber_adoption_barrier_signal = (
         item.source_id == "wood_central_api"
         and event_flags.get("timber_policy_signal", False)
@@ -344,6 +391,7 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         or product_or_platform_news
         or (construction_execution and event_flags.get("quantified_scale_signal", False))
         or official_construction_market_signal
+        or housing_market_alert_signal
         or timber_adoption_barrier_signal
         or timber_economics_alert_signal
         or timber_performance_alert_signal
@@ -361,6 +409,7 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         "industrial_relevance": industrial_relevance,
         "adjacent_logistics_only": adjacent_logistics_only,
         "official_construction_market_signal": official_construction_market_signal,
+        "housing_market_alert_signal": housing_market_alert_signal,
         "timber_adoption_barrier_signal": timber_adoption_barrier_signal,
         "timber_economics_alert_signal": timber_economics_alert_signal,
         "timber_performance_alert_signal": timber_performance_alert_signal,

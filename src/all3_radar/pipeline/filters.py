@@ -503,6 +503,124 @@ TIMBER_CONSTRUCTION_KEEP_TERMS = {
     "modular housing",
     "factory-built housing",
 }
+GERMANY_HOUSING_MARKET_TERMS = {
+    "wohnungsmarkt",
+    "wohnungsbau",
+    "wohnungsmangel",
+    "wohnungsnot",
+    "mieten",
+    "mietpreis",
+    "mietpreise",
+    "kaufpreise",
+    "hauspreise",
+    "baugenehmigungen",
+    "wohnungsbestand",
+    "energieeffizienz",
+    "investoren",
+    "neubau",
+    "residential market",
+    "housing market",
+    "building permits",
+    "housing approvals",
+    "rents",
+    "house prices",
+    "apartment market",
+    "affordable housing",
+}
+UK_HOUSING_MARKET_TERMS = {
+    "housing market",
+    "housebuilding",
+    "homebuilding",
+    "housing delivery",
+    "housing shortage",
+    "affordable housing",
+    "build-to-rent",
+    "btr",
+    "residential market",
+    "rents",
+    "rental market",
+    "house prices",
+    "planning reform",
+    "planning system",
+    "planning approvals",
+    "residential demand",
+    "housing supply",
+    "starts",
+    "completions",
+}
+MARKET_SIGNAL_TERMS = {
+    "%",
+    "index",
+    "study",
+    "report",
+    "forecast",
+    "fall",
+    "fell",
+    "drop",
+    "decline",
+    "declined",
+    "rise",
+    "rose",
+    "increase",
+    "increased",
+    "higher",
+    "lower",
+    "shortfall",
+    "shortage",
+    "demand",
+    "supply",
+    "investor",
+    "investors",
+}
+CONSTRUCTION_BRIEFING_SCOPE_TERMS = {
+    "mass timber",
+    "timber",
+    "clt",
+    "glulam",
+    "modular",
+    "prefab",
+    "prefabrication",
+    "offsite",
+    "off-site",
+    "industrialized construction",
+    "factory-built housing",
+    "construction robotics",
+    "jobsite robotics",
+    "construction automation",
+    "housing delivery",
+    "building permits",
+    "planning reform",
+}
+INTERESTING_ENGINEERING_SCOPE_TERMS = {
+    "robot",
+    "robots",
+    "robotics",
+    "humanoid",
+    "physical ai",
+    "factory automation",
+    "industrial automation",
+    "automation system",
+    "autonomous system",
+    "robot cell",
+    "warehouse automation",
+    "construction automation",
+}
+INTERESTING_ENGINEERING_OFF_SCOPE_TERMS = {
+    "space",
+    "orbit",
+    "satellite",
+    "military",
+    "defense",
+    "defence",
+    "missile",
+    "drone strike",
+    "fighter jet",
+    "quantum",
+    "fusion",
+    "battery breakthrough",
+    "consumer gadget",
+    "smartphone",
+}
 WHITESPACE_RE = re.compile(r"\s+")
 
 
@@ -569,6 +687,12 @@ def is_obvious_off_scope(item: StoredNormalizedItem) -> bool:
         and not has_any_term(haystack, TIMBER_CONSTRUCTION_KEEP_TERMS)
     ):
         return True
+    if (
+        _source_extra(item, "strict_scope") == "industrial_robotics_physical_ai"
+        and has_any_term(haystack, INTERESTING_ENGINEERING_OFF_SCOPE_TERMS)
+        and not is_interesting_engineering_scope_signal(item)
+    ):
+        return True
     return False
 
 
@@ -577,8 +701,39 @@ def _source_tags(item: StoredNormalizedItem) -> set[str]:
     return {str(tag).lower() for tag in raw_tags}
 
 
+def _source_extra(item: StoredNormalizedItem, key: str) -> str | None:
+    value = item.metadata.get(key)
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
+
+
 def is_broad_feed_source(item: StoredNormalizedItem) -> bool:
     return bool(item.metadata.get("broad_feed"))
+
+
+def is_housing_market_signal(item: StoredNormalizedItem) -> bool:
+    market_scope = _source_extra(item, "market_scope")
+    if market_scope not in {"germany_housing_market", "uk_housing_market"}:
+        return False
+    haystack = _normalize_text(f"{item.title} {item.text_preview or ''}")
+    terms = GERMANY_HOUSING_MARKET_TERMS if market_scope == "germany_housing_market" else UK_HOUSING_MARKET_TERMS
+    return has_any_term(haystack, terms) and has_any_term(haystack, MARKET_SIGNAL_TERMS)
+
+
+def is_construction_briefing_scope_signal(item: StoredNormalizedItem) -> bool:
+    if _source_extra(item, "strict_scope") != "construction_timber_innovation":
+        return False
+    haystack = _normalize_text(f"{item.title} {item.text_preview or ''}")
+    return has_any_term(haystack, CONSTRUCTION_BRIEFING_SCOPE_TERMS)
+
+
+def is_interesting_engineering_scope_signal(item: StoredNormalizedItem) -> bool:
+    if _source_extra(item, "strict_scope") != "industrial_robotics_physical_ai":
+        return False
+    haystack = _normalize_text(f"{item.title} {item.text_preview or ''}")
+    return has_any_term(haystack, INTERESTING_ENGINEERING_SCOPE_TERMS)
 
 
 def is_destatis_construction_statistics_signal(item: StoredNormalizedItem) -> bool:
@@ -623,9 +778,15 @@ def has_clear_all3_scope(item: StoredNormalizedItem, competitor_count: int, even
         return True
     if event_flags.get("construction_statistics_signal"):
         return True
+    if event_flags.get("housing_market_signal"):
+        return True
     if event_flags.get("timber_policy_signal"):
         return True
     if event_flags.get("timber_economics_signal"):
+        return True
+    if is_construction_briefing_scope_signal(item):
+        return True
+    if is_interesting_engineering_scope_signal(item):
         return True
     if has_any_term(haystack, BROAD_FEED_SCOPE_TERMS):
         return True
@@ -702,8 +863,11 @@ def compute_relevance_status(
         high_intent_scope = has_any_term(haystack, HIGH_INTENT_BROAD_FEED_TERMS)
         strong_broad_signal = (
             competitor_count > 0
+            or event_flags.get("housing_market_signal")
             or event_flags.get("strategic_ai_major_deal_signal")
             or event_flags.get("physical_industry_ai_megafunding_signal")
+            or is_construction_briefing_scope_signal(item)
+            or is_interesting_engineering_scope_signal(item)
             or (event_flags.get("permitting_or_code_signal") and high_intent_scope)
             or event_flags.get("timber_strategic_signal")
             or (

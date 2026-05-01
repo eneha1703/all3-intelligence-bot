@@ -48,7 +48,7 @@ from all3_radar.summarization.claude_editorial_review_client import (
     ClaudeEditorialReviewClient,
     ClaudeEditorialReviewUnavailableError,
 )
-from all3_radar.summarization.radar_summary import summarize_candidate
+from all3_radar.summarization.radar_summary import maybe_translate_delivery_card, summarize_candidate
 
 LOGGER = logging.getLogger(__name__)
 KNOWN_CLAUDE_EDITORIAL_FALLBACK_REASONS = {
@@ -1327,9 +1327,37 @@ class RadarService:
             delivery_started = perf_counter()
             for context in sendable_contexts:
                 _with_context_signals(context, **_resolve_card_writer_diagnostics(context))
+                headline = context.final_headline or context.item.title
+                summary_text = context.final_summary_text or (context.summary.summary_text if context.summary else None)
+                if not (
+                    context.decision.signals.get("final_card_title_source") == "claude_final_card"
+                    and context.decision.signals.get("final_card_summary_source") == "claude_final_card"
+                ):
+                    headline, summary_text, translated, translation_reason = maybe_translate_delivery_card(
+                        item=context.item,
+                        headline=headline,
+                        summary_text=summary_text,
+                        gemini_client=self.gemini_client,
+                    )
+                    if translated:
+                        context.final_headline = headline
+                        context.final_summary_text = summary_text
+                        _with_context_signals(
+                            context,
+                            delivery_translation_applied=True,
+                            delivery_translation_reason=None,
+                            final_card_title_source="gemini_delivery_translation",
+                            final_card_summary_source="gemini_delivery_translation",
+                        )
+                    elif translation_reason:
+                        _with_context_signals(
+                            context,
+                            delivery_translation_applied=False,
+                            delivery_translation_reason=translation_reason,
+                        )
                 card = build_news_card(
-                    headline=context.final_headline or context.item.title,
-                    summary_text=context.final_summary_text or (context.summary.summary_text if context.summary else None),
+                    headline=headline,
+                    summary_text=summary_text,
                     url=context.item.canonical_url,
                 )
                 if card is None:

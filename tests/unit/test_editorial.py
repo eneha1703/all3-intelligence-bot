@@ -117,6 +117,23 @@ def test_editorial_shaping_keeps_destatis_construction_market_signal() -> None:
     assert editorial.flags["telegram_worthy"] is True
 
 
+def test_editorial_shaping_keeps_uk_housing_market_signal() -> None:
+    item = _make_item(
+        "UK housing shortage deepens as completions fall and rents rise",
+        "A new housing market report says completions fell 14% while rents rose across the UK residential market.",
+        source_id="telegraph_feed",
+    )
+    item = StoredNormalizedItem(**{**item.__dict__, "metadata": {"market_scope": "uk_housing_market", "broad_feed": True}})
+    decision = _make_decision(housing_market_signal=True)
+
+    editorial = evaluate_send_stage_editorial(item, decision)
+
+    assert editorial.allow_send is True
+    assert editorial.reason is None
+    assert editorial.flags["housing_market_alert_signal"] is True
+    assert editorial.flags["telegram_worthy"] is True
+
+
 def test_editorial_shaping_keeps_wood_central_timber_barrier_signal() -> None:
     item = _make_item(
         "Architects, insurers open new front on English timber cap",

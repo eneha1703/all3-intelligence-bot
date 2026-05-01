@@ -5,6 +5,7 @@ from all3_radar.domain.models import StoredNormalizedItem
 from all3_radar.pipeline.ranking import derive_event_flags
 from all3_radar.pipeline.filters import (
     compute_relevance_status,
+    is_housing_market_signal,
     is_destatis_construction_statistics_signal,
     is_wood_central_timber_economics_signal,
     is_wood_central_timber_policy_signal,
@@ -185,6 +186,48 @@ def test_destatis_construction_statistics_signal_is_detected() -> None:
     assert is_destatis_construction_statistics_signal(item) is True
 
 
+def test_telegraph_uk_housing_market_signal_is_detected() -> None:
+    item = _make_item(
+        "UK housing shortage deepens as completions fall and rents rise",
+        "A new housing market report says completions fell 14% while rents rose across the UK residential market.",
+        broad_feed=True,
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "source_id": "telegraph_feed",
+            "metadata": {"tags": ["news"], "broad_feed": True, "market_scope": "uk_housing_market"},
+        }
+    )
+
+    assert is_housing_market_signal(item) is True
+
+
+def test_uk_housing_market_story_from_broad_feed_keeps_scope() -> None:
+    item = _make_item(
+        "UK housing shortage deepens as completions fall and rents rise",
+        "A new housing market report says completions fell 14% while rents rose across the UK residential market.",
+        broad_feed=True,
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "source_id": "telegraph_feed",
+            "metadata": {"tags": ["news"], "broad_feed": True, "market_scope": "uk_housing_market"},
+        }
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "keep"
+    assert reason is None
+
+
 def test_wood_central_timber_policy_signal_is_detected() -> None:
     item = _make_item(
         "Architects, insurers open new front on English timber cap",
@@ -224,6 +267,60 @@ def test_timber_performance_comparison_story_keeps_scope() -> None:
 
     assert status == "keep"
     assert reason is None
+
+
+def test_construction_briefing_story_without_timber_or_innovation_scope_drops() -> None:
+    item = _make_item(
+        "Contractor names new finance chief after refinancing round",
+        "The company appointed a new executive after a broader refinancing and board update.",
+        broad_feed=True,
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "source_id": "construction_briefing_rss",
+            "metadata": {"tags": ["construction"], "broad_feed": True, "strict_scope": "construction_timber_innovation"},
+        }
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "drop"
+    assert reason in {"no_clear_all3_scope", "broad_feed_without_strong_signal"}
+
+
+def test_interesting_engineering_space_story_drops() -> None:
+    item = _make_item(
+        "Startup unveils orbital battery breakthrough for deep-space missions",
+        "The company says the new battery chemistry could support satellites and deep-space exploration.",
+        broad_feed=True,
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "source_id": "interesting_engineering_rss",
+            "metadata": {
+                "tags": ["engineering"],
+                "broad_feed": True,
+                "strict_scope": "industrial_robotics_physical_ai",
+            },
+        }
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "drop"
+    assert reason == "obvious_off_scope"
 
 
 def test_soft_wood_central_timber_economics_commentary_does_not_trigger_signal() -> None:

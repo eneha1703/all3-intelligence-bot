@@ -9,7 +9,10 @@ from all3_radar.config.loader import load_yaml
 from all3_radar.domain.models import RankedDecision, StoredNormalizedItem
 from all3_radar.pipeline.filters import (
     compute_relevance_status,
+    is_construction_briefing_scope_signal,
     is_destatis_construction_statistics_signal,
+    is_housing_market_signal,
+    is_interesting_engineering_scope_signal,
     is_wood_central_timber_economics_signal,
     is_wood_central_timber_policy_signal,
 )
@@ -291,8 +294,11 @@ def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
     )
     construction_innovation_signal = quantified_scale and _contains_any(haystack, CONSTRUCTION_INNOVATION_TERMS)
     construction_statistics_signal = is_destatis_construction_statistics_signal(item)
+    housing_market_signal = is_housing_market_signal(item)
     timber_policy_signal = is_wood_central_timber_policy_signal(item)
     timber_economics_signal = is_wood_central_timber_economics_signal(item)
+    construction_briefing_scope_signal = is_construction_briefing_scope_signal(item)
+    interesting_engineering_scope_signal = is_interesting_engineering_scope_signal(item)
     funding_event = _contains_any(haystack, FUNDING_TERMS) and not _contains_any(haystack, NON_FUNDING_RAISED_PHRASES)
     acquisition_event = _contains_any(haystack, ACQUISITION_TERMS)
     partnership_event = _contains_any(haystack, PARTNERSHIP_TERMS)
@@ -350,8 +356,11 @@ def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
         "industrial_robotics_signal": industrial_robotics_signal,
         "construction_innovation_signal": construction_innovation_signal,
         "construction_statistics_signal": construction_statistics_signal,
+        "housing_market_signal": housing_market_signal,
         "timber_policy_signal": timber_policy_signal,
         "timber_economics_signal": timber_economics_signal,
+        "construction_briefing_scope_signal": construction_briefing_scope_signal,
+        "interesting_engineering_scope_signal": interesting_engineering_scope_signal,
         "strategic_ai_major_deal_signal": strategic_ai_major_deal_signal,
         "physical_industry_ai_megafunding_signal": physical_industry_ai_megafunding_signal,
         "showcase_only_architecture_penalty": timber_present

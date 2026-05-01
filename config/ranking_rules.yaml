@@ -16,6 +16,9 @@ signals:
   industrial_robotics_signal: 8
   construction_innovation_signal: 6
   construction_statistics_signal: 18
+  housing_market_signal: 12
+  construction_briefing_scope_signal: 6
+  interesting_engineering_scope_signal: 6
   timber_policy_signal: 18
   timber_economics_signal: 18
   consumer_robotics_penalty: -50

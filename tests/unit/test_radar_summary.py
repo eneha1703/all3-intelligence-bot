@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 from all3_radar.domain.enums import SourceLayer
 from all3_radar.domain.models import RankedDecision, StoredNormalizedItem
-from all3_radar.summarization.radar_summary import summarize_candidate
+from all3_radar.summarization.radar_summary import maybe_translate_delivery_card, summarize_candidate
 
 
 def _make_item(title: str, preview: str) -> StoredNormalizedItem:
@@ -43,6 +43,23 @@ class _ThinGemini:
         return ("ABB Robotics said its new PoWa family of cobots addresses a long-standing gap in the market.", None)
 
 
+class _TranslatingGemini:
+    is_available = True
+
+    def rewrite_delivery_card(
+        self,
+        *,
+        title: str,
+        summary: str,
+        source_language: str,
+        target_language: str = "English",
+    ) -> tuple[str, str]:
+        return (
+            "German building permits fall again as housing supply slows",
+            "Official statistics show building permits declined again, pointing to a weaker housing supply pipeline.",
+        )
+
+
 def test_summarize_candidate_prefers_denser_fallback_over_thin_gemini() -> None:
     item = _make_item(
         "ABB Robotics launches PoWa cobot family targeting industrial tasks",
@@ -55,3 +72,29 @@ def test_summarize_candidate_prefers_denser_fallback_over_thin_gemini() -> None:
     assert "ABB Robotics has launched PoWa cobot family targeting industrial tasks." in result.summary_text
     assert "traditional cobots." in result.summary_text
     assert result.used_gemini is False
+
+
+def test_maybe_translate_delivery_card_rewrites_german_sendable_story_to_english() -> None:
+    item = _make_item(
+        "Baugenehmigungen sinken erneut",
+        "Die Zahl der Baugenehmigungen ist erneut gesunken.",
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "source_id": "destatis_press_listing",
+            "metadata": {"origin_language": "de", "delivery_language": "en"},
+        }
+    )
+
+    headline, summary, translated, reason = maybe_translate_delivery_card(
+        item=item,
+        headline=item.title,
+        summary_text=item.text_preview,
+        gemini_client=_TranslatingGemini(),
+    )
+
+    assert translated is True
+    assert reason is None
+    assert headline == "German building permits fall again as housing supply slows"
+    assert "Official statistics show building permits declined again" in summary

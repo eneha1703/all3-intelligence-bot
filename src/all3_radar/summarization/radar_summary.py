@@ -78,6 +78,39 @@ def _build_delivery_fallback(item: StoredNormalizedItem) -> str | None:
     return None
 
 
+def should_translate_delivery(item: StoredNormalizedItem) -> bool:
+    origin_language = str(item.metadata.get("origin_language") or "").strip().lower()
+    delivery_language = str(item.metadata.get("delivery_language") or "").strip().lower()
+    return origin_language and delivery_language and origin_language != delivery_language
+
+
+def maybe_translate_delivery_card(
+    *,
+    item: StoredNormalizedItem,
+    headline: str,
+    summary_text: str | None,
+    gemini_client: GeminiClient,
+) -> tuple[str, str | None, bool, str | None]:
+    if not should_translate_delivery(item) or not summary_text:
+        return headline, summary_text, False, None
+    rewrite_fn = getattr(gemini_client, "rewrite_delivery_card", None)
+    if not callable(rewrite_fn) or not getattr(gemini_client, "is_available", False):
+        return headline, summary_text, False, "translation_unavailable"
+    try:
+        translated_headline, translated_summary = rewrite_fn(
+            title=headline,
+            summary=summary_text,
+            source_language=str(item.metadata.get("origin_language") or "de"),
+            target_language="English",
+        )
+    except GeminiUnavailableError as exc:
+        return headline, summary_text, False, str(exc)
+    translated_summary = sanitize_summary_text(translated_headline, translated_summary)
+    if not translated_headline.strip() or not translated_summary:
+        return headline, summary_text, False, "translation_invalid"
+    return translated_headline.strip(), translated_summary, True, None
+
+
 def summarize_candidate(
     item: StoredNormalizedItem,
     decision: RankedDecision,

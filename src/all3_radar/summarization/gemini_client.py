@@ -22,10 +22,33 @@ class GeminiClient:
     def is_available(self) -> bool:
         return bool(self.api_key)
 
-    def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
+    def _generate_text(self, prompt: str) -> str:
         if not self.api_key:
             raise GeminiUnavailableError("GEMINI_API_KEY is not configured.")
 
+        payload = {"contents": [{"parts": [{"text": prompt}]}]}
+        endpoint = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/{urllib.parse.quote(self.model)}:"
+            f"generateContent?key={urllib.parse.quote(self.api_key)}"
+        )
+        request = urllib.request.Request(
+            endpoint,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=30) as response:
+                body = json.loads(response.read().decode("utf-8"))
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError) as exc:
+            raise GeminiUnavailableError(f"Gemini request failed: {exc}") from exc
+
+        try:
+            return body["candidates"][0]["content"]["parts"][0]["text"].strip()
+        except (KeyError, IndexError, TypeError) as exc:
+            raise GeminiUnavailableError("Gemini response did not contain summary text.") from exc
+
+    def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
         prompt = (
             "Write a short factual Telegram news summary in 2 or 3 short sentences when the source preview supports it. "
             "Use 1 sentence only if no second concrete fact is available. "
@@ -56,27 +79,38 @@ class GeminiClient:
                 }
             ]
         }
-        endpoint = (
-            f"https://generativelanguage.googleapis.com/v1beta/models/{urllib.parse.quote(self.model)}:"
-            f"generateContent?key={urllib.parse.quote(self.api_key)}"
-        )
-        request = urllib.request.Request(
-            endpoint,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=30) as response:
-                body = json.loads(response.read().decode("utf-8"))
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError) as exc:
-            raise GeminiUnavailableError(f"Gemini request failed: {exc}") from exc
-
-        try:
-            text = body["candidates"][0]["content"]["parts"][0]["text"].strip()
-        except (KeyError, IndexError, TypeError) as exc:
-            raise GeminiUnavailableError("Gemini response did not contain summary text.") from exc
+        text = self._generate_text(payload["contents"][0]["parts"][0]["text"])
 
         if borderline and text.upper().startswith("SKIP"):
             return "", "drop"
         return text, None
+
+    def rewrite_delivery_card(
+        self,
+        *,
+        title: str,
+        summary: str,
+        source_language: str,
+        target_language: str = "English",
+    ) -> tuple[str, str]:
+        prompt = (
+            f"Rewrite this Telegram-ready news card into natural factual {target_language}. "
+            "Translate when needed. Keep it concise and human. "
+            "Do not add analysis, hype, or why-it-matters commentary. "
+            "Keep the headline concrete and news-like. Keep the summary to one short factual paragraph. "
+            "Return JSON only with this exact schema: "
+            '{"title": string, "summary": string}. '
+            f"Source language: {source_language}.\n\n"
+            f"Title: {title}\n"
+            f"Summary: {summary}"
+        )
+        text = self._generate_text(prompt)
+        try:
+            payload = json.loads(text)
+            rewritten_title = str(payload["title"]).strip()
+            rewritten_summary = str(payload["summary"]).strip()
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as exc:
+            raise GeminiUnavailableError("Gemini translation response was not valid JSON.") from exc
+        if not rewritten_title or not rewritten_summary:
+            raise GeminiUnavailableError("Gemini translation response was missing card fields.")
+        return rewritten_title, rewritten_summary

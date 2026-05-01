@@ -43,6 +43,9 @@ RANKING_RULES = {
         "industrial_robotics_signal": 8,
         "construction_innovation_signal": 6,
         "construction_statistics_signal": 18,
+        "housing_market_signal": 12,
+        "construction_briefing_scope_signal": 6,
+        "interesting_engineering_scope_signal": 6,
         "timber_policy_signal": 18,
         "timber_economics_signal": 18,
         "consumer_robotics_penalty": -50,
@@ -111,6 +114,54 @@ def test_destatis_statistics_story_now_survives() -> None:
     assert decision.relevance_status == "keep"
     assert decision.send_status == "stored_only"
     assert decision.score == 51
+
+
+def test_telegraph_housing_market_story_gets_market_signal_and_score_lift() -> None:
+    item = _make_item(
+        "UK housing shortage deepens as completions fall and rents rise",
+        "A new housing market report says completions fell 14% while rents rose across the UK residential market.",
+        broad_feed=True,
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "source_id": "telegraph_feed",
+            "metadata": {"tags": ["news"], "broad_feed": True, "market_scope": "uk_housing_market"},
+        }
+    )
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["housing_market_signal"] is True
+    assert decision.relevance_status == "keep"
+    assert decision.score == 37
+
+
+def test_interesting_engineering_robotics_story_gets_scope_signal() -> None:
+    item = _make_item(
+        "Humanoid robot platform expands industrial automation deployments",
+        "The company says the robotics system will scale physical AI and factory automation workflows across manufacturing sites.",
+        broad_feed=True,
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "source_id": "interesting_engineering_rss",
+            "metadata": {
+                "tags": ["engineering"],
+                "broad_feed": True,
+                "strict_scope": "industrial_robotics_physical_ai",
+            },
+        }
+    )
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["interesting_engineering_scope_signal"] is True
+    assert decision.relevance_status == "keep"
+    assert decision.score >= 39
 
 
 def test_wood_central_timber_policy_story_now_survives_without_funding_flag() -> None:
