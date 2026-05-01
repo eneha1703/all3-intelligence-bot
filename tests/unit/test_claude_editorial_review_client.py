@@ -80,6 +80,8 @@ def test_build_claude_editorial_review_prompt_includes_scope_rules() -> None:
     assert "construction automation" in prompt
     assert "housing industrialization or productivity" in prompt
     assert "timber adoption, scaling, economics, or policy" in prompt
+    assert "timber building-performance evidence" in prompt
+    assert "quantified heat-loss" in prompt
     assert "robotics, automation, platform funding, deployment, or physical infrastructure automation" in prompt
     assert "Industrial automation engineering enablement can also be in scope" in prompt
     assert "manufacturing language models" in prompt
@@ -91,6 +93,7 @@ def test_build_claude_editorial_review_prompt_includes_scope_rules() -> None:
     assert "generic enterprise AI, ERP, workflow, procurement, or back-office automation" in prompt
     assert "access-control, security, or generic Industrial IoT security automation" in prompt
     assert "generic manufacturing without robotics, AI, or automation" in prompt
+    assert "Do not reject quantified timber building-performance evidence as mere thought leadership" in prompt
     assert "prefer low or medium confidence over a high-confidence rejection" in prompt
     assert "Return only a single JSON object" in prompt
     assert "Do not use markdown" in prompt

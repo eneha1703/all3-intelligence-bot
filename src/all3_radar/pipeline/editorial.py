@@ -187,6 +187,31 @@ WOOD_CENTRAL_QUANTIFIED_ECONOMICS_TERMS = (
     "higher than",
     "lower than",
 )
+WOOD_CENTRAL_PERFORMANCE_CONTEXT_TERMS = (
+    "heat loss",
+    "thermal bridges",
+    "thermal bridge",
+    "building performance",
+    "energy performance",
+    "operational energy",
+    "cold zones",
+    "identical typology",
+)
+WOOD_CENTRAL_MATERIAL_COMPARISON_TERMS = (
+    "concrete",
+    "steel",
+    "mass timber",
+    "clt",
+    "glulam",
+)
+WOOD_CENTRAL_QUANTIFIED_PERFORMANCE_TERMS = (
+    "%",
+    "per cent",
+    "more heat",
+    "less heat",
+    "higher than",
+    "lower than",
+)
 WOOD_CENTRAL_FRICTION_TERMS = (
     "concern",
     "concerns",
@@ -297,6 +322,13 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         and _contains_any(haystack, WOOD_CENTRAL_QUANTIFIED_ECONOMICS_TERMS)
         and _contains_any(haystack, WOOD_CENTRAL_COMMERCIAL_BARRIER_TERMS)
     )
+    timber_performance_alert_signal = (
+        item.source_id == "wood_central_api"
+        and event_flags.get("timber_performance_signal", False)
+        and _contains_any(haystack, WOOD_CENTRAL_PERFORMANCE_CONTEXT_TERMS)
+        and _contains_any(haystack, WOOD_CENTRAL_MATERIAL_COMPARISON_TERMS)
+        and _contains_any(haystack, WOOD_CENTRAL_QUANTIFIED_PERFORMANCE_TERMS)
+    )
     strategic_industrial_ai_alert_signal = (
         bool(item.metadata.get("broad_feed"))
         and event_flags.get("strategic_ai_major_deal_signal", False)
@@ -314,6 +346,7 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         or official_construction_market_signal
         or timber_adoption_barrier_signal
         or timber_economics_alert_signal
+        or timber_performance_alert_signal
         or strategic_industrial_ai_alert_signal
     )
 
@@ -330,6 +363,7 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         "official_construction_market_signal": official_construction_market_signal,
         "timber_adoption_barrier_signal": timber_adoption_barrier_signal,
         "timber_economics_alert_signal": timber_economics_alert_signal,
+        "timber_performance_alert_signal": timber_performance_alert_signal,
         "strategic_industrial_ai_alert_signal": strategic_industrial_ai_alert_signal,
         "tangible_operational_signal": tangible_operational_signal,
         "telegram_worthy": telegram_worthy,

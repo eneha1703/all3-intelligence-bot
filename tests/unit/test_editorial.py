@@ -149,6 +149,22 @@ def test_editorial_shaping_keeps_wood_central_timber_economics_signal() -> None:
     assert editorial.flags["telegram_worthy"] is True
 
 
+def test_editorial_shaping_keeps_wood_central_timber_performance_signal() -> None:
+    item = _make_item(
+        "Concrete Loses 32% More Heat Than Mass Timber in Chile's Cold Zones",
+        "Concrete buildings lose between 26 and 32 per cent more heat than mass timber buildings of identical typology when thermal bridges are included in the calculation.",
+        source_id="wood_central_api",
+    )
+    decision = _make_decision(timber_performance_signal=True)
+
+    editorial = evaluate_send_stage_editorial(item, decision)
+
+    assert editorial.allow_send is True
+    assert editorial.reason is None
+    assert editorial.flags["timber_performance_alert_signal"] is True
+    assert editorial.flags["telegram_worthy"] is True
+
+
 def test_editorial_shaping_keeps_macro_statistics_without_construction_signal_blocked() -> None:
     item = _make_item(
         "Consumer prices in Germany rise 0.2% in April 2026",
