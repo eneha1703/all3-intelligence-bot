@@ -416,6 +416,150 @@ def test_parent_company_stock_market_story_without_robotics_segment_still_drops(
     assert reason == "no_clear_all3_scope"
 
 
+def test_consumer_robotaxi_service_guide_is_dropped_as_obvious_off_scope() -> None:
+    item = _make_item(
+        "Robotaxi service guide explains where public rides are available",
+        "The guide explains how to ride the robotaxi service, where available city expansion is happening, and which app-based ride options are live.",
+        broad_feed=True,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "drop"
+    assert reason == "obvious_off_scope"
+
+
+def test_autonomous_ride_hailing_explainer_is_dropped_as_obvious_off_scope() -> None:
+    item = _make_item(
+        "Autonomous taxi ride-hailing service expands public rides",
+        "The explainer covers the ride-hailing service, app-based booking flow, and public rides as the autonomous taxi network enters more city zones.",
+        broad_feed=True,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "drop"
+    assert reason == "obvious_off_scope"
+
+
+def test_how_to_ride_costs_crash_record_av_guide_is_dropped_as_obvious_off_scope() -> None:
+    item = _make_item(
+        "Self-driving taxi guide: how to ride, costs, crash record, and where available",
+        "The story walks through how to ride the self-driving taxi service, what it costs, the crash record, and where the public rides are available.",
+        broad_feed=True,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "drop"
+    assert reason == "obvious_off_scope"
+
+
+def test_factory_amr_story_still_keeps_scope() -> None:
+    item = _make_item(
+        "Factory AMRs expand material handling autonomy on the production floor",
+        "The deployment adds autonomous mobile robots for industrial material handling and factory logistics workflows.",
+        broad_feed=False,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "keep"
+    assert reason is None
+
+
+def test_warehouse_robotics_story_still_keeps_scope() -> None:
+    item = _make_item(
+        "Warehouse robotics rollout adds autonomous mobile robots to industrial material handling operations",
+        "The company is deploying autonomous mobile robots for industrial warehouse material handling and factory logistics operations.",
+        broad_feed=False,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "keep"
+    assert reason is None
+
+
+def test_construction_autonomy_story_still_keeps_scope() -> None:
+    item = _make_item(
+        "Construction autonomy platform expands jobsite robotics workflows",
+        "The company is applying autonomous systems and jobsite robotics to construction automation and worksite productivity.",
+        broad_feed=False,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "keep"
+    assert reason is None
+
+
+def test_off_road_heavy_equipment_autonomy_story_still_keeps_scope() -> None:
+    item = _make_item(
+        "Off-road heavy equipment autonomy expands autonomous haulage at mine site",
+        "The deployment adds autonomous haulage and heavy equipment autonomy for off-road mining operations.",
+        broad_feed=False,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "keep"
+    assert reason is None
+
+
+def test_physical_infrastructure_automation_autonomy_story_still_keeps_scope() -> None:
+    item = _make_item(
+        "Physical infrastructure automation platform coordinates construction automation workflows",
+        "The platform targets infrastructure automation, data center construction, and autonomous coordination for physical project execution across construction automation workflows.",
+        broad_feed=False,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "keep"
+    assert reason is None
+
+
 def test_broad_feed_major_industrial_ai_merger_story_survives_scope_gate() -> None:
     item = _make_item(
         "Cohere and Aleph Alpha explore merger with Schwarz Group backing",

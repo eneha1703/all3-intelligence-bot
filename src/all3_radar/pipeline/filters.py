@@ -18,6 +18,36 @@ CONSUMER_ROBOT_TERMS = {
     "toy robot",
     "consumer robot",
 }
+CONSUMER_AV_SERVICE_TERMS = {
+    "robotaxi",
+    "robotaxi service",
+    "autonomous taxi",
+    "self-driving taxi",
+    "ride-hailing",
+    "ride hailing",
+    "ride service",
+    "ride-sharing",
+    "ridesharing",
+    "autonomous ride service",
+    "self-driving ride service",
+    "public rides",
+}
+CONSUMER_AV_GUIDE_TERMS = {
+    "how to ride",
+    "costs",
+    "cost to ride",
+    "crash record",
+    "where available",
+    "available in",
+    "ride in",
+    "book a ride",
+    "hail a ride",
+    "app-based",
+    "ride app",
+    "city expansion",
+    "service availability",
+    "public ride",
+}
 MILITARY_ROBOTICS_TERMS = {
     "military robot",
     "military robotics",
@@ -132,6 +162,31 @@ INDUSTRIAL_CONTEXT_TERMS = {
     "timber",
     "permitting",
     "code",
+}
+INDUSTRIAL_AUTONOMY_EXCEPTION_TERMS = INDUSTRIAL_CONTEXT_TERMS | {
+    "warehouse",
+    "warehousing",
+    "logistics",
+    "intralogistics",
+    "material handling",
+    "autonomous mobile robots",
+    "mobile industrial robots",
+    "amr",
+    "amrs",
+    "agv",
+    "agvs",
+    "construction automation",
+    "construction autonomy",
+    "jobsite robotics",
+    "off-road",
+    "mining",
+    "mine site",
+    "heavy equipment",
+    "earthmoving",
+    "haul truck",
+    "autonomous haulage",
+    "infrastructure automation",
+    "data center construction",
 }
 TOPIC_TERMS = {
     "robot",
@@ -422,6 +477,12 @@ def has_any_term(text: str, terms: set[str]) -> bool:
 def is_obvious_off_scope(item: StoredNormalizedItem) -> bool:
     haystack = _normalize_text(f"{item.title} {item.text_preview or ''}")
     if has_any_term(haystack, MILITARY_ROBOTICS_TERMS):
+        return True
+    if (
+        has_any_term(haystack, CONSUMER_AV_SERVICE_TERMS)
+        and has_any_term(haystack, CONSUMER_AV_GUIDE_TERMS)
+        and not has_any_term(haystack, INDUSTRIAL_AUTONOMY_EXCEPTION_TERMS)
+    ):
         return True
     if (
         (
