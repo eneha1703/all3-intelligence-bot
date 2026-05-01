@@ -26,10 +26,15 @@ Weekly Digest House Style
   "this underscores"
 - The headline should be interpretive, not a lightly rewritten source title.
 - Do not restate the source headline in the first sentence.
+- Do not repeat the same core fact or thought in the headline and the first sentence with only light rewording.
+- If the headline already carries the funding or deployment fact, the first sentence should add useful detail or change the angle.
 - Prefer calm, clear, readable language over jargon or hype.
 - Do not write from a first-person company perspective:
   avoid "we", "our", "our need", "our goals", or "our strategy".
 - Do not sound like you are justifying relevance to the team.
+- Do not default to opening every paragraph with the company name.
+- Vary the sentence openings across items.
+- When possible, open with the strongest fact, metric, or market detail instead.
 - Use only facts present in the provided input.
 - Do not invent investors, customers, timelines, outcomes, or implications not grounded in the source.
 - Always format currencies as:

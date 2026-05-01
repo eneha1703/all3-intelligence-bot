@@ -341,26 +341,39 @@ def _prepare_digest_rows(rows: list[dict[str, object]], *, limit: int) -> list[d
     strong_rows = [
         row for row in non_noise_rows if _weekly_bucket(row) not in {"weak_generic_funding", "weak_off_thesis"}
     ]
-    sorted_strong_rows = _dedupe_semantic_digest_rows(_sort_digest_rows(strong_rows))
+    sent_strong_rows = [row for row in strong_rows if str(row.get("send_status") or "") == "sent"]
+    stored_strong_rows = [row for row in strong_rows if str(row.get("send_status") or "") != "sent"]
+
+    sorted_sent_rows = _dedupe_semantic_digest_rows(_sort_digest_rows(sent_strong_rows))
+    sorted_stored_rows = _dedupe_semantic_digest_rows(_sort_digest_rows(stored_strong_rows))
 
     preferred: list[dict[str, object]] = []
     selected_ids: set[str] = set()
     for bucket in WEEKLY_PREFERRED_BUCKETS:
-        for row in sorted_strong_rows:
-            row_id = str(row["canonical_event_id"])
-            if row_id in selected_ids or _weekly_bucket(row) != bucket:
+        for pool in (sorted_sent_rows, sorted_stored_rows):
+            for row in pool:
+                row_id = str(row["canonical_event_id"])
+                if row_id in selected_ids or _weekly_bucket(row) != bucket:
+                    continue
+                preferred.append(row)
+                selected_ids.add(row_id)
+                break
+            else:
                 continue
-            preferred.append(row)
-            selected_ids.add(row_id)
             break
 
-    remaining_strong_rows = [row for row in sorted_strong_rows if str(row["canonical_event_id"]) not in selected_ids]
-    prepared = preferred + remaining_strong_rows
+    remaining_sent_rows = [row for row in sorted_sent_rows if str(row["canonical_event_id"]) not in selected_ids]
+    prepared = preferred + remaining_sent_rows
+    if len(prepared) >= min(limit, 5):
+        return prepared[:limit]
+
+    remaining_stored_rows = [row for row in sorted_stored_rows if str(row["canonical_event_id"]) not in selected_ids]
+    prepared.extend(remaining_stored_rows)
     if len(prepared) >= min(limit, 5):
         return prepared[:limit]
 
     seen_ids = {str(row["canonical_event_id"]) for row in prepared}
-    backfill_rows = [row for row in rows if str(row["canonical_event_id"]) not in seen_ids]
+    backfill_rows = [row for row in non_noise_rows if str(row["canonical_event_id"]) not in seen_ids]
     prepared.extend(_dedupe_semantic_digest_rows(_sort_digest_rows(backfill_rows)))
     return _dedupe_semantic_digest_rows(prepared)[:limit]
 

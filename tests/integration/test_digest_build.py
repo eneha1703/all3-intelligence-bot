@@ -337,7 +337,7 @@ def test_digest_build_generates_telegram_ready_artifact_with_claude(monkeypatch,
     service = DigestService(repo_root=repo_root, claude_client=fake_client)
     result = service.build_digest("2026-W18", output_path=output_path)
 
-    assert result.candidate_count == 8
+    assert result.candidate_count == 6
     assert result.claude_used is True
     assert result.fallback_reason is None
 
@@ -381,6 +381,30 @@ def test_digest_build_generates_telegram_ready_artifact_with_claude(monkeypatch,
     assert len(fake_client.writer_prompts) == 1
 
 
+def test_digest_build_prefers_sent_stories_before_stored_only_backfill(monkeypatch, tmp_path) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "digest.db"
+    output_path = tmp_path / "weekly_digest_2026-W18.md"
+    schema_path = repo_root / "src" / "all3_radar" / "storage" / "schema.sql"
+    _seed_digest_db(db_path, schema_path)
+
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("CLAUDE_DIGEST_ENABLED", "false")
+
+    service = DigestService(repo_root=repo_root)
+    result = service.build_digest("2026-W18", output_path=output_path)
+
+    assert result.candidate_count == 6
+    assert result.claude_used is False
+    report_text = (tmp_path / "weekly_digest_2026-W18.report.md").read_text(encoding="utf-8")
+    assert "Sereact scales physical AI reliability after fresh funding" in report_text
+    assert "Mass timber school pipeline points to repeatable civic deployment" in report_text
+    assert "SoftBank and Roze turn AI infrastructure into a robotics delivery problem" in report_text
+    assert ALL3_TITLE_A in report_text
+    assert PROMETHEUS_TITLE in report_text
+    assert "Waymo, Alphabet's robotaxi service" not in report_text
+
+
 def test_digest_build_falls_back_to_deterministic_artifact_without_claude(monkeypatch, tmp_path) -> None:
     repo_root = Path(__file__).resolve().parents[2]
     db_path = tmp_path / "digest.db"
@@ -394,7 +418,7 @@ def test_digest_build_falls_back_to_deterministic_artifact_without_claude(monkey
     service = DigestService(repo_root=repo_root, claude_client=_FailingClaudeClient())
     result = service.build_digest("2026-W18", output_path=output_path)
 
-    assert result.candidate_count == 8
+    assert result.candidate_count == 6
     assert result.claude_used is False
     assert result.fallback_reason == "timeout"
     digest_text = output_path.read_text(encoding="utf-8")
@@ -418,7 +442,7 @@ def test_digest_build_falls_back_to_deterministic_artifact_without_claude(monkey
 
     assert digest_row[0] == "completed"
     assert digest_row[1].startswith("Top 5 News Highlights | 23-30 April 2026 | Week 18")
-    assert candidate_count == 8
+    assert candidate_count == 6
     report_text = (tmp_path / "weekly_digest_2026-W18.report.md").read_text(encoding="utf-8")
     assert "## Claude Digest Status" in report_text
     assert "- Claude used: no" in report_text
@@ -532,7 +556,7 @@ def test_digest_build_dedupes_duplicate_story_candidates(monkeypatch, tmp_path) 
     service = DigestService(repo_root=repo_root)
     result = service.build_digest("2026-W18", output_path=output_path)
 
-    assert result.candidate_count == 9
+    assert result.candidate_count == 6
     digest_text = output_path.read_text(encoding="utf-8")
     assert digest_text.count("A banker wants to trade his $4.8 million California estate for shares in Anthropic") <= 1
     assert digest_text.count("1. <b>") == 1
