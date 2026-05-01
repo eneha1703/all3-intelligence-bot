@@ -2681,6 +2681,381 @@ def test_claude_editorial_medium_rejection_records_send_ok_and_reject_reason(
     assert signals["claude_editorial_reject_reason"] == "interesting_but_not_strong_enough"
 
 
+def _run_claude_editorial_single_case(
+    monkeypatch,
+    tmp_path,
+    *,
+    slug: str,
+    title: str,
+    description: str,
+    tags: tuple[str, ...],
+    claude_result: ClaudeEditorialReviewResult,
+    source_id: str | None = None,
+    source_name: str | None = None,
+    source_url: str | None = None,
+    source_priority: int = 100,
+    item_link: str | None = None,
+) -> tuple[object, object, list, str, str | None, dict]:
+    repo_root = Path(__file__).resolve().parents[2]
+    baseline_db_path = tmp_path / f"{slug}_baseline.db"
+    db_path = tmp_path / f"{slug}.db"
+    monkeypatch.setenv("DATABASE_PATH", str(baseline_db_path))
+    monkeypatch.setenv("CLAUDE_EDITORIAL_ENABLED", "false")
+    monkeypatch.setenv("CLAUDE_FINAL_CARD_ENABLED", "false")
+
+    now = datetime.now(timezone.utc)
+    resolved_source_id = source_id or f"{slug}_feed"
+    resolved_source_name = source_name or f"{slug} Feed"
+    resolved_source_url = source_url or f"https://example.com/{slug}.xml"
+    resolved_item_link = item_link or f"https://example.com/{slug}"
+    feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>{title}</title>
+    <link>{resolved_item_link}</link>
+    <description>{description}</description>
+    <pubDate>{format_datetime(now - timedelta(hours=1))}</pubDate>
+    <guid>{slug}-1</guid>
+  </item>
+</channel></rss>"""
+
+    registry = SourceRegistry(
+        (
+            SourceDefinition(
+                id=resolved_source_id,
+                name=resolved_source_name,
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url=resolved_source_url,
+                priority=source_priority,
+                tags=tags,
+            ),
+        )
+    )
+
+    class FakeGeminiClient:
+        is_available = True
+
+        def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
+            return (preview or title, None)
+
+    class FakeTelegramSender:
+        def __init__(self) -> None:
+            self.sent_cards = []
+
+        def send_card(self, card):
+            self.sent_cards.append(card)
+            return [
+                TelegramDelivery(
+                    chat_id="123",
+                    status="sent",
+                    telegram_message_id=f"msg-{len(self.sent_cards)}",
+                    error_text=None,
+                    payload_text=card.text,
+                )
+            ]
+
+    class FakeClaudeEditorialClient:
+        is_available = True
+
+        def review_candidate(self, **kwargs):
+            return claude_result
+
+    def fake_fetch_text(url: str) -> str:
+        assert url == resolved_source_url
+        return feed
+
+    baseline_sender = FakeTelegramSender()
+    baseline_service = RadarService(
+        repo_root=repo_root,
+        registry=registry,
+        fetch_text_fn=fake_fetch_text,
+        gemini_client=FakeGeminiClient(),
+        telegram_sender=baseline_sender,
+    )
+    baseline_result = baseline_service.run(dry_run=False)
+
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("CLAUDE_EDITORIAL_ENABLED", "true")
+    fake_sender = FakeTelegramSender()
+    service = RadarService(
+        repo_root=repo_root,
+        registry=registry,
+        fetch_text_fn=fake_fetch_text,
+        gemini_client=FakeGeminiClient(),
+        claude_editorial_review_client=FakeClaudeEditorialClient(),
+        telegram_sender=fake_sender,
+    )
+    result = service.run(dry_run=False)
+    send_status, skip_reason, signals, _ = _load_radar_decision_for_title(db_path, title)
+    return baseline_result, result, fake_sender.sent_cards, send_status, skip_reason, signals
+
+
+def test_claude_editorial_medium_promotion_promotes_top_taxonomy_buckets(
+    monkeypatch, tmp_path
+) -> None:
+    teradyne_baseline, teradyne_result, teradyne_cards, teradyne_status, teradyne_skip_reason, teradyne_signals = _run_claude_editorial_single_case(
+        monkeypatch,
+        tmp_path,
+        slug="medium-teradyne",
+        title="Robotics segment revenue rises at the start of 2026",
+        description="Teradyne Robotics brought in $91 million in Q1 2026, with its AI products helping to boost robotics sales.",
+        tags=("robotics", "industrial"),
+        claude_result=ClaudeEditorialReviewResult(
+            send_ok=True,
+            reject_reason=None,
+            edited_title="Teradyne Robotics revenue rises as industrial automation demand builds",
+            edited_summary="Teradyne Robotics reported stronger segment revenue, pointing to continued demand for industrial automation systems.",
+            confidence="medium",
+            used_claude=True,
+        ),
+    )
+    assert teradyne_baseline.sent_items == 0
+    assert teradyne_result.sent_items == 1
+    assert len(teradyne_cards) == 1
+    assert teradyne_status == "sent"
+    assert teradyne_skip_reason is None
+    assert teradyne_signals["claude_editorial_outcome"] == "promoted"
+    assert teradyne_signals["claude_editorial_confidence"] == "medium"
+    assert teradyne_signals["claude_editorial_medium_promoted"] is True
+
+    launchpad_baseline, launchpad_result, launchpad_cards, launchpad_status, launchpad_skip_reason, launchpad_signals = _run_claude_editorial_single_case(
+        monkeypatch,
+        tmp_path,
+        slug="medium-launchpad",
+        title="Manufacturing language model helps engineers outline automation workflows",
+        description="The tool is positioned as an aid for factory automation engineering teams to outline cell designs and programming tasks, without reporting customer deployments, scale metrics, or commissioning results.",
+        tags=("robotics", "industrial"),
+        source_id="robot_report_rss",
+        source_name="The Robot Report RSS",
+        source_url="https://robot-report.example/medium-launchpad.xml",
+        source_priority=85,
+        claude_result=ClaudeEditorialReviewResult(
+            send_ok=True,
+            reject_reason=None,
+            edited_title="Manufacturing language model targets industrial automation engineering",
+            edited_summary="The tool is aimed at speeding automation design, programming, and deployment engineering for factory systems.",
+            confidence="medium",
+            used_claude=True,
+        ),
+    )
+    assert launchpad_baseline.sent_items == 0
+    assert launchpad_result.sent_items == 1
+    assert len(launchpad_cards) == 1
+    assert launchpad_status == "sent"
+    assert launchpad_skip_reason is None
+    assert launchpad_signals["claude_editorial_outcome"] == "promoted"
+    assert launchpad_signals["claude_editorial_confidence"] == "medium"
+    assert launchpad_signals["claude_editorial_medium_promoted"] is True
+
+    roze_baseline, roze_result, roze_cards, roze_status, roze_skip_reason, roze_signals = _run_claude_editorial_single_case(
+        monkeypatch,
+        tmp_path,
+        slug="medium-roze",
+        title="Robotics-led infrastructure venture targets data center buildout",
+        description="The venture combines robotics, data center construction, and physical AI platform ambitions for infrastructure delivery.",
+        tags=("robotics", "construction", "infrastructure"),
+        claude_result=ClaudeEditorialReviewResult(
+            send_ok=True,
+            reject_reason=None,
+            edited_title="Robotics-led infrastructure venture targets data center buildout",
+            edited_summary="The company is positioning robotics and physical AI as part of how data center capacity gets built.",
+            confidence="medium",
+            used_claude=True,
+        ),
+    )
+    assert roze_baseline.sent_items == 1
+    assert roze_result.sent_items == 1
+    assert len(roze_cards) == 1
+    assert roze_status == "sent"
+    assert roze_skip_reason is None
+    assert roze_signals["claude_editorial_outcome"] == "promoted"
+    assert roze_signals["claude_editorial_confidence"] == "medium"
+    assert roze_signals["claude_editorial_medium_promoted"] is True
+
+
+def test_claude_editorial_medium_promotion_does_not_apply_to_reviewed_non_top_taxonomy_buckets(
+    monkeypatch, tmp_path
+) -> None:
+    cases = [
+        (
+            "medium-greenhouse",
+            "Omni-directional trolley positions greenhouse automation for harvesting robots",
+            "The German agritech startup calls the trolley a robot-ready stepping stone to greenhouse automation, fully-automated greenhouses, and harvesting robots for industrial greenhouse operations.",
+            ("automation",),
+            "robotics_automation_news_rss",
+            "Robotics and Automation News RSS",
+            "https://robotics-automation.example/medium-greenhouse.xml",
+            80,
+            None,
+        ),
+        (
+            "medium-procurement",
+            "How Procurement Automation Creates Audit-Ready Supply Chains in Manufacturing",
+            "A tier-two automotive supplier used procurement automation to improve approval history and audit-ready supply chain workflows.",
+            ("automation",),
+            "robotics_automation_news_rss",
+            "Robotics and Automation News RSS",
+            "https://robotics-automation.example/medium-procurement.xml",
+            80,
+            None,
+        ),
+        (
+            "medium-security",
+            "How Access Control Systems Integrate with Industrial IoT for Real-Time Security Automation",
+            "Factories and logistics hubs are using connected sensors and access control systems for real-time security automation in industrial IoT environments.",
+            ("automation",),
+            "robotics_automation_news_rss",
+            "Robotics and Automation News RSS",
+            "https://robotics-automation.example/medium-security.xml",
+            80,
+            None,
+        ),
+        (
+            "medium-auction",
+            "Surplus robots, robot welders, and support equipment to be auctioned by BTM Industrial",
+            "BTM Industrial is liquidating surplus inventory and auctioning robot welders and support equipment to free up floor space.",
+            ("automation",),
+            "robotics_automation_news_rss",
+            "Robotics and Automation News RSS",
+            "https://robotics-automation.example/medium-auction.xml",
+            80,
+            None,
+        ),
+    ]
+
+    for slug, title, description, tags, source_id, source_name, source_url, source_priority, item_link in cases:
+        baseline_result, result, sent_cards, send_status, skip_reason, signals = _run_claude_editorial_single_case(
+            monkeypatch,
+            tmp_path,
+            slug=slug,
+            title=title,
+            description=description,
+            tags=tags,
+            source_id=source_id,
+            source_name=source_name,
+            source_url=source_url,
+            source_priority=source_priority,
+            item_link=item_link,
+            claude_result=ClaudeEditorialReviewResult(
+                send_ok=True,
+                reject_reason=None,
+                edited_title=f"Edited {title}",
+                edited_summary="Edited summary suggesting the story might be worth sending.",
+                confidence="medium",
+                used_claude=True,
+            ),
+        )
+        assert signals["claude_editorial_reviewed"] is True
+        assert signals["claude_editorial_send_ok"] is True
+        assert signals["claude_editorial_has_edited_title"] is True
+        assert signals["claude_editorial_has_edited_summary"] is True
+        assert signals["claude_editorial_outcome"] == "fallback_low_or_medium_confidence"
+        assert signals["claude_editorial_confidence"] == "medium"
+        assert signals.get("claude_editorial_medium_promoted") is not True
+        assert baseline_result.sent_items == 0
+        assert result.sent_items == 0
+        assert len(sent_cards) == result.sent_items
+        assert send_status in {"stored_only", "skip"}
+        assert skip_reason in {None, "editorial_not_telegram_worthy", "no_clear_all3_scope"}
+
+
+def test_claude_editorial_medium_promotion_does_not_apply_to_deprioritized_waymo_candidate(
+    monkeypatch, tmp_path
+) -> None:
+    baseline_result, result, sent_cards, send_status, skip_reason, signals = _run_claude_editorial_single_case(
+        monkeypatch,
+        tmp_path,
+        slug="medium-waymo",
+        title="Waymo, Alphabet's robotaxi service, is growing fast. Here's how to ride, costs, and the self-driving cars' crash record.",
+        description="Waymo is Alphabet's robotaxi service. It has partnered with Uber and DoorDash, launched public rides across cities, worked through regulation and licensing, and raised $16 billion to expand the autonomous service.",
+        tags=("automation",),
+        source_id="business_insider_feed",
+        source_name="Business Insider Feed",
+        source_url="https://business-insider.example/medium-waymo.xml",
+        source_priority=100,
+        item_link="https://www.businessinsider.com/waymo",
+        claude_result=ClaudeEditorialReviewResult(
+            send_ok=True,
+            reject_reason=None,
+            edited_title="Edited Waymo title",
+            edited_summary="Edited summary suggesting the story might be worth sending.",
+            confidence="medium",
+            used_claude=True,
+        ),
+    )
+    assert baseline_result.sent_items == 0
+    assert result.sent_items == 0
+    assert len(sent_cards) == 0
+    assert signals["claude_editorial_reviewed"] is False
+    assert signals["claude_editorial_outcome"] == "not_reviewed"
+    assert signals["claude_editorial_not_reviewed_reason"] == "ineligible"
+    assert signals.get("claude_editorial_medium_promoted") is not True
+    assert send_status == "skip"
+    assert skip_reason == "no_clear_all3_scope"
+
+
+def test_claude_editorial_medium_promotion_requires_send_ok_complete_edits_and_medium_confidence(
+    monkeypatch, tmp_path
+) -> None:
+    cases = [
+        ClaudeEditorialReviewResult(
+            send_ok=False,
+            reject_reason="borderline_not_strong_enough",
+            edited_title=None,
+            edited_summary=None,
+            confidence="medium",
+            used_claude=True,
+        ),
+        ClaudeEditorialReviewResult(
+            send_ok=True,
+            reject_reason=None,
+            edited_title=None,
+            edited_summary="Usable summary but missing title.",
+            confidence="medium",
+            used_claude=True,
+        ),
+        ClaudeEditorialReviewResult(
+            send_ok=True,
+            reject_reason=None,
+            edited_title="Usable title but missing summary",
+            edited_summary=None,
+            confidence="medium",
+            used_claude=True,
+        ),
+        ClaudeEditorialReviewResult(
+            send_ok=True,
+            reject_reason=None,
+            edited_title="Low confidence title",
+            edited_summary="Low confidence summary",
+            confidence="low",
+            used_claude=True,
+        ),
+    ]
+
+    for index, claude_result in enumerate(cases, start=1):
+        baseline_result, result, sent_cards, send_status, skip_reason, signals = _run_claude_editorial_single_case(
+            monkeypatch,
+            tmp_path,
+            slug=f"medium-guard-{index}",
+            title="Robotics segment revenue rises at the start of 2026",
+            description="Teradyne Robotics brought in $91 million in Q1 2026, with its AI products helping to boost robotics sales.",
+            tags=("robotics", "industrial"),
+            claude_result=claude_result,
+        )
+        assert signals.get("claude_editorial_medium_promoted") is not True
+        assert signals["claude_editorial_outcome"] == "fallback_low_or_medium_confidence"
+        assert signals["claude_editorial_confidence"] == claude_result.confidence
+        assert baseline_result.sent_items == result.sent_items
+        assert len(sent_cards) == result.sent_items
+        assert send_status in {"stored_only", "sent", "skip"}
+        assert skip_reason in {None, "editorial_not_telegram_worthy", "already_sent_canonical_event", "telegram_send_failed"}
+
+
 def test_claude_editorial_review_pool_prioritizes_strategic_borderline_candidates(
     monkeypatch, tmp_path
 ) -> None:

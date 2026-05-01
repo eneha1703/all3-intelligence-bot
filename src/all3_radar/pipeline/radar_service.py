@@ -204,12 +204,11 @@ def _contains_any_term(haystack: str, terms: tuple[str, ...]) -> bool:
     return any(term in haystack for term in terms)
 
 
-def _claude_editorial_review_priority(context: CurrentRunContext) -> tuple[int, int]:
+def _claude_editorial_taxonomy_bucket(context: CurrentRunContext) -> str:
     if context.decision is None:
-        return (0, 0)
+        return "other"
 
     haystack = f"{context.item.title} {context.item.text_preview or ''}".lower()
-    score = context.decision.score
     signals = context.decision.signals
     event_flags = signals.get("event_flags", {})
     if not isinstance(event_flags, dict):
@@ -371,20 +370,67 @@ def _claude_editorial_review_priority(context: CurrentRunContext) -> tuple[int, 
     auction_story = _contains_any_term(haystack, auction_terms)
     generic_business_explainer = _contains_any_term(haystack, explainer_terms)
 
-    if (
-        consumer_robotaxi_story
-        or timber_policy_only_story
-        or security_automation_story
-        or procurement_story
-        or auction_story
-        or generic_business_explainer
-    ):
-        return (0, score)
-    if robotics_business_story or automation_engineering_story or robotics_infrastructure_story or greenhouse_automation_story:
-        return (3, score)
+    if consumer_robotaxi_story:
+        return "consumer_robotaxi_or_av_service"
+    if security_automation_story:
+        return "security_access_control_iiot"
+    if procurement_story:
+        return "backoffice_procurement_workflow"
+    if auction_story:
+        return "auction_liquidation_surplus"
+    if timber_policy_only_story or generic_business_explainer:
+        return "generic_finance_or_explainer"
+    if robotics_infrastructure_story:
+        return "robotics_led_infrastructure"
+    if robotics_business_story:
+        return "robotics_business_performance"
+    if automation_engineering_story:
+        return "industrial_automation_engineering_enablement"
+    if greenhouse_automation_story:
+        return "greenhouse_ag_automation"
     if clear_industrial_operating_signal:
-        return (2, score)
-    return (1, score)
+        return "other"
+    return "other"
+
+
+def _claude_editorial_review_priority(context: CurrentRunContext) -> tuple[int, int]:
+    if context.decision is None:
+        return (0, 0)
+
+    bucket = _claude_editorial_taxonomy_bucket(context)
+    score = context.decision.score
+
+    priority_by_bucket = {
+        "robotics_led_infrastructure": 4,
+        "robotics_business_performance": 4,
+        "industrial_automation_engineering_enablement": 4,
+        "greenhouse_ag_automation": 3,
+        "other": 2,
+        "consumer_robotaxi_or_av_service": 0,
+        "backoffice_procurement_workflow": 0,
+        "security_access_control_iiot": 0,
+        "auction_liquidation_surplus": 0,
+        "generic_finance_or_explainer": 0,
+    }
+    return (priority_by_bucket.get(bucket, 1), score)
+
+
+def _is_allowed_medium_claude_editorial_promotion(
+    context: CurrentRunContext,
+    claude_result: ClaudeEditorialReviewResult,
+) -> bool:
+    if not claude_result.send_ok:
+        return False
+    if claude_result.confidence != "medium":
+        return False
+    if claude_result.edited_title is None or claude_result.edited_summary is None:
+        return False
+
+    return _claude_editorial_taxonomy_bucket(context) in {
+        "robotics_led_infrastructure",
+        "robotics_business_performance",
+        "industrial_automation_engineering_enablement",
+    }
 
 
 def _settings_snapshot(settings: object) -> dict:
@@ -996,6 +1042,45 @@ class RadarService:
                         )
                         LOGGER.info(
                             "Claude editorial promoted candidate: item=%s score=%s",
+                            context.item.normalized_item_id,
+                            context.decision.score,
+                        )
+                        continue
+
+                    if _is_allowed_medium_claude_editorial_promotion(context, claude_result):
+                        increment_stage_counter("claude_editorial_promoted")
+                        _set_claude_editorial_diagnostics(
+                            context,
+                            reviewed=True,
+                            outcome="promoted",
+                            review_rank=context.decision.signals.get("claude_editorial_review_rank"),
+                            confidence=claude_result.confidence,
+                            reason=None,
+                            not_reviewed_reason=None,
+                        )
+                        context.decision = RankedDecision(
+                            relevance_status=context.decision.relevance_status,
+                            send_status=context.decision.send_status,
+                            skip_reason=None,
+                            score=context.decision.score,
+                            signals={
+                                **context.decision.signals,
+                                "claude_editorial_promoted": True,
+                                "claude_editorial_medium_promoted": True,
+                                "claude_editorial_confidence": claude_result.confidence,
+                            },
+                            is_shortlisted=context.decision.is_shortlisted,
+                            is_borderline=context.decision.is_borderline,
+                        )
+                        context.final_headline = claude_result.edited_title
+                        context.final_summary_text = claude_result.edited_summary
+                        _with_context_signals(
+                            context,
+                            final_card_title_source="claude_editorial_promotion",
+                            final_card_summary_source="claude_editorial_promotion",
+                        )
+                        LOGGER.info(
+                            "Claude editorial medium-confidence promotion: item=%s score=%s",
                             context.item.normalized_item_id,
                             context.decision.score,
                         )
