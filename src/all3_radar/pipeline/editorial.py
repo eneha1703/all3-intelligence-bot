@@ -123,6 +123,29 @@ STRATEGIC_AI_REAL_WORLD_TERMS = (
     "physical industries",
     "factory floor",
 )
+HUMANOID_ACCESS_TERMS = (
+    "humanoid",
+    "aliexpress",
+    "global sales",
+    "global availability",
+    "broader market",
+    "entry point",
+    "western peers",
+    "experimentation",
+    "entry-level",
+    "low-cost",
+    "lower-cost",
+)
+HUMANOID_ACCESS_IMPACT_TERMS = (
+    "$",
+    "usd",
+    "price point",
+    "access",
+    "affordability",
+    "cheaper",
+    "lower-cost",
+    "global",
+)
 DESTATIS_CONSTRUCTION_MARKET_TERMS = (
     "bauhauptgewerbe",
     "auftragseingang",
@@ -351,6 +374,11 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         and _contains_any(haystack, HOUSING_MARKET_CONTEXT_TERMS)
         and _contains_any(haystack, HOUSING_MARKET_QUANTIFIED_TERMS)
     )
+    humanoid_access_signal = (
+        event_flags.get("humanoid_affordability_signal", False)
+        and _contains_any(haystack, HUMANOID_ACCESS_TERMS)
+        and _contains_any(haystack, HUMANOID_ACCESS_IMPACT_TERMS)
+    )
     timber_adoption_barrier_signal = (
         item.source_id == "wood_central_api"
         and event_flags.get("timber_policy_signal", False)
@@ -392,6 +420,7 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         or (construction_execution and event_flags.get("quantified_scale_signal", False))
         or official_construction_market_signal
         or housing_market_alert_signal
+        or humanoid_access_signal
         or timber_adoption_barrier_signal
         or timber_economics_alert_signal
         or timber_performance_alert_signal
@@ -410,6 +439,7 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         "adjacent_logistics_only": adjacent_logistics_only,
         "official_construction_market_signal": official_construction_market_signal,
         "housing_market_alert_signal": housing_market_alert_signal,
+        "humanoid_access_signal": humanoid_access_signal,
         "timber_adoption_barrier_signal": timber_adoption_barrier_signal,
         "timber_economics_alert_signal": timber_economics_alert_signal,
         "timber_performance_alert_signal": timber_performance_alert_signal,

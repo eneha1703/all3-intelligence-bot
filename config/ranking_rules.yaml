@@ -14,6 +14,7 @@ signals:
   timber_strategic_signal: 15
   timber_performance_signal: 12
   industrial_robotics_signal: 8
+  humanoid_affordability_signal: 8
   construction_innovation_signal: 6
   construction_statistics_signal: 18
   housing_market_signal: 12

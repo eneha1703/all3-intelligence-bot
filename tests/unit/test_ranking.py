@@ -41,6 +41,7 @@ RANKING_RULES = {
         "timber_strategic_signal": 15,
         "timber_performance_signal": 12,
         "industrial_robotics_signal": 8,
+        "humanoid_affordability_signal": 8,
         "construction_innovation_signal": 6,
         "construction_statistics_signal": 18,
         "housing_market_signal": 12,
@@ -162,6 +163,33 @@ def test_interesting_engineering_robotics_story_gets_scope_signal() -> None:
     assert flags["interesting_engineering_scope_signal"] is True
     assert decision.relevance_status == "keep"
     assert decision.score >= 39
+
+
+def test_unitree_humanoid_affordability_story_gets_access_signal_and_score_lift() -> None:
+    item = _make_item(
+        "China’s Unitree reshapes entry-level humanoid robot market with $4,290 droid",
+        "Unitree has begun selling humanoid robots globally through AliExpress, with its R1 model listed at $4,290 and positioned far below many western peers.",
+        broad_feed=True,
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "source_id": "interesting_engineering_rss",
+            "metadata": {
+                "tags": ["engineering"],
+                "broad_feed": True,
+                "strict_scope": "industrial_robotics_physical_ai",
+            },
+        }
+    )
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["interesting_engineering_scope_signal"] is True
+    assert flags["humanoid_affordability_signal"] is True
+    assert decision.relevance_status == "keep"
+    assert decision.score == 39
 
 
 def test_wood_central_timber_policy_story_now_survives_without_funding_flag() -> None:

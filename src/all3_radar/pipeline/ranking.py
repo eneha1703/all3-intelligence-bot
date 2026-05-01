@@ -104,6 +104,23 @@ INDUSTRIAL_ROBOTICS_TERMS = (
     "factory floor",
     "factories",
 )
+HUMANOID_AFFORDABILITY_TERMS = (
+    "entry-level",
+    "lower-cost",
+    "low-cost",
+    "affordable",
+    "price point",
+    "globally",
+    "global sales",
+    "global availability",
+    "aliexpress",
+    "western peers",
+    "broader market",
+    "entry point",
+    "experimentation",
+)
+HUMANOID_TERMS = ("humanoid", "humanoid robot", "humanoid robots", "droid")
+LOW_PRICE_RE = re.compile(r"\$?\s?([1-9]\d{0,2}(?:,\d{3})+|\d{3,5})\b")
 PRODUCT_LAUNCH_VERBS = (
     "launches",
     "launched",
@@ -292,6 +309,19 @@ def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
         (_contains_any(haystack, ("robot", "robots", "robotics", "humanoid", "automation", "autonomous")) and _contains_any(haystack, INDUSTRIAL_ROBOTICS_TERMS))
         or (_contains_any(haystack, ("robot", "robots", "robotics", "humanoid")) and _contains_any(haystack, STRATEGIC_CONTEXT_TERMS))
     )
+    low_price_match = LOW_PRICE_RE.search(haystack)
+    low_price_value = None
+    if low_price_match:
+        try:
+            low_price_value = int(low_price_match.group(1).replace(",", ""))
+        except ValueError:
+            low_price_value = None
+    humanoid_affordability_signal = (
+        _contains_any(haystack, HUMANOID_TERMS)
+        and low_price_value is not None
+        and low_price_value <= 10000
+        and _contains_any(haystack, HUMANOID_AFFORDABILITY_TERMS)
+    )
     construction_innovation_signal = quantified_scale and _contains_any(haystack, CONSTRUCTION_INNOVATION_TERMS)
     construction_statistics_signal = is_destatis_construction_statistics_signal(item)
     housing_market_signal = is_housing_market_signal(item)
@@ -354,6 +384,7 @@ def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
        "timber_strategic_signal": timber_strategic,
         "timber_performance_signal": timber_performance,
         "industrial_robotics_signal": industrial_robotics_signal,
+        "humanoid_affordability_signal": humanoid_affordability_signal,
         "construction_innovation_signal": construction_innovation_signal,
         "construction_statistics_signal": construction_statistics_signal,
         "housing_market_signal": housing_market_signal,
