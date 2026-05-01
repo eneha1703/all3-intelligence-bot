@@ -704,6 +704,49 @@ def test_summary_normalizes_decimal_spacing_when_otherwise_valid(monkeypatch: py
     assert "Dyad 3.0" in result.summary
 
 
+def test_single_sentence_summary_with_dangling_once_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(
+            _payload(
+                json.dumps(
+                    {
+                        "send_ok": True,
+                        "reject_reason": None,
+                        "title": "Concrete Loses Up to 32% More Heat Than Mass Timber in Chilean Cold-Climate Study",
+                        "summary": (
+                            "A study of buildings in Chile's cold climate zones found that concrete structures lose between 26% and 32% "
+                            "more heat than mass timber buildings of identical typology once."
+                        ),
+                        "why_it_matters": None,
+                        "duplicate_risk": "low",
+                        "confidence": "high",
+                    }
+                )
+            )
+        ),
+    )
+
+    with pytest.raises(ClaudeFinalCardUnavailableError, match="incomplete fragment"):
+        _generate_for_story(
+            _client(),
+            title="Concrete Loses 32% More Heat Than Mass Timber in Chile's Cold Zones",
+            source="Wood Central",
+            url="https://example.com/chile-timber",
+            text_preview=(
+                "A study of buildings in Chile's cold climate zones found that concrete structures lose between 26% and 32% more heat "
+                "than mass timber buildings of identical typology when thermal bridges are included in the calculation."
+            ),
+            score=45,
+            event_flags={"timber_performance_signal": True},
+            signals={"direct_wood_central_source": True},
+            existing_summary=(
+                "Concrete buildings lose between 26 and 32 per cent more heat than mass timber buildings of identical typology when thermal "
+                "bridges are included in the calculation."
+            ),
+        )
+
+
 def test_send_ok_false_requires_reject_reason(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "urllib.request.urlopen",

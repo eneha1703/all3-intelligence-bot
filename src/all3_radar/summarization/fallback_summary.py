@@ -124,6 +124,10 @@ TRAILING_FRAGMENT_PATTERNS = [
     re.compile(r",?\s*according(?:\s+to.*)?\.?$", re.IGNORECASE),
     re.compile(r",?\s*including\.?$", re.IGNORECASE),
     re.compile(r",?\s*such as\.?$", re.IGNORECASE),
+    re.compile(r",?\s*once\.?$", re.IGNORECASE),
+    re.compile(r",?\s*while\.?$", re.IGNORECASE),
+    re.compile(r",?\s*with\.?$", re.IGNORECASE),
+    re.compile(r",?\s*after\.?$", re.IGNORECASE),
 ]
 CAPTION_MARKERS = (
     "getty images",
@@ -340,6 +344,26 @@ def _trim_long_sentence(sentence: str) -> str:
     return _ensure_terminal_punctuation(_cleanup_trailing_fragment(candidate))
 
 
+def _has_dangling_tail(sentence: str) -> bool:
+    lowered = sentence.lower().strip()
+    return lowered.endswith(
+        (
+            " once.",
+            " while.",
+            " with.",
+            " after.",
+            " before.",
+            " because.",
+            " although.",
+            " when.",
+            " where.",
+            " which.",
+            " including.",
+            " such as.",
+        )
+    )
+
+
 def remove_repeated_headline(summary: str, headline: str) -> str:
     normalized_summary = summary.strip()
     if normalized_summary.lower().startswith(headline.strip().lower()):
@@ -390,6 +414,8 @@ def sanitize_summary_text(headline: str, summary: str | None) -> str | None:
     if len(cleaned.split()) < 6:
         return None
     if cleaned[-1] not in ".!?":
+        return None
+    if _has_dangling_tail(cleaned):
         return None
     if had_ellipsis:
         if not _is_usable_truncated_single_sentence(cleaned) and _sentence_count(cleaned) < 2:

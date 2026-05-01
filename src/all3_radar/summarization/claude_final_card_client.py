@@ -178,7 +178,23 @@ def _summary_detail_score(summary: str) -> int:
 def _has_trailing_fragment(summary: str) -> bool:
     sentences = [sentence.strip() for sentence in SENTENCE_SPLIT_RE.split(summary.strip()) if sentence.strip()]
     if len(sentences) < 2:
-        return False
+        lowered = summary.lower().strip()
+        return lowered.endswith(
+            (
+                " once.",
+                " while.",
+                " with.",
+                " after.",
+                " before.",
+                " because.",
+                " although.",
+                " when.",
+                " where.",
+                " which.",
+                " including.",
+                " such as.",
+            )
+        )
     last_sentence = sentences[-1]
     last_words = _count_words(last_sentence)
     if last_words <= 2:
@@ -199,10 +215,10 @@ def _validate_summary_richness(
         raise ClaudeFinalCardUnavailableError("Claude final-card response summary must not contain raw URLs.")
     if _contains_any_term(summary.lower(), HYPE_TERMS):
         raise ClaudeFinalCardUnavailableError("Claude final-card response summary used hype language.")
-    if _mostly_repeats_headline(input_title, summary):
-        raise ClaudeFinalCardUnavailableError("Claude final-card response summary mostly repeated the headline.")
     if _has_trailing_fragment(summary):
         raise ClaudeFinalCardUnavailableError("Claude final-card response summary ended in an incomplete fragment.")
+    if _mostly_repeats_headline(input_title, summary):
+        raise ClaudeFinalCardUnavailableError("Claude final-card response summary mostly repeated the headline.")
     if _source_has_richer_facts(text_preview, existing_summary):
         summary_words = _count_words(summary)
         if _looks_like_thin_funding_blurb(summary):

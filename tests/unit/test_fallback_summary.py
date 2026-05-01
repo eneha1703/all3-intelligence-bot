@@ -25,9 +25,20 @@ def test_generate_fallback_summary_builds_two_sentence_industrial_card() -> None
 
 def test_generate_fallback_summary_prefers_title_sentence_for_single_sentence_announce_preview() -> None:
     summary = generate_fallback_summary(
-        "Sereact announces €110M Series B round",
-        "Sereact has raised €110 million in Series B financing to expand its AI robotics stack for warehouse and industrial automation.",
+        "Sereact announces EUR110M Series B round",
+        "Sereact has raised EUR110 million in Series B financing to expand its AI robotics stack for warehouse and industrial automation.",
     )
 
     assert summary is not None
-    assert summary == "Sereact has announced €110M Series B round."
+    assert summary == "Sereact has announced EUR110M Series B round."
+
+
+def test_generate_fallback_summary_rejects_dangling_comparison_tail() -> None:
+    summary = generate_fallback_summary(
+        "Concrete Loses 32% More Heat Than Mass Timber in Chile's Cold Zones",
+        "A study of buildings in Chile's cold climate zones found that concrete structures lose between 26% and 32% more heat than mass timber buildings of identical typology once.",
+    )
+
+    assert summary is not None
+    assert summary.endswith("identical typology.")
+    assert " once." not in summary
