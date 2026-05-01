@@ -9,6 +9,9 @@ from all3_radar.storage.db import initialize_database
 
 ALL3_TITLE_A = "The founders behind a $1.5B food delivery exit just raised $25M from RTP Global for a construction robotics startup"
 ALL3_TITLE_B = "UK Robotic Construction Company All3 Raises $25M in Seed Round Funding"
+PROMETHEUS_TITLE = "Project Prometheus raises $10B at $38B valuation to build AI for physical industries"
+BMW_FUND_TITLE = "BMW’s venture arm just raised a new $300M fund to bet on physical AI and robotics"
+BIOORBIT_TITLE = "BioOrbit zips £9.8M to make cancer drugs in orbit in the largest-ever in-space manufacturing seed round"
 
 
 def _seed_digest_db(db_path: Path, schema_path: Path) -> None:
@@ -170,6 +173,39 @@ def _seed_digest_db(db_path: Path, schema_path: Path) -> None:
                 "Startup CEOs told Business Insider that autonomous-vehicle veterans are a strong talent pool for robotics hiring.",
                 '{"event_flags":{"industrial_robotics_signal":true}}',
             ),
+            (
+                "raw-15",
+                "item-15",
+                "event-15",
+                PROMETHEUS_TITLE,
+                "https://example.com/project-prometheus",
+                "robot_report_rss",
+                90,
+                "Project Prometheus raised $10B at a $38B valuation and is building AI systems for aerospace, automotive, advanced manufacturing, and drug discovery.",
+                '{"event_flags":{"funding_event":true,"industrial_robotics_signal":true}}',
+            ),
+            (
+                "raw-16",
+                "item-16",
+                "event-16",
+                BMW_FUND_TITLE,
+                "https://example.com/bmw-fund",
+                "robot_report_rss",
+                89,
+                "BMW i Ventures, the independent venture capital arm of BMW Group, has launched its third fund to bet on physical AI and robotics.",
+                '{"event_flags":{"funding_event":true,"industrial_robotics_signal":true}}',
+            ),
+            (
+                "raw-17",
+                "item-17",
+                "event-17",
+                BIOORBIT_TITLE,
+                "https://example.com/bioorbit",
+                "robot_report_rss",
+                88,
+                "BioOrbit, a London-based in-space drug manufacturing company, has raised £9.8 million in a seed round.",
+                '{"event_flags":{"funding_event":true}}',
+            ),
         ]
         for raw_id, item_id, event_id, title, url, source_id, score, summary_text, signals_json in raw_rows:
             connection.execute(
@@ -212,7 +248,7 @@ def _seed_digest_db(db_path: Path, schema_path: Path) -> None:
                     event_id,
                     "fresh",
                     "keep",
-                    "sent" if item_id in {"item-1", "item-2", "item-7", "item-12"} else "stored_only",
+                    "sent" if item_id in {"item-1", "item-2", "item-7", "item-12", "item-15"} else "stored_only",
                     None,
                     score,
                     signals_json,
@@ -248,28 +284,31 @@ class _FakeClaudeClient:
     def select_top_story_ids(self, prompt: str, *, allowed_ids: set[str], exact_count: int = 5) -> list[str]:
         self.selection_prompts.append(prompt)
         assert exact_count == 5
-        selected_ids = ["event-1", "event-2", "event-3", "event-4", "event-5"]
+        selected_ids = ["event-2", "event-4", "event-15", "event-3", "event-12"]
         assert len(selected_ids) == len(set(selected_ids))
         assert set(selected_ids).issubset(allowed_ids)
         return selected_ids
 
     def generate_telegram_digest(self, prompt: str, *, expected_title: str) -> str:
         self.writer_prompts.append(prompt)
-        assert "German construction orders recover before capacity does" in prompt
+        assert "Sereact scales physical AI reliability after fresh funding" in prompt
+        assert PROMETHEUS_TITLE in prompt
         assert "Taco Bell adds AI menu personalization" not in prompt
+        assert BMW_FUND_TITLE not in prompt
+        assert BIOORBIT_TITLE not in prompt
         return "\n\n".join(
             [
                 expected_title,
-                '1. <b>German construction orders recover before capacity does</b>\n'
-                'Destatis suggests that order intake is recovering ahead of labor and site capacity, which matters because upstream demand is returning before the industry can fully execute. <a href="https://example.com/destatis-orders">Link</a>',
-                '2. <b>Sereact turns funding into a reliability test for warehouse physical AI</b>\n'
+                '1. <b>Sereact turns funding into a reliability test for warehouse physical AI</b>\n'
                 'The funding matters less as capital than as a signal that customers now expect measurable production reliability from warehouse robotics platforms. <a href="https://example.com/sereact">Link</a>',
-                '3. <b>SoftBank and Roze show AI infrastructure becoming a physical automation problem</b>\n'
-                'The strategic signal is that data-center growth now depends on construction and delivery automation, not just compute budgets. <a href="https://example.com/softbank-roze">Link</a>',
-                '4. <b>Mass timber moves from showcase projects toward repeatable civic deployment</b>\n'
+                '2. <b>Mass timber moves from showcase projects toward repeatable civic deployment</b>\n'
                 'The typology mix suggests timber adoption is broadening into replicable public-sector delivery rather than isolated demonstration work. <a href="https://example.com/mass-timber">Link</a>',
-                '5. <b>Flex and Teradyne deepen the manufacturing stack around physical AI</b>\n'
-                'This partnership matters because it connects physical AI deployment to production execution capacity inside existing industrial networks. <a href="https://example.com/flex">Link</a>',
+                '3. <b>Project Prometheus shows how big the physical AI bet is becoming</b>\n'
+                'The round size matters because investors are starting to treat physical AI as a platform opportunity across aerospace, automotive, advanced manufacturing, and drug discovery. <a href="https://example.com/project-prometheus">Link</a>',
+                '4. <b>SoftBank and Roze show AI infrastructure becoming a physical automation problem</b>\n'
+                'The strategic signal is that data-center growth now depends on construction and delivery automation, not just compute budgets. <a href="https://example.com/softbank-roze">Link</a>',
+                '5. <b>All3 raises $25M for robotic construction</b>\n'
+                'All3 combines AI-assisted design, off-site robotic fabrication, and on-site assembly into a construction platform tied to real deployment economics. <a href="https://example.com/all3-techfundingnews">Link</a>',
             ]
         )
 
@@ -298,15 +337,15 @@ def test_digest_build_generates_telegram_ready_artifact_with_claude(monkeypatch,
     service = DigestService(repo_root=repo_root, claude_client=fake_client)
     result = service.build_digest("2026-W18", output_path=output_path)
 
-    assert result.candidate_count == 7
+    assert result.candidate_count == 8
     assert result.claude_used is True
     assert result.fallback_reason is None
 
     digest_text = output_path.read_text(encoding="utf-8")
     assert digest_text.startswith("Top 5 News Highlights | 23-30 April 2026 | Week 18")
-    assert '<a href="https://example.com/destatis-orders">Link</a>' in digest_text
-    assert "https://example.com/destatis-orders" not in digest_text.replace(
-        '<a href="https://example.com/destatis-orders">Link</a>', ""
+    assert '<a href="https://example.com/sereact">Link</a>' in digest_text
+    assert "https://example.com/sereact" not in digest_text.replace(
+        '<a href="https://example.com/sereact">Link</a>', ""
     )
     assert "Taco Bell adds AI menu personalization" not in digest_text
     assert "Waymo, Alphabet's robotaxi service" not in digest_text
@@ -314,18 +353,26 @@ def test_digest_build_generates_telegram_ready_artifact_with_claude(monkeypatch,
     assert "Amazon pushes AI use and closely tracks adoption" not in digest_text
     assert "Want to hire for your robotics startup" not in digest_text
     assert sum(title in digest_text for title in (ALL3_TITLE_A, ALL3_TITLE_B)) <= 1
-    assert "Destatis suggests that order intake is recovering" in digest_text
+    assert "Sereact turns funding into a reliability test" in digest_text
+    assert "Project Prometheus shows how big the physical AI bet is becoming" in digest_text
+    assert BMW_FUND_TITLE not in digest_text
+    assert BIOORBIT_TITLE not in digest_text
 
     report_path = tmp_path / "weekly_digest_2026-W18.report.md"
     assert report_path.exists()
     report_text = report_path.read_text(encoding="utf-8")
     assert "## Top Stories" in report_text
-    assert "German construction orders recover before capacity does" in report_text
+    assert "Sereact scales physical AI reliability after fresh funding" in report_text
+    assert PROMETHEUS_TITLE in report_text
+    assert "Mass timber school pipeline points to repeatable civic deployment" in report_text
+    assert "SoftBank and Roze turn AI infrastructure into a robotics delivery problem" in report_text
     assert "Waymo, Alphabet's robotaxi service" not in report_text
     assert "2 chefs share how generative AI helps" not in report_text
     assert "Amazon pushes AI use and closely tracks adoption" not in report_text
     assert "Want to hire for your robotics startup" not in report_text
-    assert sum(title in report_text for title in (ALL3_TITLE_A, ALL3_TITLE_B)) <= 1
+    assert sum(title in report_text for title in (ALL3_TITLE_A, ALL3_TITLE_B)) == 1
+    assert BMW_FUND_TITLE not in report_text
+    assert BIOORBIT_TITLE not in report_text
 
     assert len(fake_client.selection_prompts) == 1
     assert len(fake_client.writer_prompts) == 1
@@ -344,18 +391,21 @@ def test_digest_build_falls_back_to_deterministic_artifact_without_claude(monkey
     service = DigestService(repo_root=repo_root, claude_client=_FailingClaudeClient())
     result = service.build_digest("2026-W18", output_path=output_path)
 
-    assert result.candidate_count == 7
+    assert result.candidate_count == 8
     assert result.claude_used is False
     assert result.fallback_reason == "timeout"
     digest_text = output_path.read_text(encoding="utf-8")
     assert digest_text.startswith("Top 5 News Highlights | 23-30 April 2026 | Week 18")
-    assert '<a href="https://example.com/destatis-orders">Link</a>' in digest_text
+    assert '<a href="https://example.com/sereact">Link</a>' in digest_text
     assert "Taco Bell adds AI menu personalization" not in digest_text
     assert "Waymo, Alphabet's robotaxi service" not in digest_text
     assert "2 chefs share how generative AI helps" not in digest_text
     assert "Amazon pushes AI use and closely tracks adoption" not in digest_text
     assert "Want to hire for your robotics startup" not in digest_text
     assert sum(title in digest_text for title in (ALL3_TITLE_A, ALL3_TITLE_B)) == 1
+    assert PROMETHEUS_TITLE in digest_text
+    assert BMW_FUND_TITLE not in digest_text
+    assert BIOORBIT_TITLE not in digest_text
 
     with sqlite3.connect(db_path) as connection:
         digest_row = connection.execute(
@@ -365,7 +415,7 @@ def test_digest_build_falls_back_to_deterministic_artifact_without_claude(monkey
 
     assert digest_row[0] == "completed"
     assert digest_row[1].startswith("Top 5 News Highlights | 23-30 April 2026 | Week 18")
-    assert candidate_count == 7
+    assert candidate_count == 8
 
 
 def test_digest_build_dedupes_duplicate_story_candidates(monkeypatch, tmp_path) -> None:
@@ -475,7 +525,7 @@ def test_digest_build_dedupes_duplicate_story_candidates(monkeypatch, tmp_path) 
     service = DigestService(repo_root=repo_root)
     result = service.build_digest("2026-W18", output_path=output_path)
 
-    assert result.candidate_count == 8
+    assert result.candidate_count == 9
     digest_text = output_path.read_text(encoding="utf-8")
     assert digest_text.count("A banker wants to trade his $4.8 million California estate for shares in Anthropic") <= 1
     assert digest_text.count("1. <b>") == 1

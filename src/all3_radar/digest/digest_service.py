@@ -29,6 +29,25 @@ from all3_radar.storage.repositories import RadarRepository
 LOGGER = logging.getLogger(__name__)
 WHITESPACE_RE = re.compile(r"\s+")
 NON_ALNUM_RE = re.compile(r"[^a-z0-9]+")
+WEEKLY_PREFERRED_BUCKETS = (
+    "physical_ai_proof",
+    "mass_timber_construction",
+    "strategic_capital_bet",
+    "infrastructure_platform_signal",
+    "construction_robotics",
+)
+WEEKLY_BUCKET_RANK = {
+    "physical_ai_proof": 0,
+    "mass_timber_construction": 1,
+    "strategic_capital_bet": 2,
+    "infrastructure_platform_signal": 3,
+    "construction_robotics": 4,
+    "construction_statistics": 5,
+    "industrial_deployment": 6,
+    "general_relevant": 7,
+    "weak_generic_funding": 8,
+    "weak_off_thesis": 9,
+}
 
 
 @dataclass(frozen=True)
@@ -62,6 +81,10 @@ def _normalize_digest_text(value: str | None) -> str:
         return ""
     normalized = NON_ALNUM_RE.sub(" ", value.lower())
     return WHITESPACE_RE.sub(" ", normalized).strip()
+
+
+def _has_any_phrase(text: str, phrases: tuple[str, ...]) -> bool:
+    return any(phrase in text for phrase in phrases)
 
 
 def _row_signal_score(row: dict[str, object]) -> int:
@@ -167,10 +190,131 @@ def _is_obvious_weekly_noise(row: dict[str, object]) -> bool:
     return False
 
 
+def _weekly_bucket(row: dict[str, object]) -> str:
+    title = _normalize_digest_text(str(row.get("title") or ""))
+    summary = _normalize_digest_text(str(row.get("summary_text") or ""))
+    combined = f"{title} {summary}".strip()
+    flags = _row_event_flags(row)
+
+    if _has_any_phrase(
+        combined,
+        (
+            "in space drug manufacturing",
+            "drug manufacturing company",
+            "cancer drugs in orbit",
+            "in space manufacturing",
+            "drugs in orbit",
+        ),
+    ):
+        return "weak_off_thesis"
+
+    if (
+        bool(flags.get("timber_strategic_signal"))
+        or "mass timber" in combined
+        or _has_any_phrase(combined, ("clt", "lvl posts", "lvl beams", "urban sites", "tight city plot"))
+    ) and _has_any_phrase(
+        combined,
+        (
+            "building",
+            "office building",
+            "school",
+            "project",
+            "construction",
+            "urban",
+            "site",
+            "concrete sidewalls",
+            "three storey office",
+        ),
+    ):
+        return "mass_timber_construction"
+
+    if _has_any_phrase(
+        combined,
+        (
+            "construction robotics",
+            "robotic construction",
+            "off site robotic fabrication",
+            "on site assembly",
+            "autonomous building platform",
+            "housing industrialization",
+            "ai assisted design",
+        ),
+    ):
+        return "construction_robotics"
+
+    if bool(flags.get("industrial_robotics_signal")) and _has_any_phrase(
+        combined,
+        (
+            "systems live",
+            "production picks",
+            "remote human intervention",
+            "reliability",
+            "warehouse production metrics",
+            "production proof",
+            "scaled manufacturing operations",
+            "production lines",
+        ),
+    ):
+        return "physical_ai_proof"
+
+    if _has_any_phrase(
+        combined,
+        (
+            "softbank",
+            "roze",
+            "abb robotics",
+            "data center buildout",
+            "data center growth",
+            "energy land and infrastructure",
+            "physical delivery problem",
+        ),
+    ):
+        return "infrastructure_platform_signal"
+
+    if bool(flags.get("funding_event")) and _has_any_phrase(
+        combined,
+        (
+            "valuation",
+            "total funding",
+            "platform opportunity",
+            "physical industries",
+            "advanced manufacturing",
+            "aerospace",
+            "automotive",
+            "drug discovery",
+            "project prometheus",
+        ),
+    ):
+        return "strategic_capital_bet"
+
+    if bool(flags.get("construction_statistics_signal")):
+        return "construction_statistics"
+
+    if bool(flags.get("industrial_robotics_signal")) or bool(flags.get("deployment_event")):
+        if _has_any_phrase(combined, ("deploy", "deployment", "humanoids by 2032", "manufacturing facilities")):
+            return "industrial_deployment"
+
+    if bool(flags.get("funding_event")) and _has_any_phrase(
+        combined,
+        (
+            "venture arm",
+            "venture capital arm",
+            "fund iii",
+            "independent venture capital arm",
+            "launched its third fund",
+            "bet on physical ai and robotics",
+        ),
+    ):
+        return "weak_generic_funding"
+
+    return "general_relevant"
+
+
 def _sort_digest_rows(rows: list[dict[str, object]]) -> list[dict[str, object]]:
     return sorted(
         rows,
         key=lambda row: (
+            WEEKLY_BUCKET_RANK.get(_weekly_bucket(row), 50),
             0 if str(row.get("send_status") or "") == "sent" else 1,
             -_row_signal_score(row),
             -int(row.get("score") or 0),
@@ -194,7 +338,24 @@ def _dedupe_semantic_digest_rows(rows: list[dict[str, object]]) -> list[dict[str
 
 def _prepare_digest_rows(rows: list[dict[str, object]], *, limit: int) -> list[dict[str, object]]:
     non_noise_rows = [row for row in rows if not _is_obvious_weekly_noise(row)]
-    prepared = _dedupe_semantic_digest_rows(_sort_digest_rows(non_noise_rows))
+    strong_rows = [
+        row for row in non_noise_rows if _weekly_bucket(row) not in {"weak_generic_funding", "weak_off_thesis"}
+    ]
+    sorted_strong_rows = _dedupe_semantic_digest_rows(_sort_digest_rows(strong_rows))
+
+    preferred: list[dict[str, object]] = []
+    selected_ids: set[str] = set()
+    for bucket in WEEKLY_PREFERRED_BUCKETS:
+        for row in sorted_strong_rows:
+            row_id = str(row["canonical_event_id"])
+            if row_id in selected_ids or _weekly_bucket(row) != bucket:
+                continue
+            preferred.append(row)
+            selected_ids.add(row_id)
+            break
+
+    remaining_strong_rows = [row for row in sorted_strong_rows if str(row["canonical_event_id"]) not in selected_ids]
+    prepared = preferred + remaining_strong_rows
     if len(prepared) >= min(limit, 5):
         return prepared[:limit]
 
