@@ -151,6 +151,23 @@ def test_editorial_shaping_keeps_humanoid_affordability_market_signal() -> None:
     assert editorial.flags["telegram_worthy"] is True
 
 
+def test_editorial_shaping_keeps_short_humanoid_affordability_preview() -> None:
+    item = _make_item(
+        "China's Unitree reshapes entry-level humanoid robot market with $4,290 droid",
+        "Chinese robotics firm Unitree has introduced a low-cost bipedal humanoid robot with an upper-body-only design.",
+        source_id="interesting_engineering_rss",
+    )
+    item = StoredNormalizedItem(**{**item.__dict__, "metadata": {"broad_feed": True, "strict_scope": "industrial_robotics_physical_ai"}})
+    decision = _make_decision(humanoid_affordability_signal=True, interesting_engineering_scope_signal=True)
+
+    editorial = evaluate_send_stage_editorial(item, decision)
+
+    assert editorial.allow_send is True
+    assert editorial.reason is None
+    assert editorial.flags["humanoid_access_signal"] is True
+    assert editorial.flags["telegram_worthy"] is True
+
+
 def test_editorial_shaping_keeps_wood_central_timber_barrier_signal() -> None:
     item = _make_item(
         "Architects, insurers open new front on English timber cap",

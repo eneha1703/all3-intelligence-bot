@@ -136,16 +136,6 @@ HUMANOID_ACCESS_TERMS = (
     "low-cost",
     "lower-cost",
 )
-HUMANOID_ACCESS_IMPACT_TERMS = (
-    "$",
-    "usd",
-    "price point",
-    "access",
-    "affordability",
-    "cheaper",
-    "lower-cost",
-    "global",
-)
 DESTATIS_CONSTRUCTION_MARKET_TERMS = (
     "bauhauptgewerbe",
     "auftragseingang",
@@ -374,10 +364,11 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         and _contains_any(haystack, HOUSING_MARKET_CONTEXT_TERMS)
         and _contains_any(haystack, HOUSING_MARKET_QUANTIFIED_TERMS)
     )
-    humanoid_access_signal = (
-        event_flags.get("humanoid_affordability_signal", False)
-        and _contains_any(haystack, HUMANOID_ACCESS_TERMS)
-        and _contains_any(haystack, HUMANOID_ACCESS_IMPACT_TERMS)
+    # Ranking already computes this narrowly from low humanoid price + affordability/access language.
+    # At editorial time the RSS preview is often shorter, so trust the derived signal instead of
+    # requiring the excerpt to repeat AliExpress/global-availability details.
+    humanoid_access_signal = bool(event_flags.get("humanoid_affordability_signal", False)) and (
+        _contains_any(haystack, HUMANOID_ACCESS_TERMS) or item.source_id == "interesting_engineering_rss"
     )
     timber_adoption_barrier_signal = (
         item.source_id == "wood_central_api"
