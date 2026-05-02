@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import argparse
+import json
 from pathlib import Path
 
+from all3_radar.config.loader import load_settings
 from all3_radar.pipeline.radar_service import run_radar
 from all3_radar.pipeline.replay_service import replay_radar_window
+from all3_radar.storage.repositories import RadarRepository
+from all3_radar.telegram_interactions.callbacks import TelegramBotApiClient, handle_telegram_callback_update
+from all3_radar.telegram_interactions.polling import poll_telegram_callback_updates
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -39,6 +44,24 @@ def build_parser() -> argparse.ArgumentParser:
 
     resend_parser = subparsers.add_parser("resend", help="Resend a previously approved radar item")
     resend_parser.add_argument("item_id", help="Normalized item id")
+
+    telegram_update_parser = subparsers.add_parser(
+        "telegram-handle-update",
+        help="Handle one Telegram callback update from a JSON file",
+    )
+    telegram_update_parser.add_argument("update_json_file", help="Path to raw Telegram update JSON")
+
+    telegram_poll_parser = subparsers.add_parser(
+        "telegram-poll-updates",
+        help="Poll Telegram for callback updates and process shortlist button clicks",
+    )
+    telegram_poll_parser.add_argument("--limit", type=int, default=50, help="Max updates to fetch in one polling call")
+    telegram_poll_parser.add_argument(
+        "--timeout-seconds",
+        type=int,
+        default=0,
+        help="Telegram long-poll timeout in seconds for this call",
+    )
     return parser
 
 
@@ -85,6 +108,36 @@ def main() -> int:
 
     if args.command == "resend":
         print(f"Resend skeleton for item_id={args.item_id}")
+        return 0
+
+    if args.command == "telegram-handle-update":
+        settings = load_settings(repo_root)
+        repository = RadarRepository(settings.app.database_path)
+        update = json.loads(Path(args.update_json_file).read_text(encoding="utf-8"))
+        result = handle_telegram_callback_update(
+            update,
+            repository=repository,
+            bot_api_client=TelegramBotApiClient(settings.integrations.telegram_alert_bot_token),
+        )
+        print(
+            f"Telegram callback handled={result.handled} action={result.action} "
+            f"normalized_item_id={result.normalized_item_id} active={result.is_active} message={result.message}"
+        )
+        return 0
+
+    if args.command == "telegram-poll-updates":
+        settings = load_settings(repo_root)
+        repository = RadarRepository(settings.app.database_path)
+        result = poll_telegram_callback_updates(
+            repository=repository,
+            bot_api_client=TelegramBotApiClient(settings.integrations.telegram_alert_bot_token),
+            limit=args.limit,
+            timeout_seconds=args.timeout_seconds,
+        )
+        print(
+            f"Telegram polling complete: fetched={result.fetched_updates} "
+            f"handled_callbacks={result.handled_callbacks} next_offset={result.next_offset}"
+        )
         return 0
 
     parser.error("Unknown command")

@@ -150,6 +150,27 @@ class TelegramCard:
     headline: str
     summary_text: str
     url: str
+    action_buttons: tuple["TelegramActionButton", ...] = ()
+
+
+@dataclass(frozen=True)
+class TelegramActionButton:
+    text: str
+    callback_data: str
+
+
+@dataclass(frozen=True)
+class EditorialSignal:
+    signal_type: str
+    signal_state: str
+    source_kind: str
+    normalized_item_id: str
+    canonical_event_id: str | None
+    chat_id: str = ""
+    telegram_message_id: str = ""
+    user_id: str = ""
+    username: str = ""
+    raw_value: str | None = None
 
 
 @dataclass(frozen=True)

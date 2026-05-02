@@ -14,6 +14,7 @@ from all3_radar.domain.models import (
     ClusterAssignment,
     CollectedRawItem,
     CompetitorMatch,
+    EditorialSignal,
     FreshnessEvaluation,
     NormalizedItem,
     SourceDefinition,
@@ -641,6 +642,182 @@ class RadarRepository:
                     error_text,
                     _utc_now_iso(),
                 ),
+            )
+            connection.commit()
+
+    def upsert_editorial_signal(self, signal: EditorialSignal) -> None:
+        signal_id = uuid.uuid4().hex
+        now = _utc_now_iso()
+        with connect(self.database_path) as connection:
+            connection.execute(
+                """
+                INSERT INTO editorial_signals (
+                  id, signal_type, signal_state, source_kind, normalized_item_id, canonical_event_id,
+                  chat_id, telegram_message_id, user_id, username, raw_value, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(signal_type, source_kind, normalized_item_id, chat_id, user_id) DO UPDATE SET
+                  signal_state=excluded.signal_state,
+                  canonical_event_id=excluded.canonical_event_id,
+                  telegram_message_id=excluded.telegram_message_id,
+                  username=excluded.username,
+                  raw_value=excluded.raw_value,
+                  updated_at=excluded.updated_at
+                """,
+                (
+                    signal_id,
+                    signal.signal_type,
+                    signal.signal_state,
+                    signal.source_kind,
+                    signal.normalized_item_id,
+                    signal.canonical_event_id,
+                    signal.chat_id,
+                    signal.telegram_message_id,
+                    signal.user_id,
+                    signal.username,
+                    signal.raw_value,
+                    now,
+                    now,
+                ),
+            )
+            connection.commit()
+
+    def load_active_shortlist_candidates_for_week(
+        self,
+        start_date: str,
+        end_date: str,
+        limit: int,
+        require_canonical_events: bool,
+    ) -> list[dict[str, Any]]:
+        with connect(self.database_path) as connection:
+            if require_canonical_events:
+                rows = connection.execute(
+                    """
+                    SELECT ce.id AS canonical_event_id,
+                           ni.id AS normalized_item_id,
+                           ni.source_id,
+                           ni.title,
+                           ni.canonical_url,
+                           ni.published_ts,
+                           rd.score,
+                           rd.send_status,
+                           rd.summary_text,
+                           rd.signals_json
+                    FROM editorial_signals es
+                    JOIN normalized_items ni ON ni.id = es.normalized_item_id
+                    JOIN radar_decisions rd ON rd.normalized_item_id = ni.id
+                    LEFT JOIN canonical_events ce ON ce.id = rd.canonical_event_id
+                    WHERE es.signal_type = 'shortlist'
+                      AND es.signal_state = 'active'
+                      AND rd.relevance_status = 'keep'
+                      AND rd.send_status IN ('sent', 'stored_only')
+                      AND ni.published_ts IS NOT NULL
+                      AND date(COALESCE(ce.last_published_ts, ni.published_ts)) >= date(?)
+                      AND date(COALESCE(ce.last_published_ts, ni.published_ts)) <= date(?)
+                    ORDER BY es.updated_at DESC, rd.score DESC, COALESCE(ce.last_published_ts, ni.published_ts) DESC
+                    LIMIT ?
+                    """,
+                    (start_date, end_date, limit),
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    """
+                    SELECT COALESCE(rd.canonical_event_id, ni.id) AS canonical_event_id,
+                           ni.id AS normalized_item_id,
+                           ni.source_id,
+                           ni.title,
+                           ni.canonical_url,
+                           ni.published_ts,
+                           rd.score,
+                           rd.send_status,
+                           rd.summary_text,
+                           rd.signals_json
+                    FROM editorial_signals es
+                    JOIN normalized_items ni ON ni.id = es.normalized_item_id
+                    JOIN radar_decisions rd ON rd.normalized_item_id = ni.id
+                    WHERE es.signal_type = 'shortlist'
+                      AND es.signal_state = 'active'
+                      AND rd.relevance_status = 'keep'
+                      AND rd.send_status IN ('sent', 'stored_only')
+                      AND ni.published_ts IS NOT NULL
+                      AND date(ni.published_ts) >= date(?)
+                      AND date(ni.published_ts) <= date(?)
+                    ORDER BY es.updated_at DESC, rd.score DESC, ni.published_ts DESC
+                    LIMIT ?
+                    """,
+                    (start_date, end_date, limit),
+                ).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_editorial_signal_state(
+        self,
+        *,
+        signal_type: str,
+        source_kind: str,
+        normalized_item_id: str,
+        chat_id: str,
+        user_id: str,
+    ) -> str | None:
+        with connect(self.database_path) as connection:
+            row = connection.execute(
+                """
+                SELECT signal_state
+                FROM editorial_signals
+                WHERE signal_type = ?
+                  AND source_kind = ?
+                  AND normalized_item_id = ?
+                  AND chat_id = ?
+                  AND user_id = ?
+                LIMIT 1
+                """,
+                (signal_type, source_kind, normalized_item_id, chat_id, user_id),
+            ).fetchone()
+        return str(row["signal_state"]) if row else None
+
+    def get_item_event_mapping(self, normalized_item_id: str) -> dict[str, str | None] | None:
+        with connect(self.database_path) as connection:
+            row = connection.execute(
+                """
+                SELECT ni.id AS normalized_item_id, ce.id AS canonical_event_id
+                FROM normalized_items ni
+                LEFT JOIN radar_decisions rd ON rd.normalized_item_id = ni.id
+                LEFT JOIN canonical_events ce ON ce.id = rd.canonical_event_id
+                WHERE ni.id = ?
+                LIMIT 1
+                """,
+                (normalized_item_id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return {
+            "normalized_item_id": str(row["normalized_item_id"]),
+            "canonical_event_id": str(row["canonical_event_id"]) if row["canonical_event_id"] else None,
+        }
+
+    def get_integration_cursor(self, consumer_key: str) -> str | None:
+        with connect(self.database_path) as connection:
+            row = connection.execute(
+                """
+                SELECT cursor_value
+                FROM integration_cursors
+                WHERE consumer_key = ?
+                LIMIT 1
+                """,
+                (consumer_key,),
+            ).fetchone()
+        return str(row["cursor_value"]) if row else None
+
+    def upsert_integration_cursor(self, consumer_key: str, cursor_value: str) -> None:
+        with connect(self.database_path) as connection:
+            connection.execute(
+                """
+                INSERT INTO integration_cursors (consumer_key, cursor_value, updated_at)
+                VALUES (?, ?, ?)
+                ON CONFLICT(consumer_key) DO UPDATE SET
+                  cursor_value=excluded.cursor_value,
+                  updated_at=excluded.updated_at
+                """,
+                (consumer_key, cursor_value, _utc_now_iso()),
             )
             connection.commit()
 

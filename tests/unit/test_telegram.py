@@ -1,4 +1,9 @@
-from all3_radar.delivery.telegram import build_news_card, build_replay_card
+from all3_radar.delivery.telegram import (
+    build_inline_reply_markup,
+    build_news_card,
+    build_replay_card,
+    build_shortlist_action_button,
+)
 
 
 def test_build_news_card_formats_clean_message() -> None:
@@ -155,3 +160,19 @@ def test_build_replay_card_prepends_clear_replay_label() -> None:
 
     assert replay_card.text.startswith("<i>[REPLAY / MANUAL VALIDATION 2026-04-24..2026-04-28]</i>")
     assert "<b>Mass timber premiums run six to ten times higher than concrete and steel</b>" in replay_card.text
+
+
+def test_build_news_card_can_include_shortlist_button() -> None:
+    button = build_shortlist_action_button("item-123")
+    card = build_news_card(
+        headline="Unitree launches upper-body humanoid robot at $4,290",
+        summary_text="Unitree has unveiled a low-cost upper-body humanoid robot aimed at entry-level use.",
+        url="https://example.com/unitree",
+        action_buttons=(button,),
+    )
+
+    assert card is not None
+    assert card.action_buttons == (button,)
+    assert build_inline_reply_markup(card.action_buttons) == {
+        "inline_keyboard": [[{"text": "🏆 Add to shortlist", "callback_data": "shortlist:toggle:item-123"}]]
+    }

@@ -337,7 +337,17 @@ def _dedupe_semantic_digest_rows(rows: list[dict[str, object]]) -> list[dict[str
 
 
 def _prepare_digest_rows(rows: list[dict[str, object]], *, limit: int) -> list[dict[str, object]]:
+    manual_rows = _dedupe_semantic_digest_rows(
+        _sort_digest_rows([row for row in rows if bool(row.get("manual_shortlist_signal"))])
+    )
+    selected_ids = {str(row["canonical_event_id"]) for row in manual_rows}
+    prepared: list[dict[str, object]] = list(manual_rows)
+    if len(prepared) >= limit:
+        return prepared[:limit]
+
+    remaining_rows = [row for row in rows if str(row["canonical_event_id"]) not in selected_ids]
     non_noise_rows = [row for row in rows if not _is_obvious_weekly_noise(row)]
+    non_noise_rows = [row for row in non_noise_rows if str(row["canonical_event_id"]) not in selected_ids]
     strong_rows = [
         row for row in non_noise_rows if _weekly_bucket(row) not in {"weak_generic_funding", "weak_off_thesis"}
     ]
@@ -348,7 +358,6 @@ def _prepare_digest_rows(rows: list[dict[str, object]], *, limit: int) -> list[d
     sorted_stored_rows = _dedupe_semantic_digest_rows(_sort_digest_rows(stored_strong_rows))
 
     preferred: list[dict[str, object]] = []
-    selected_ids: set[str] = set()
     for bucket in WEEKLY_PREFERRED_BUCKETS:
         for pool in (sorted_sent_rows, sorted_stored_rows):
             for row in pool:
@@ -363,7 +372,7 @@ def _prepare_digest_rows(rows: list[dict[str, object]], *, limit: int) -> list[d
             break
 
     remaining_sent_rows = [row for row in sorted_sent_rows if str(row["canonical_event_id"]) not in selected_ids]
-    prepared = preferred + remaining_sent_rows
+    prepared.extend(preferred + remaining_sent_rows)
     if len(prepared) >= min(limit, 5):
         return prepared[:limit]
 
@@ -373,7 +382,7 @@ def _prepare_digest_rows(rows: list[dict[str, object]], *, limit: int) -> list[d
         return prepared[:limit]
 
     seen_ids = {str(row["canonical_event_id"]) for row in prepared}
-    backfill_rows = [row for row in non_noise_rows if str(row["canonical_event_id"]) not in seen_ids]
+    backfill_rows = [row for row in remaining_rows if str(row["canonical_event_id"]) not in seen_ids]
     prepared.extend(_dedupe_semantic_digest_rows(_sort_digest_rows(backfill_rows)))
     return _dedupe_semantic_digest_rows(prepared)[:limit]
 
@@ -486,6 +495,17 @@ class DigestService:
                 limit=self.settings.digest.shortlist_size_before_claude,
                 require_canonical_events=self.settings.digest.require_canonical_events,
             )
+            manual_rows = self.repository.load_active_shortlist_candidates_for_week(
+                start_date=window.previous_thursday.isoformat(),
+                end_date=window.current_thursday.isoformat(),
+                limit=self.settings.digest.shortlist_size_before_claude,
+                require_canonical_events=self.settings.digest.require_canonical_events,
+            )
+            for row in manual_rows:
+                row["manual_shortlist_signal"] = True
+            for row in rows:
+                row.setdefault("manual_shortlist_signal", False)
+            rows = manual_rows + rows
             rows = _dedupe_candidate_rows(rows)
             rows = _prepare_digest_rows(rows, limit=self.settings.digest.shortlist_size_before_claude)
             candidates = hydrate_digest_candidates(rows)

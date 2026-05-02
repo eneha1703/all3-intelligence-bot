@@ -10,7 +10,7 @@ import urllib.request
 import uuid
 from dataclasses import dataclass
 
-from all3_radar.domain.models import TelegramCard
+from all3_radar.domain.models import TelegramActionButton, TelegramCard
 from all3_radar.summarization.fallback_summary import sanitize_summary_text
 
 WHITESPACE_RE = re.compile(r"\s+")
@@ -34,7 +34,30 @@ def _normalize_card_summary(headline: str, summary_text: str) -> str | None:
     return normalized or None
 
 
-def build_news_card(headline: str, summary_text: str | None, url: str) -> TelegramCard | None:
+def build_shortlist_action_button(normalized_item_id: str, *, is_active: bool = False) -> TelegramActionButton:
+    return TelegramActionButton(
+        text="✅ Shortlisted" if is_active else "🏆 Add to shortlist",
+        callback_data=f"shortlist:toggle:{normalized_item_id}",
+    )
+
+
+def build_inline_reply_markup(action_buttons: tuple[TelegramActionButton, ...]) -> dict[str, list[list[dict[str, str]]]] | None:
+    if not action_buttons:
+        return None
+    return {
+        "inline_keyboard": [
+            [{"text": button.text, "callback_data": button.callback_data}] for button in action_buttons
+        ]
+    }
+
+
+def build_news_card(
+    headline: str,
+    summary_text: str | None,
+    url: str,
+    *,
+    action_buttons: tuple[TelegramActionButton, ...] = (),
+) -> TelegramCard | None:
     if not headline.strip() or not summary_text or not url.strip():
         return None
     cleaned_summary = _normalize_card_summary(headline, summary_text)
@@ -47,7 +70,13 @@ def build_news_card(headline: str, summary_text: str | None, url: str) -> Telegr
             f'<a href="{html.escape(url, quote=True)}">Link</a>',
         ]
     )
-    return TelegramCard(text=text, headline=headline, summary_text=cleaned_summary, url=url)
+    return TelegramCard(
+        text=text,
+        headline=headline,
+        summary_text=cleaned_summary,
+        url=url,
+        action_buttons=action_buttons,
+    )
 
 
 @dataclass(frozen=True)
@@ -66,6 +95,7 @@ def build_replay_card(card: TelegramCard, replay_label: str) -> TelegramCard:
         headline=card.headline,
         summary_text=card.summary_text,
         url=card.url,
+        action_buttons=card.action_buttons,
     )
 
 
@@ -99,6 +129,9 @@ class TelegramSender:
                 "parse_mode": "HTML",
                 "disable_web_page_preview": False,
             }
+            reply_markup = build_inline_reply_markup(card.action_buttons)
+            if reply_markup is not None:
+                payload["reply_markup"] = reply_markup
             request = urllib.request.Request(
                 endpoint,
                 data=json.dumps(payload).encode("utf-8"),

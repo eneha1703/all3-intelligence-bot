@@ -118,6 +118,37 @@ CREATE TABLE IF NOT EXISTS telegram_deliveries (
   FOREIGN KEY(run_id) REFERENCES pipeline_runs(id)
 );
 
+CREATE TABLE IF NOT EXISTS editorial_signals (
+  id TEXT PRIMARY KEY,
+  signal_type TEXT NOT NULL,
+  signal_state TEXT NOT NULL,
+  source_kind TEXT NOT NULL,
+  normalized_item_id TEXT NOT NULL,
+  canonical_event_id TEXT,
+  chat_id TEXT NOT NULL DEFAULT '',
+  telegram_message_id TEXT NOT NULL DEFAULT '',
+  user_id TEXT NOT NULL DEFAULT '',
+  username TEXT NOT NULL DEFAULT '',
+  raw_value TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY(normalized_item_id) REFERENCES normalized_items(id),
+  FOREIGN KEY(canonical_event_id) REFERENCES canonical_events(id),
+  UNIQUE(signal_type, source_kind, normalized_item_id, chat_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_editorial_signals_active_type
+  ON editorial_signals(signal_type, signal_state, updated_at);
+
+CREATE INDEX IF NOT EXISTS idx_editorial_signals_canonical_event
+  ON editorial_signals(canonical_event_id);
+
+CREATE TABLE IF NOT EXISTS integration_cursors (
+  consumer_key TEXT PRIMARY KEY,
+  cursor_value TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS weekly_digest_runs (
   id TEXT PRIMARY KEY,
   pipeline_run_id TEXT NOT NULL,

@@ -2,8 +2,10 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
+from all3_radar.domain.models import EditorialSignal
 from all3_radar.digest.claude_client import ClaudeDigestUnavailableError
 from all3_radar.digest.digest_service import DigestService
+from all3_radar.storage.repositories import RadarRepository
 from all3_radar.storage.db import initialize_database
 
 
@@ -564,3 +566,48 @@ def test_digest_build_dedupes_duplicate_story_candidates(monkeypatch, tmp_path) 
 
     report_text = (tmp_path / "weekly_digest_2026-W18.report.md").read_text(encoding="utf-8")
     assert report_text.count("[A banker wants to trade his $4.8 million California estate for shares in Anthropic. He's already gotten offers.]") <= 1
+
+
+def test_digest_build_includes_active_manual_shortlist_signal_in_candidate_pool(monkeypatch, tmp_path) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "digest.db"
+    output_path = tmp_path / "weekly_digest_2026-W18.md"
+    schema_path = repo_root / "src" / "all3_radar" / "storage" / "schema.sql"
+    _seed_digest_db(db_path, schema_path)
+
+    repository = RadarRepository(db_path)
+    repository.upsert_editorial_signal(
+        EditorialSignal(
+            signal_type="shortlist",
+            signal_state="active",
+            source_kind="telegram_inline_button",
+            normalized_item_id="item-6",
+            canonical_event_id="event-6",
+            chat_id="chat-1",
+            telegram_message_id="msg-1",
+            user_id="user-1",
+            username="editor",
+            raw_value="🏆",
+        )
+    )
+
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("CLAUDE_DIGEST_ENABLED", "false")
+
+    service = DigestService(repo_root=repo_root, repository=repository)
+    result = service.build_digest("2026-W18", output_path=output_path)
+
+    assert result.candidate_count == 7
+
+    with sqlite3.connect(db_path) as connection:
+        candidate_rows = connection.execute(
+            """
+            SELECT canonical_event_id, rationale_json
+            FROM weekly_digest_candidates
+            ORDER BY canonical_event_id
+            """
+        ).fetchall()
+
+    candidate_event_ids = {row[0] for row in candidate_rows}
+    assert "event-6" in candidate_event_ids
+    assert any("Taco Bell adds AI menu personalization" in row[1] for row in candidate_rows)

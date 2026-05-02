@@ -9,7 +9,7 @@ from pathlib import Path
 from time import perf_counter
 
 from all3_radar.config.loader import load_settings
-from all3_radar.delivery.telegram import TelegramSender, build_news_card
+from all3_radar.delivery.telegram import TelegramSender, build_news_card, build_shortlist_action_button
 from all3_radar.domain.enums import FreshnessStatus, PipelineName, PipelineStatus
 from all3_radar.domain.models import (
     ClusterAssignment,
@@ -1359,6 +1359,7 @@ class RadarService:
                     headline=headline,
                     summary_text=summary_text,
                     url=context.item.canonical_url,
+                    action_buttons=(build_shortlist_action_button(context.item.normalized_item_id),),
                 )
                 if card is None:
                     context.decision = RankedDecision(
