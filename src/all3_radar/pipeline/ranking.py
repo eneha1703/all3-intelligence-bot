@@ -31,7 +31,21 @@ FUNDING_TERMS = (
     "financing",
 )
 PARTNERSHIP_TERMS = ("partnership", "partners with", "partnered with", "partnering", "collaboration")
-ACQUISITION_TERMS = ("acquires", "acquisition", "acquired", "merger", "merge", "merged")
+ACQUISITION_TERMS = (
+    "acquires",
+    "acquisition",
+    "acquired",
+    "buys",
+    "buying",
+    "purchase",
+    "purchases",
+    "purchased",
+    "takeover",
+    "takeovers",
+    "merger",
+    "merge",
+    "merged",
+)
 DEPLOYMENT_TERMS = ("deployment", "deployed", "pilot", "rollout", "contract", "framework agreement")
 FACTORY_TERMS = (
     "factory opening",
@@ -276,6 +290,49 @@ MAJOR_DEAL_TERMS = (
     "strategic deal",
     "strategic merger",
 )
+STRATEGIC_CAPABILITY_TARGET_TERMS = (
+    "robot",
+    "robots",
+    "robotics",
+    "humanoid",
+    "autonomous system",
+    "autonomous systems",
+    "physical ai",
+    "physics ai",
+    "industrial automation",
+    "machine vision",
+    "robot programming",
+    "construction robotics",
+    "construction automation",
+    "prefab",
+    "prefabrication",
+    "modular",
+    "offsite",
+    "off-site",
+    "contech",
+    "building tech",
+    "housing delivery",
+    "mass timber",
+    "timber",
+)
+STRATEGIC_CAPABILITY_COMPANY_TERMS = (
+    "startup",
+    "startups",
+    "company",
+    "companies",
+    "platform",
+    "platforms",
+    "technology",
+    "technologies",
+    "software",
+    "systems",
+    "system",
+    "developer",
+    "developers",
+    "capability",
+    "capabilities",
+    "ambitions",
+)
 
 
 def load_ranking_rules(path: Path) -> dict:
@@ -369,6 +426,13 @@ def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
             or (partnership_event and quantified_scale and _contains_any(haystack, ("strategic",)))
         )
     )
+    strategic_capability_acquisition_signal = acquisition_event and _contains_any(
+        haystack, STRATEGIC_CAPABILITY_TARGET_TERMS
+    ) and (
+        _contains_any(haystack, STRATEGIC_CAPABILITY_COMPANY_TERMS)
+        or _contains_any(haystack, STRATEGIC_CONTEXT_TERMS)
+        or _contains_any(haystack, ("ai", "artificial intelligence"))
+    )
     factory_opening_or_expansion = _contains_any(haystack, FACTORY_TERMS) or (
         _contains_any(haystack, FACTORY_OPENING_VERBS) and _contains_any(haystack, FACTORY_CONTEXT_TERMS)
     )
@@ -393,6 +457,7 @@ def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
         "construction_briefing_scope_signal": construction_briefing_scope_signal,
         "interesting_engineering_scope_signal": interesting_engineering_scope_signal,
         "strategic_ai_major_deal_signal": strategic_ai_major_deal_signal,
+        "strategic_capability_acquisition_signal": strategic_capability_acquisition_signal,
         "physical_industry_ai_megafunding_signal": physical_industry_ai_megafunding_signal,
         "showcase_only_architecture_penalty": timber_present
         and _contains_any(haystack, SHOWCASE_TIMBER_TERMS)

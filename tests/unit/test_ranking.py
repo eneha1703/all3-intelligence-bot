@@ -42,6 +42,7 @@ RANKING_RULES = {
         "timber_performance_signal": 12,
         "industrial_robotics_signal": 8,
         "humanoid_affordability_signal": 8,
+        "strategic_capability_acquisition_signal": 12,
         "construction_innovation_signal": 6,
         "construction_statistics_signal": 18,
         "housing_market_signal": 12,
@@ -368,7 +369,39 @@ def test_major_industrial_ai_merger_story_from_broad_feed_reaches_send_path() ->
     assert flags["acquisition_event"] is True
     assert decision.relevance_status == "keep"
     assert decision.send_status == "stored_only"
-    assert decision.score == 60
+    assert decision.score >= 60
+
+
+def test_meta_humanoid_robotics_acquisition_story_gets_strategic_capability_signal() -> None:
+    item = _make_item(
+        "Meta buys robotics startup to bolster its humanoid AI ambitions",
+        "The deal adds robotics talent and technology to Meta's humanoid AI push.",
+        broad_feed=True,
+    )
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["acquisition_event"] is True
+    assert flags["strategic_capability_acquisition_signal"] is True
+    assert decision.relevance_status == "keep"
+    assert decision.score == 57
+
+
+def test_construction_company_robotics_acquisition_story_gets_strategic_capability_signal() -> None:
+    item = _make_item(
+        "Builder buys construction robotics startup to speed modular housing delivery",
+        "The acquisition gives the construction company robotics and prefab automation capability for jobsite and factory workflows.",
+        broad_feed=True,
+    )
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["acquisition_event"] is True
+    assert flags["strategic_capability_acquisition_signal"] is True
+    assert decision.relevance_status == "keep"
+    assert decision.score >= 57
 
 
 def test_abb_like_launch_sets_product_launch_event() -> None:

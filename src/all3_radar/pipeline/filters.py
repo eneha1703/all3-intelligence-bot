@@ -774,6 +774,8 @@ def has_clear_all3_scope(item: StoredNormalizedItem, competitor_count: int, even
         return True
     if event_flags.get("strategic_ai_major_deal_signal"):
         return True
+    if event_flags.get("strategic_capability_acquisition_signal"):
+        return True
     if event_flags.get("physical_industry_ai_megafunding_signal"):
         return True
     if event_flags.get("construction_statistics_signal"):
@@ -865,6 +867,7 @@ def compute_relevance_status(
             competitor_count > 0
             or event_flags.get("housing_market_signal")
             or event_flags.get("strategic_ai_major_deal_signal")
+            or event_flags.get("strategic_capability_acquisition_signal")
             or event_flags.get("physical_industry_ai_megafunding_signal")
             or is_construction_briefing_scope_signal(item)
             or is_interesting_engineering_scope_signal(item)

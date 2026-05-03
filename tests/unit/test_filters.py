@@ -732,10 +732,64 @@ def test_broad_feed_major_industrial_ai_merger_story_survives_scope_gate() -> No
     assert reason is None
 
 
+def test_broad_feed_meta_robotics_acquisition_story_survives_scope_gate() -> None:
+    item = _make_item(
+        "Meta buys robotics startup to bolster its humanoid AI ambitions",
+        "The deal adds robotics talent and technology to Meta's humanoid AI push.",
+        broad_feed=True,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "keep"
+    assert reason is None
+
+
+def test_construction_robotics_acquisition_story_survives_scope_gate() -> None:
+    item = _make_item(
+        "Builder buys construction robotics startup to speed modular housing delivery",
+        "The acquisition gives the construction company robotics and prefab automation capability for jobsite and factory workflows.",
+        broad_feed=True,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "keep"
+    assert reason is None
+
+
 def test_generic_broad_feed_ai_merger_without_physical_industry_scope_stays_dropped() -> None:
     item = _make_item(
         "Cohere and Aleph Alpha explore merger for enterprise AI expansion",
         "The companies are discussing a strategic AI merger to expand enterprise chat and office productivity tools.",
+        broad_feed=True,
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "drop"
+    assert reason == "no_clear_all3_scope"
+
+
+def test_generic_broad_feed_software_acquisition_without_physical_scope_stays_dropped() -> None:
+    item = _make_item(
+        "CRM company buys workflow software startup to expand sales automation",
+        "The acquisition supports enterprise software, customer support tooling, and office productivity workflows.",
         broad_feed=True,
     )
 
