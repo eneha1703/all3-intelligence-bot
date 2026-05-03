@@ -93,6 +93,8 @@ def test_build_claude_editorial_review_prompt_includes_scope_rules() -> None:
     assert "generic enterprise AI, ERP, workflow, procurement, or back-office automation" in prompt
     assert "access-control, security, or generic Industrial IoT security automation" in prompt
     assert "generic manufacturing without robotics, AI, or automation" in prompt
+    assert "Do not reject strategic capability acquisitions" in prompt
+    assert "buying robotics, humanoid, industrial automation, construction automation, prefab, modular, contech, or physical-AI capability" in prompt
     assert "Do not reject quantified timber building-performance evidence as mere thought leadership" in prompt
     assert "prefer low or medium confidence over a high-confidence rejection" in prompt
     assert "Return only a single JSON object" in prompt

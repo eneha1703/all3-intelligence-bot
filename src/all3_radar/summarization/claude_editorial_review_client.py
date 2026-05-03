@@ -180,6 +180,8 @@ def build_claude_editorial_review_prompt(
         "generic enterprise AI, ERP, workflow, procurement, or back-office automation, "
         "access-control, security, or generic Industrial IoT security automation, "
         "and generic finance, profile, or executive stories. "
+        "Do not reject strategic capability acquisitions when a company is buying robotics, humanoid, industrial automation, "
+        "construction automation, prefab, modular, contech, or physical-AI capability that is clearly relevant to how physical systems are built, automated, or operated. "
         "Do not reject quantified timber building-performance evidence as mere thought leadership when it presents "
         "a concrete materials comparison relevant to building adoption, thermal performance, energy behavior, or envelope design. "
         "If a story is strategically relevant because it affects industrial automation engineering workflows but is still thin on customer adoption, "

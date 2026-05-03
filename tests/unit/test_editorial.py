@@ -279,6 +279,40 @@ def test_editorial_shaping_keeps_strong_strategic_industrial_ai_funding_story() 
     assert editorial.flags["telegram_worthy"] is True
 
 
+def test_editorial_shaping_keeps_strategic_robotics_capability_acquisition() -> None:
+    item = _make_item(
+        "Meta buys robotics startup to bolster its humanoid AI ambitions",
+        "The deal adds robotics talent and technology to Meta's humanoid AI push.",
+        source_id="techcrunch_rss",
+    )
+    item = StoredNormalizedItem(**{**item.__dict__, "metadata": {"broad_feed": True}})
+    decision = _make_decision(acquisition_event=True, strategic_capability_acquisition_signal=True)
+
+    editorial = evaluate_send_stage_editorial(item, decision)
+
+    assert editorial.allow_send is True
+    assert editorial.reason is None
+    assert editorial.flags["strategic_capability_acquisition_alert_signal"] is True
+    assert editorial.flags["telegram_worthy"] is True
+
+
+def test_editorial_shaping_keeps_construction_robotics_capability_acquisition() -> None:
+    item = _make_item(
+        "Builder buys construction robotics startup to speed modular housing delivery",
+        "The acquisition gives the construction company robotics and prefab automation capability for jobsite and factory workflows.",
+        source_id="techcrunch_rss",
+    )
+    item = StoredNormalizedItem(**{**item.__dict__, "metadata": {"broad_feed": True}})
+    decision = _make_decision(acquisition_event=True, strategic_capability_acquisition_signal=True)
+
+    editorial = evaluate_send_stage_editorial(item, decision)
+
+    assert editorial.allow_send is True
+    assert editorial.reason is None
+    assert editorial.flags["strategic_capability_acquisition_alert_signal"] is True
+    assert editorial.flags["telegram_worthy"] is True
+
+
 def test_editorial_shaping_keeps_strategic_ai_merger_stored_only_without_stronger_real_world_signal() -> None:
     item = _make_item(
         "Cohere and Aleph Alpha explore merger with Schwarz Group backing",

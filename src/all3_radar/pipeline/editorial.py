@@ -123,6 +123,27 @@ STRATEGIC_AI_REAL_WORLD_TERMS = (
     "physical industries",
     "factory floor",
 )
+STRATEGIC_CAPABILITY_ACQUISITION_TERMS = (
+    "robot",
+    "robots",
+    "robotics",
+    "humanoid",
+    "physical ai",
+    "physics ai",
+    "industrial automation",
+    "machine vision",
+    "robot programming",
+    "construction robotics",
+    "construction automation",
+    "prefab",
+    "prefabrication",
+    "modular",
+    "offsite",
+    "off-site",
+    "contech",
+    "building tech",
+    "housing delivery",
+)
 HUMANOID_ACCESS_TERMS = (
     "humanoid",
     "aliexpress",
@@ -401,6 +422,11 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         and event_flags.get("funding_event", False)
         and _contains_any(haystack, STRATEGIC_AI_REAL_WORLD_TERMS)
     )
+    strategic_capability_acquisition_alert_signal = (
+        event_flags.get("strategic_capability_acquisition_signal", False)
+        and event_flags.get("acquisition_event", False)
+        and _contains_any(haystack, STRATEGIC_CAPABILITY_ACQUISITION_TERMS)
+    )
     tangible_operational_signal = operational_detail or construction_execution or industrial_relevance
     product_or_platform_news = product_launch and tangible_operational_signal and (
         industrial_relevance or construction_execution or competitor_count > 0
@@ -416,6 +442,7 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         or timber_economics_alert_signal
         or timber_performance_alert_signal
         or strategic_industrial_ai_alert_signal
+        or strategic_capability_acquisition_alert_signal
     )
 
     flags = {
@@ -435,6 +462,7 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         "timber_economics_alert_signal": timber_economics_alert_signal,
         "timber_performance_alert_signal": timber_performance_alert_signal,
         "strategic_industrial_ai_alert_signal": strategic_industrial_ai_alert_signal,
+        "strategic_capability_acquisition_alert_signal": strategic_capability_acquisition_alert_signal,
         "tangible_operational_signal": tangible_operational_signal,
         "telegram_worthy": telegram_worthy,
     }
