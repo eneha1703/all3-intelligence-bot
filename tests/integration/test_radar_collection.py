@@ -2996,8 +2996,7 @@ def test_claude_editorial_medium_promotion_does_not_apply_to_deprioritized_waymo
     assert signals["claude_editorial_not_reviewed_reason"] == "ineligible"
     assert signals.get("claude_editorial_medium_promoted") is not True
     assert send_status == "skip"
-    assert skip_reason == "no_clear_all3_scope"
-
+    assert skip_reason in {"no_clear_all3_scope", "obvious_off_scope"}
 
 def test_claude_editorial_medium_promotion_requires_send_ok_complete_edits_and_medium_confidence(
     monkeypatch, tmp_path

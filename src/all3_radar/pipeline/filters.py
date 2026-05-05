@@ -307,6 +307,37 @@ ROBOTICS_TERMS = {
     "autonomy",
     "autonomous",
 }
+INDUSTRIAL_ROBOTICS_PRODUCT_LAUNCH_TERMS = {
+    "launches",
+    "launched",
+    "introduces",
+    "introduced",
+    "unveils",
+    "unveiled",
+    "releases",
+    "released",
+    "rolls out",
+    "rolled out",
+    "debuts",
+    "debuted",
+}
+INDUSTRIAL_ROBOTICS_PRODUCT_CONTEXT_TERMS = {
+    "automation cell",
+    "robot cell",
+    "robotic cell",
+    "surface finishing",
+    "finishing cell",
+    "sanding",
+    "polishing",
+    "grinding",
+    "painting",
+    "coating",
+    "manufacturing cell",
+    "factory automation",
+    "industrial automation",
+    "manufacturing automation",
+    "autonomous cell",
+}
 AUTOMATION_TERMS = {
     "automation",
     "automated",
@@ -642,6 +673,14 @@ def has_any_term(text: str, terms: set[str]) -> bool:
     return any(_term_pattern(term).search(normalized) for term in terms)
 
 
+def is_industrial_robotics_product_launch_signal(item: StoredNormalizedItem) -> bool:
+    haystack = _normalize_text(f"{item.title} {item.text_preview or ''}")
+    return (
+        has_any_term(haystack, ROBOTICS_TERMS)
+        and has_any_term(haystack, INDUSTRIAL_ROBOTICS_PRODUCT_LAUNCH_TERMS)
+        and has_any_term(haystack, INDUSTRIAL_ROBOTICS_PRODUCT_CONTEXT_TERMS)
+    )
+
 def is_obvious_off_scope(item: StoredNormalizedItem) -> bool:
     haystack = _normalize_text(f"{item.title} {item.text_preview or ''}")
     if has_any_term(haystack, MILITARY_ROBOTICS_TERMS):
@@ -797,6 +836,8 @@ def has_clear_all3_scope(item: StoredNormalizedItem, competitor_count: int, even
     if has_any_term(haystack, ROBOTICS_BUSINESS_ENTITY_TERMS) and has_any_term(
         haystack, ROBOTICS_BUSINESS_PERFORMANCE_TERMS
     ):
+        return True
+    if is_industrial_robotics_product_launch_signal(item):
         return True
     if has_any_term(haystack, ROBOTICS_TERMS) and has_any_term(haystack, STRATEGIC_WORK_ENV_TERMS):
         return True

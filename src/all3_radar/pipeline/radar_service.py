@@ -228,6 +228,24 @@ def _claude_editorial_taxonomy_bucket(context: CurrentRunContext) -> str:
         "humanoid",
         "humanoids",
     )
+    humanoid_component_terms = (
+        "robotic hand",
+        "robotic hands",
+        "robot hand",
+        "robot hands",
+        "dexterous hand",
+        "dexterous hands",
+        "dexterous manipulation",
+        "robotic manipulation",
+        "humanoid hand",
+        "humanoid hands",
+        "humanoid component",
+        "humanoid components",
+        "end effector",
+        "end-effectors",
+        "gripper",
+        "grippers",
+    )
     business_performance_terms = (
         "revenue",
         "sales",
@@ -246,6 +264,21 @@ def _claude_editorial_taxonomy_bucket(context: CurrentRunContext) -> str:
         "rises",
         "fell",
         "falls",
+    )
+    funding_or_valuation_terms = (
+        "funding",
+        "funding round",
+        "raises",
+        "raised",
+        "round",
+        "valuation",
+        "valued at",
+        "targets",
+        "targeting",
+        "investor",
+        "investors",
+        "billion",
+        "$",
     )
     infrastructure_terms = (
         "infrastructure",
@@ -327,6 +360,11 @@ def _claude_editorial_taxonomy_bucket(context: CurrentRunContext) -> str:
     robotics_business_story = _contains_any_term(haystack, robotics_terms) and _contains_any_term(
         haystack, business_performance_terms
     )
+    humanoid_component_funding_story = (
+        _contains_any_term(haystack, humanoid_component_terms)
+        and _contains_any_term(haystack, robotics_terms)
+        and _contains_any_term(haystack, funding_or_valuation_terms)
+    )
     automation_engineering_story = _contains_any_term(haystack, automation_enablement_terms) and (
         _contains_any_term(haystack, ("automation", "robot", "robotics", "factory", "manufacturing", "industrial"))
     )
@@ -380,6 +418,8 @@ def _claude_editorial_taxonomy_bucket(context: CurrentRunContext) -> str:
         return "auction_liquidation_surplus"
     if timber_policy_only_story or generic_business_explainer:
         return "generic_finance_or_explainer"
+    if humanoid_component_funding_story:
+        return "humanoid_robotics_component_funding"
     if robotics_infrastructure_story:
         return "robotics_led_infrastructure"
     if robotics_business_story:
@@ -404,6 +444,7 @@ def _claude_editorial_review_priority(context: CurrentRunContext) -> tuple[int, 
         "robotics_led_infrastructure": 4,
         "robotics_business_performance": 4,
         "industrial_automation_engineering_enablement": 4,
+        "humanoid_robotics_component_funding": 4,
         "greenhouse_ag_automation": 3,
         "other": 2,
         "consumer_robotaxi_or_av_service": 0,
@@ -430,6 +471,7 @@ def _is_allowed_medium_claude_editorial_promotion(
         "robotics_led_infrastructure",
         "robotics_business_performance",
         "industrial_automation_engineering_enablement",
+        "humanoid_robotics_component_funding",
     }
 
 
