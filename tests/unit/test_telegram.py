@@ -1,9 +1,4 @@
-from all3_radar.delivery.telegram import (
-    build_inline_reply_markup,
-    build_news_card,
-    build_replay_card,
-    build_shortlist_action_button,
-)
+from all3_radar.delivery.telegram import build_inline_reply_markup, build_news_card, build_replay_card
 
 
 def test_build_news_card_formats_clean_message() -> None:
@@ -117,9 +112,9 @@ def test_build_news_card_keeps_three_short_factual_sentences_when_useful() -> No
 
 def test_build_news_card_trims_overlong_clause_heaviness() -> None:
     card = build_news_card(
-        headline="Neura Robotics partners with Dassault Systèmes",
+        headline="Neura Robotics partners with Dassault Systemes",
         summary_text=(
-            "Neura Robotics is partnering with Dassault Systèmes to connect robot training in virtual environments with real-world deployment. "
+            "Neura Robotics is partnering with Dassault Systemes to connect robot training in virtual environments with real-world deployment. "
             "The agreement links Neura's robotics platform with Dassault's 3DEXPERIENCE virtual twin platform, creating a closed-loop system where robots learn in simulation, operate in physical environments, and continuously improve across both."
         ),
         url="https://example.com/neura-story",
@@ -162,17 +157,13 @@ def test_build_replay_card_prepends_clear_replay_label() -> None:
     assert "<b>Mass timber premiums run six to ten times higher than concrete and steel</b>" in replay_card.text
 
 
-def test_build_news_card_can_include_shortlist_button() -> None:
-    button = build_shortlist_action_button("item-123")
+def test_build_news_card_has_no_actions_by_default() -> None:
     card = build_news_card(
         headline="Unitree launches upper-body humanoid robot at $4,290",
         summary_text="Unitree has unveiled a low-cost upper-body humanoid robot aimed at entry-level use.",
         url="https://example.com/unitree",
-        action_buttons=(button,),
     )
 
     assert card is not None
-    assert card.action_buttons == (button,)
-    assert build_inline_reply_markup(card.action_buttons) == {
-        "inline_keyboard": [[{"text": "🏆 Add to shortlist", "callback_data": "shortlist:toggle:item-123"}]]
-    }
+    assert card.action_buttons == ()
+    assert build_inline_reply_markup(card.action_buttons) is None
