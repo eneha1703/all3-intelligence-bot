@@ -629,6 +629,9 @@ UK_CONSTRUCTION_PRIORITY_TERMS = {
 MARKET_SIGNAL_TERMS = {
     "%",
     "index",
+    "finanzierungsindex",
+    "immobilienfinanzierungsindex",
+    "difi",
     "study",
     "report",
     "forecast",

@@ -205,6 +205,23 @@ def test_telegraph_uk_housing_market_signal_is_detected() -> None:
     assert is_housing_market_signal(item) is True
 
 
+def test_haufe_germany_housing_finance_index_signal_is_detected() -> None:
+    item = _make_item(
+        "Kreditangebot: Wer jetzt noch Immobilien finanziert",
+        "Der Deutsche Immobilienfinanzierungsindex (DIFI) zeigt Einschätzungen von Experten zur Lage am Kreditmarkt.",
+        broad_feed=True,
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "source_id": "haufe_immobilien_listing",
+            "metadata": {"tags": ["construction", "germany"], "broad_feed": True, "market_scope": "germany_housing_market"},
+        }
+    )
+
+    assert is_housing_market_signal(item) is True
+
+
 def test_uk_housing_market_story_from_broad_feed_keeps_scope() -> None:
     item = _make_item(
         "UK housing shortage deepens as completions fall and rents rise",

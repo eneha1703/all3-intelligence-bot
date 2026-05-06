@@ -307,6 +307,7 @@ def build_claude_final_card_prompt(
         "Do not select news from scratch. Do not broaden scope. Do not invent facts. "
         "You may only improve wording for a final Telegram card or reject the candidate when it is clearly duplicate, off-scope, generic, or insufficiently specific. "
         "Write in English. Write a Telegram-ready daily news card, not a weekly digest memo. "
+        "Do not label stories with meta tags like PRESS RELEASE, BREAKING, or ALERT. "
         "Approve only when the story has a concrete All3-relevant operational signal such as physical AI, industrial robotics, "
         "factory automation directly tied to robotics, AI, or autonomous systems, construction automation, housing industrialization or productivity, "
         "timber adoption, scaling, economics, or policy, or strategically relevant robotics, automation, or platform funding or deployment. "
