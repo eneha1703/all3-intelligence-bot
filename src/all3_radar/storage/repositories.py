@@ -645,6 +645,265 @@ class RadarRepository:
             )
             connection.commit()
 
+    def upsert_telegram_group_message(
+        self,
+        *,
+        chat_id: str,
+        telegram_message_id: str,
+        sent_by_bot: bool,
+        sender_user_id: str,
+        sender_chat_id: str,
+        message_ts: str,
+        message_text: str | None,
+        message_caption: str | None,
+        message_urls: tuple[str, ...],
+        has_links: bool,
+        normalized_item_id: str | None = None,
+        canonical_event_id: str | None = None,
+        raw_update: dict[str, Any] | None = None,
+    ) -> None:
+        now = _utc_now_iso()
+        single_message_url = message_urls[0] if len(message_urls) == 1 else None
+        with connect(self.database_path) as connection:
+            connection.execute(
+                """
+                INSERT INTO telegram_group_messages (
+                  id, chat_id, telegram_message_id, sent_by_bot, sender_user_id, sender_chat_id,
+                  message_ts, message_text, message_caption, message_url, has_links, link_count,
+                  normalized_item_id, canonical_event_id, raw_update_json, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(chat_id, telegram_message_id) DO UPDATE SET
+                  sent_by_bot=excluded.sent_by_bot,
+                  sender_user_id=excluded.sender_user_id,
+                  sender_chat_id=excluded.sender_chat_id,
+                  message_ts=excluded.message_ts,
+                  message_text=excluded.message_text,
+                  message_caption=excluded.message_caption,
+                  message_url=excluded.message_url,
+                  has_links=excluded.has_links,
+                  link_count=excluded.link_count,
+                  normalized_item_id=COALESCE(excluded.normalized_item_id, telegram_group_messages.normalized_item_id),
+                  canonical_event_id=COALESCE(excluded.canonical_event_id, telegram_group_messages.canonical_event_id),
+                  raw_update_json=excluded.raw_update_json,
+                  updated_at=excluded.updated_at
+                """,
+                (
+                    uuid.uuid4().hex,
+                    chat_id,
+                    telegram_message_id,
+                    int(sent_by_bot),
+                    sender_user_id,
+                    sender_chat_id,
+                    message_ts,
+                    message_text,
+                    message_caption,
+                    single_message_url,
+                    int(has_links),
+                    len(message_urls),
+                    normalized_item_id,
+                    canonical_event_id,
+                    json.dumps(raw_update or {}, sort_keys=True),
+                    now,
+                    now,
+                ),
+            )
+            connection.execute(
+                """
+                DELETE FROM telegram_group_message_links
+                WHERE chat_id = ? AND telegram_message_id = ?
+                """,
+                (chat_id, telegram_message_id),
+            )
+            for index, url in enumerate(message_urls):
+                connection.execute(
+                    """
+                    INSERT INTO telegram_group_message_links (
+                      id, chat_id, telegram_message_id, link_index, url, created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (uuid.uuid4().hex, chat_id, telegram_message_id, index, url, now),
+                )
+            connection.commit()
+
+    def upsert_telegram_reaction_pick(
+        self,
+        *,
+        chat_id: str,
+        telegram_message_id: str,
+        reactor_user_id: str,
+        actor_chat_id: str,
+        reaction_key: str,
+        is_active: bool,
+        picked_at: str,
+        source_update_kind: str,
+        raw_update: dict[str, Any] | None = None,
+    ) -> None:
+        now = _utc_now_iso()
+        with connect(self.database_path) as connection:
+            connection.execute(
+                """
+                INSERT INTO telegram_reaction_picks (
+                  id, chat_id, telegram_message_id, reactor_user_id, actor_chat_id, reaction_key,
+                  is_active, picked_at, source_update_kind, raw_update_json, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(chat_id, telegram_message_id, reactor_user_id, actor_chat_id, reaction_key) DO UPDATE SET
+                  is_active=excluded.is_active,
+                  picked_at=excluded.picked_at,
+                  source_update_kind=excluded.source_update_kind,
+                  raw_update_json=excluded.raw_update_json,
+                  updated_at=excluded.updated_at
+                """,
+                (
+                    uuid.uuid4().hex,
+                    chat_id,
+                    telegram_message_id,
+                    reactor_user_id,
+                    actor_chat_id,
+                    reaction_key,
+                    int(is_active),
+                    picked_at,
+                    source_update_kind,
+                    json.dumps(raw_update or {}, sort_keys=True),
+                    now,
+                    now,
+                ),
+            )
+            connection.commit()
+
+    def load_telegram_reaction_shortlist_candidates(
+        self,
+        *,
+        window_start: str,
+        window_end: str,
+        allowed_reaction_keys: tuple[str, ...],
+        min_unique_reactors: int,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        if not allowed_reaction_keys:
+            return []
+        placeholders = ",".join("?" for _ in allowed_reaction_keys)
+        with connect(self.database_path) as connection:
+            rows = connection.execute(
+                f"""
+                SELECT gm.chat_id,
+                       gm.telegram_message_id,
+                       gm.sent_by_bot,
+                       gm.sender_user_id,
+                       gm.message_ts,
+                       gm.message_text,
+                       gm.message_caption,
+                       gm.message_url,
+                       gm.has_links,
+                       gm.normalized_item_id,
+                       gm.canonical_event_id,
+                       COUNT(DISTINCT NULLIF(COALESCE(NULLIF(rp.reactor_user_id, ''), rp.actor_chat_id), '')) AS unique_reactors,
+                       MAX(rp.picked_at) AS last_picked_at
+                FROM telegram_reaction_picks rp
+                JOIN telegram_group_messages gm
+                  ON gm.chat_id = rp.chat_id
+                 AND gm.telegram_message_id = rp.telegram_message_id
+                WHERE rp.is_active = 1
+                  AND rp.reaction_key IN ({placeholders})
+                  AND rp.picked_at >= ?
+                  AND rp.picked_at <= ?
+                  AND ((gm.link_count = 1 AND gm.message_url IS NOT NULL) OR gm.normalized_item_id IS NOT NULL)
+                GROUP BY gm.chat_id, gm.telegram_message_id
+                HAVING unique_reactors >= ?
+                ORDER BY last_picked_at DESC, gm.message_ts DESC
+                LIMIT ?
+                """,
+                (*allowed_reaction_keys, window_start, window_end, min_unique_reactors, limit),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
+    def load_telegram_reaction_digest_candidates_for_week(
+        self,
+        *,
+        start_date: str,
+        end_date: str,
+        allowed_reaction_keys: tuple[str, ...],
+        min_unique_reactors: int,
+        limit: int,
+        require_canonical_events: bool,
+    ) -> list[dict[str, Any]]:
+        if not allowed_reaction_keys:
+            return []
+        placeholders = ",".join("?" for _ in allowed_reaction_keys)
+        canonical_event_expression = (
+            "ce.id"
+            if require_canonical_events
+            else "COALESCE(rd.canonical_event_id, td.canonical_event_id, gm.canonical_event_id, ni.id)"
+        )
+        canonical_join = (
+            "JOIN canonical_events ce ON ce.id = COALESCE(rd.canonical_event_id, td.canonical_event_id, gm.canonical_event_id)"
+            if require_canonical_events
+            else ""
+        )
+        with connect(self.database_path) as connection:
+            rows = connection.execute(
+                f"""
+                WITH unique_url_matches AS (
+                    SELECT ni.canonical_url AS canonical_url,
+                           MAX(COALESCE(ce.representative_item_id, ni.id)) AS normalized_item_id
+                    FROM normalized_items ni
+                    JOIN radar_decisions rd
+                      ON rd.normalized_item_id = ni.id
+                    LEFT JOIN canonical_events ce
+                      ON ce.id = rd.canonical_event_id
+                    WHERE rd.relevance_status = 'keep'
+                      AND rd.send_status IN ('sent', 'stored_only')
+                    GROUP BY ni.canonical_url
+                    HAVING COUNT(DISTINCT COALESCE(rd.canonical_event_id, ni.id)) = 1
+                )
+                SELECT {canonical_event_expression} AS canonical_event_id,
+                       ni.id AS normalized_item_id,
+                       ni.source_id,
+                       ni.title,
+                       ni.canonical_url,
+                       ni.published_ts,
+                       rd.score,
+                       rd.send_status,
+                       rd.summary_text,
+                       rd.signals_json,
+                       COUNT(DISTINCT NULLIF(COALESCE(NULLIF(rp.reactor_user_id, ''), rp.actor_chat_id), '')) AS unique_reactors,
+                       MAX(rp.picked_at) AS last_picked_at
+                FROM telegram_reaction_picks rp
+                LEFT JOIN telegram_group_messages gm
+                  ON gm.chat_id = rp.chat_id
+                 AND gm.telegram_message_id = rp.telegram_message_id
+                LEFT JOIN telegram_deliveries td
+                  ON td.chat_id = rp.chat_id
+                 AND td.telegram_message_id = rp.telegram_message_id
+                 AND td.status = 'sent'
+                LEFT JOIN normalized_items ni_from_id
+                  ON ni_from_id.id = COALESCE(gm.normalized_item_id, td.normalized_item_id)
+                LEFT JOIN unique_url_matches url_match
+                  ON gm.link_count = 1
+                 AND gm.message_url IS NOT NULL
+                 AND url_match.canonical_url = gm.message_url
+                JOIN normalized_items ni
+                  ON ni.id = COALESCE(ni_from_id.id, url_match.normalized_item_id)
+                JOIN radar_decisions rd
+                  ON rd.normalized_item_id = ni.id
+                {canonical_join}
+                WHERE rp.is_active = 1
+                  AND rp.reaction_key IN ({placeholders})
+                  AND date(rp.picked_at) >= date(?)
+                  AND date(rp.picked_at) <= date(?)
+                  AND rd.relevance_status = 'keep'
+                  AND rd.send_status IN ('sent', 'stored_only')
+                GROUP BY {canonical_event_expression}, ni.id
+                HAVING unique_reactors >= ?
+                ORDER BY last_picked_at DESC, rd.score DESC, ni.published_ts DESC
+                LIMIT ?
+                """,
+                (*allowed_reaction_keys, start_date, end_date, min_unique_reactors, limit),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def upsert_editorial_signal(self, signal: EditorialSignal) -> None:
         signal_id = uuid.uuid4().hex
         now = _utc_now_iso()

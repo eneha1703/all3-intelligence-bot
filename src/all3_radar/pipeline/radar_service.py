@@ -1451,6 +1451,22 @@ class RadarService:
                         telegram_message_id=delivery.telegram_message_id,
                         error_text=delivery.error_text,
                     )
+                    if delivery.status == "sent" and delivery.telegram_message_id:
+                        self.repository.upsert_telegram_group_message(
+                            chat_id=delivery.chat_id,
+                            telegram_message_id=delivery.telegram_message_id,
+                            sent_by_bot=True,
+                            sender_user_id="",
+                            sender_chat_id="",
+                            message_ts=datetime.now(timezone.utc).isoformat(),
+                            message_text=card.text,
+                            message_caption=None,
+                            message_urls=(context.item.canonical_url,),
+                            has_links=True,
+                            normalized_item_id=context.item.normalized_item_id,
+                            canonical_event_id=context.cluster_assignment.canonical_event_id,
+                            raw_update={"source": "bot_delivery", "bot_kind": "alert"},
+                        )
                     any_sent = any_sent or delivery.status == "sent"
                     LOGGER.info(
                         "Telegram delivery: item=%s status=%s chat_id=%s reason=%s",

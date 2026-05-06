@@ -246,6 +246,103 @@ def test_radar_collection_dedupes_and_sends_with_mocks(monkeypatch, tmp_path, ca
     assert "Telegram delivery" in caplog.text
 
 
+def test_sent_telegram_news_is_registered_in_group_message_registry(monkeypatch, tmp_path) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "radar_group_registry.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+
+    now = datetime.now(timezone.utc)
+    feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Kewazo raises funding for construction robot rollout</title>
+    <link>https://direct-a.example/story</link>
+    <description>The company said the round will support factory and jobsite deployment expansion.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=1))}</pubDate>
+    <guid>a1</guid>
+  </item>
+</channel></rss>"""
+
+    registry = SourceRegistry(
+        (
+            SourceDefinition(
+                id="direct_a",
+                name="Direct A",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://direct-a.example/feed.xml",
+                priority=90,
+                tags=("robotics", "construction"),
+            ),
+        )
+    )
+
+    class FakeGeminiClient:
+        is_available = True
+
+        def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
+            return (
+                "The round supports deployment expansion across construction robotics workflows. "
+                "Kewazo is using the capital to scale rollout across factory and jobsite operations.",
+                None,
+            )
+
+    class FakeTelegramSender:
+        def send_card(self, card):
+            return [
+                TelegramDelivery(
+                    chat_id="-100123",
+                    status="sent",
+                    telegram_message_id="321",
+                    error_text=None,
+                    payload_text=card.text,
+                )
+            ]
+
+    def fake_fetch_text(url: str) -> str:
+        assert url == "https://direct-a.example/feed.xml"
+        return feed
+
+    service = RadarService(
+        repo_root=repo_root,
+        registry=registry,
+        fetch_text_fn=fake_fetch_text,
+        gemini_client=FakeGeminiClient(),
+        telegram_sender=FakeTelegramSender(),
+    )
+    result = service.run(dry_run=False)
+
+    assert result.sent_items == 1
+    with sqlite3.connect(db_path) as connection:
+        group_row = connection.execute(
+            """
+            SELECT chat_id, telegram_message_id, sent_by_bot, message_url, link_count, normalized_item_id
+            FROM telegram_group_messages
+            """
+        ).fetchone()
+        link_rows = connection.execute(
+            """
+            SELECT link_index, url
+            FROM telegram_group_message_links
+            WHERE chat_id = '-100123' AND telegram_message_id = '321'
+            ORDER BY link_index
+            """
+        ).fetchall()
+
+    assert group_row is not None
+    assert group_row[0] == "-100123"
+    assert group_row[1] == "321"
+    assert group_row[2] == 1
+    assert group_row[3] == "https://direct-a.example/story"
+    assert group_row[4] == 1
+    assert group_row[5] is not None
+    assert link_rows == [(0, "https://direct-a.example/story")]
+
+
 def test_radar_collection_continues_when_one_source_fails(monkeypatch, tmp_path, caplog) -> None:
     repo_root = Path(__file__).resolve().parents[2]
     db_path = tmp_path / "radar_partial.db"

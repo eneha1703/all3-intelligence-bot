@@ -118,6 +118,76 @@ CREATE TABLE IF NOT EXISTS telegram_deliveries (
   FOREIGN KEY(run_id) REFERENCES pipeline_runs(id)
 );
 
+CREATE TABLE IF NOT EXISTS telegram_group_messages (
+  id TEXT PRIMARY KEY,
+  chat_id TEXT NOT NULL,
+  telegram_message_id TEXT NOT NULL,
+  sent_by_bot INTEGER NOT NULL,
+  sender_user_id TEXT NOT NULL DEFAULT '',
+  sender_chat_id TEXT NOT NULL DEFAULT '',
+  message_ts TEXT NOT NULL,
+  message_text TEXT,
+  message_caption TEXT,
+  message_url TEXT,
+  has_links INTEGER NOT NULL,
+  link_count INTEGER NOT NULL DEFAULT 0,
+  normalized_item_id TEXT,
+  canonical_event_id TEXT,
+  raw_update_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY(normalized_item_id) REFERENCES normalized_items(id),
+  FOREIGN KEY(canonical_event_id) REFERENCES canonical_events(id),
+  UNIQUE(chat_id, telegram_message_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_telegram_group_messages_url
+  ON telegram_group_messages(has_links, message_ts);
+
+CREATE INDEX IF NOT EXISTS idx_telegram_group_messages_item
+  ON telegram_group_messages(normalized_item_id);
+
+CREATE TABLE IF NOT EXISTS telegram_group_message_links (
+  id TEXT PRIMARY KEY,
+  chat_id TEXT NOT NULL,
+  telegram_message_id TEXT NOT NULL,
+  link_index INTEGER NOT NULL,
+  url TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  FOREIGN KEY(chat_id, telegram_message_id)
+    REFERENCES telegram_group_messages(chat_id, telegram_message_id),
+  UNIQUE(chat_id, telegram_message_id, link_index),
+  UNIQUE(chat_id, telegram_message_id, url)
+);
+
+CREATE INDEX IF NOT EXISTS idx_telegram_group_message_links_message
+  ON telegram_group_message_links(chat_id, telegram_message_id);
+
+CREATE INDEX IF NOT EXISTS idx_telegram_group_message_links_url
+  ON telegram_group_message_links(url);
+
+CREATE TABLE IF NOT EXISTS telegram_reaction_picks (
+  id TEXT PRIMARY KEY,
+  chat_id TEXT NOT NULL,
+  telegram_message_id TEXT NOT NULL,
+  reactor_user_id TEXT NOT NULL DEFAULT '',
+  actor_chat_id TEXT NOT NULL DEFAULT '',
+  reaction_key TEXT NOT NULL,
+  is_active INTEGER NOT NULL,
+  picked_at TEXT NOT NULL,
+  source_update_kind TEXT NOT NULL,
+  raw_update_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE(chat_id, telegram_message_id, reactor_user_id, actor_chat_id, reaction_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_telegram_reaction_picks_active
+  ON telegram_reaction_picks(is_active, picked_at, reaction_key);
+
+CREATE INDEX IF NOT EXISTS idx_telegram_reaction_picks_message
+  ON telegram_reaction_picks(chat_id, telegram_message_id);
+
 CREATE TABLE IF NOT EXISTS editorial_signals (
   id TEXT PRIMARY KEY,
   signal_type TEXT NOT NULL,

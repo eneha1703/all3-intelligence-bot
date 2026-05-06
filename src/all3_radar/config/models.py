@@ -44,6 +44,16 @@ class TelegramConfig:
 
 
 @dataclass(frozen=True)
+class TelegramGroupCurationConfig:
+    enabled: bool
+    message_ingest_enabled: bool
+    reaction_shortlist_enabled: bool
+    shortlist_reaction_allowlist: tuple[str, ...]
+    shortlist_window_days: int
+    shortlist_min_unique_reactors: int
+
+
+@dataclass(frozen=True)
 class IntegrationsConfig:
     gemini_api_key: str | None
     gemini_model: str
@@ -67,4 +77,5 @@ class Settings:
     radar: RadarConfig
     digest: DigestConfig
     telegram: TelegramConfig
+    telegram_group_curation: TelegramGroupCurationConfig
     integrations: IntegrationsConfig

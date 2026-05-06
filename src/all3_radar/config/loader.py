@@ -8,7 +8,15 @@ from typing import Any, Mapping
 
 import yaml
 
-from all3_radar.config.models import AppConfig, DigestConfig, IntegrationsConfig, RadarConfig, Settings, TelegramConfig
+from all3_radar.config.models import (
+    AppConfig,
+    DigestConfig,
+    IntegrationsConfig,
+    RadarConfig,
+    Settings,
+    TelegramConfig,
+    TelegramGroupCurationConfig,
+)
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
@@ -65,6 +73,17 @@ def _parse_chat_ids(value: str | None) -> tuple[str, ...]:
     return tuple(part.strip() for part in value.split(",") if part.strip())
 
 
+def _parse_string_tuple(value: Any, field_name: str) -> tuple[str, ...]:
+    if value is None:
+        return ()
+    if isinstance(value, str):
+        return tuple(part.strip() for part in value.split(",") if part.strip())
+    if isinstance(value, list | tuple):
+        parsed = tuple(str(part).strip() for part in value if str(part).strip())
+        return parsed
+    raise ValueError(f"Expected string list for {field_name}, got: {value!r}")
+
+
 def _env_str_with_default(env: Mapping[str, str], env_name: str, default: str) -> str:
     value = env.get(env_name)
     if value is None:
@@ -81,6 +100,7 @@ def load_settings(repo_root: Path, env: Mapping[str, str] | None = None) -> Sett
     radar = dict(_require(config, "radar"))
     digest = dict(_require(config, "digest"))
     telegram = dict(_require(config, "telegram"))
+    telegram_group_curation = dict(config.get("telegram_group_curation") or {})
 
     timezone = str(_apply_env_override(app, "timezone", env, "TIMEZONE"))
     database_value = str(_apply_env_override(app, "database_path", env, "DATABASE_PATH"))
@@ -142,6 +162,44 @@ def load_settings(repo_root: Path, env: Mapping[str, str] | None = None) -> Sett
         telegram=TelegramConfig(
             parse_mode=str(telegram["parse_mode"]),
             disable_web_page_preview=_parse_bool(telegram["disable_web_page_preview"]),
+        ),
+        telegram_group_curation=TelegramGroupCurationConfig(
+            enabled=_parse_bool(env.get("TELEGRAM_GROUP_CURATION_ENABLED", telegram_group_curation.get("enabled", False))),
+            message_ingest_enabled=_parse_bool(
+                env.get(
+                    "TELEGRAM_GROUP_MESSAGE_INGEST_ENABLED",
+                    telegram_group_curation.get("message_ingest_enabled", False),
+                )
+            ),
+            reaction_shortlist_enabled=_parse_bool(
+                env.get(
+                    "TELEGRAM_REACTION_SHORTLIST_ENABLED",
+                    telegram_group_curation.get("reaction_shortlist_enabled", False),
+                )
+            ),
+            shortlist_reaction_allowlist=_parse_string_tuple(
+                env.get(
+                    "TELEGRAM_SHORTLIST_REACTION_ALLOWLIST",
+                    telegram_group_curation.get("shortlist_reaction_allowlist", ()),
+                ),
+                "telegram_group_curation.shortlist_reaction_allowlist",
+            ),
+            shortlist_window_days=_parse_int(
+                env.get(
+                    "TELEGRAM_SHORTLIST_WINDOW_DAYS",
+                    telegram_group_curation.get("shortlist_window_days", 7),
+                ),
+                "telegram_group_curation.shortlist_window_days",
+                default=7,
+            ),
+            shortlist_min_unique_reactors=_parse_int(
+                env.get(
+                    "TELEGRAM_SHORTLIST_MIN_UNIQUE_REACTORS",
+                    telegram_group_curation.get("shortlist_min_unique_reactors", 1),
+                ),
+                "telegram_group_curation.shortlist_min_unique_reactors",
+                default=1,
+            ),
         ),
         integrations=IntegrationsConfig(
             gemini_api_key=env.get("GEMINI_API_KEY") or None,

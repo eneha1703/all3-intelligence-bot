@@ -30,6 +30,12 @@ def test_load_settings_applies_env_overrides() -> None:
             "CLAUDE_EDITORIAL_TIMEOUT_SECONDS": "31",
             "CLAUDE_EDITORIAL_MAX_TOKENS": "701",
             "TELEGRAM_ALERT_CHAT_IDS": "1,2, 3",
+            "TELEGRAM_GROUP_CURATION_ENABLED": "true",
+            "TELEGRAM_GROUP_MESSAGE_INGEST_ENABLED": "true",
+            "TELEGRAM_REACTION_SHORTLIST_ENABLED": "true",
+            "TELEGRAM_SHORTLIST_REACTION_ALLOWLIST": "emoji:star, emoji:fire",
+            "TELEGRAM_SHORTLIST_WINDOW_DAYS": "14",
+            "TELEGRAM_SHORTLIST_MIN_UNIQUE_REACTORS": "2",
         },
     )
 
@@ -53,6 +59,24 @@ def test_load_settings_applies_env_overrides() -> None:
     assert settings.integrations.claude_editorial_timeout_seconds == 31
     assert settings.integrations.claude_editorial_max_tokens == 701
     assert settings.integrations.telegram_alert_chat_ids == ("1", "2", "3")
+    assert settings.telegram_group_curation.enabled is True
+    assert settings.telegram_group_curation.message_ingest_enabled is True
+    assert settings.telegram_group_curation.reaction_shortlist_enabled is True
+    assert settings.telegram_group_curation.shortlist_reaction_allowlist == ("emoji:star", "emoji:fire")
+    assert settings.telegram_group_curation.shortlist_window_days == 14
+    assert settings.telegram_group_curation.shortlist_min_unique_reactors == 2
+
+
+def test_load_settings_telegram_group_curation_defaults() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    settings = load_settings(repo_root, env={})
+
+    assert settings.telegram_group_curation.enabled is False
+    assert settings.telegram_group_curation.message_ingest_enabled is False
+    assert settings.telegram_group_curation.reaction_shortlist_enabled is False
+    assert settings.telegram_group_curation.shortlist_reaction_allowlist == ("emoji:star",)
+    assert settings.telegram_group_curation.shortlist_window_days == 7
+    assert settings.telegram_group_curation.shortlist_min_unique_reactors == 1
 
 
 def test_empty_claude_digest_integer_envs_use_defaults() -> None:

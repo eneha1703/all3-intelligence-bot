@@ -11,7 +11,8 @@ from all3_radar.pipeline.radar_service import run_radar
 from all3_radar.pipeline.replay_service import replay_radar_window
 from all3_radar.storage.repositories import RadarRepository
 from all3_radar.telegram_interactions.callbacks import TelegramBotApiClient, handle_telegram_callback_update
-from all3_radar.telegram_interactions.polling import poll_telegram_callback_updates
+from all3_radar.telegram_interactions.group_curation import TelegramGroupCurationService
+from all3_radar.telegram_interactions.polling import poll_telegram_callback_updates, poll_telegram_interaction_updates
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -53,7 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     telegram_poll_parser = subparsers.add_parser(
         "telegram-poll-updates",
-        help="Poll Telegram for callback updates and process shortlist button clicks",
+        help="Poll Telegram for shortlist callbacks and optional group curation updates",
     )
     telegram_poll_parser.add_argument("--limit", type=int, default=50, help="Max updates to fetch in one polling call")
     telegram_poll_parser.add_argument(
@@ -113,24 +114,59 @@ def main() -> int:
     if args.command == "telegram-handle-update":
         settings = load_settings(repo_root)
         repository = RadarRepository(settings.app.database_path)
+        bot_api_client = TelegramBotApiClient(settings.integrations.telegram_alert_bot_token)
         update = json.loads(Path(args.update_json_file).read_text(encoding="utf-8"))
-        result = handle_telegram_callback_update(
+        callback_result = handle_telegram_callback_update(
             update,
             repository=repository,
-            bot_api_client=TelegramBotApiClient(settings.integrations.telegram_alert_bot_token),
+            bot_api_client=bot_api_client,
         )
+        curation_result = None
+        if settings.telegram_group_curation.enabled:
+            curation_result = TelegramGroupCurationService(
+                repository,
+                enabled=settings.telegram_group_curation.enabled,
+                message_ingest_enabled=settings.telegram_group_curation.message_ingest_enabled,
+                reaction_shortlist_enabled=settings.telegram_group_curation.reaction_shortlist_enabled,
+                allowed_reaction_keys=settings.telegram_group_curation.shortlist_reaction_allowlist,
+            ).ingest_update(update)
         print(
-            f"Telegram callback handled={result.handled} action={result.action} "
-            f"normalized_item_id={result.normalized_item_id} active={result.is_active} message={result.message}"
+            f"Telegram update handled_callback={callback_result.handled} action={callback_result.action} "
+            f"normalized_item_id={callback_result.normalized_item_id} active={callback_result.is_active} "
+            f"stored_messages={curation_result.stored_messages if curation_result else 0} "
+            f"stored_reaction_picks={curation_result.stored_reaction_picks if curation_result else 0} "
+            f"message={callback_result.message}"
         )
         return 0
 
     if args.command == "telegram-poll-updates":
         settings = load_settings(repo_root)
         repository = RadarRepository(settings.app.database_path)
+        bot_api_client = TelegramBotApiClient(settings.integrations.telegram_alert_bot_token)
+        if settings.telegram_group_curation.enabled:
+            curation_service = TelegramGroupCurationService(
+                repository,
+                enabled=settings.telegram_group_curation.enabled,
+                message_ingest_enabled=settings.telegram_group_curation.message_ingest_enabled,
+                reaction_shortlist_enabled=settings.telegram_group_curation.reaction_shortlist_enabled,
+                allowed_reaction_keys=settings.telegram_group_curation.shortlist_reaction_allowlist,
+            )
+            result = poll_telegram_interaction_updates(
+                repository=repository,
+                bot_api_client=bot_api_client,
+                curation_service=curation_service,
+                limit=args.limit,
+                timeout_seconds=args.timeout_seconds,
+            )
+            print(
+                f"Telegram polling complete: fetched={result.fetched_updates} "
+                f"handled_callbacks={result.handled_callbacks} stored_messages={result.stored_messages} "
+                f"stored_reaction_picks={result.stored_reaction_picks} next_offset={result.next_offset}"
+            )
+            return 0
         result = poll_telegram_callback_updates(
             repository=repository,
-            bot_api_client=TelegramBotApiClient(settings.integrations.telegram_alert_bot_token),
+            bot_api_client=bot_api_client,
             limit=args.limit,
             timeout_seconds=args.timeout_seconds,
         )

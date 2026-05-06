@@ -6,7 +6,7 @@ import json
 import logging
 import re
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from all3_radar.config.loader import load_settings
@@ -503,6 +503,25 @@ class DigestService:
             )
             for row in manual_rows:
                 row["manual_shortlist_signal"] = True
+            if (
+                self.settings.telegram_group_curation.enabled
+                and self.settings.telegram_group_curation.reaction_shortlist_enabled
+            ):
+                reaction_window_start = window.current_thursday - timedelta(
+                    days=self.settings.telegram_group_curation.shortlist_window_days
+                )
+                telegram_reaction_rows = self.repository.load_telegram_reaction_digest_candidates_for_week(
+                    start_date=reaction_window_start.isoformat(),
+                    end_date=window.current_thursday.isoformat(),
+                    allowed_reaction_keys=self.settings.telegram_group_curation.shortlist_reaction_allowlist,
+                    min_unique_reactors=self.settings.telegram_group_curation.shortlist_min_unique_reactors,
+                    limit=self.settings.digest.shortlist_size_before_claude,
+                    require_canonical_events=self.settings.digest.require_canonical_events,
+                )
+                for row in telegram_reaction_rows:
+                    row["manual_shortlist_signal"] = True
+                    row["telegram_reaction_shortlist_signal"] = True
+                manual_rows.extend(telegram_reaction_rows)
             for row in rows:
                 row.setdefault("manual_shortlist_signal", False)
             rows = manual_rows + rows

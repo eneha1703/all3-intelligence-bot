@@ -22,3 +22,12 @@ digest:
 telegram:
   parse_mode: HTML
   disable_web_page_preview: false
+
+telegram_group_curation:
+  enabled: false
+  message_ingest_enabled: false
+  reaction_shortlist_enabled: false
+  shortlist_reaction_allowlist:
+    - "emoji:star"
+  shortlist_window_days: 7
+  shortlist_min_unique_reactors: 1
