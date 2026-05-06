@@ -910,13 +910,11 @@ class RadarService:
             record_stage_timing("summary_generation", summary_generation_started)
 
             def is_claude_editorial_eligible(context: CurrentRunContext) -> bool:
-                claude_editorial_score_floor = max(30, send_threshold)
                 return (
                     context.decision is not None
                     and context.freshness.is_fresh
                     and context.decision.relevance_status == "keep"
                     and context.decision.send_status != "skip"
-                    and context.decision.score >= claude_editorial_score_floor
                     and (
                         context.decision.is_shortlisted
                         or context.decision.is_borderline
@@ -1266,13 +1264,7 @@ class RadarService:
                 and self.claude_final_card_client is not None
                 and self.claude_final_card_client.is_available
             ):
-                # Claude is the most expensive step. Restrict to higher-scoring candidates first to reduce token burn.
-                claude_score_floor = 40
-                claude_contexts = [
-                    context
-                    for context in sendable_contexts
-                    if context.decision is not None and context.decision.score >= claude_score_floor
-                ][: self.settings.radar.claude_final_card_max_candidates]
+                claude_contexts = sendable_contexts[: self.settings.radar.claude_final_card_max_candidates]
                 filtered_sendable_contexts: list[CurrentRunContext] = []
                 for context in sendable_contexts:
                     if context not in claude_contexts:
