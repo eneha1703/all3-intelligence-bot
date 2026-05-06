@@ -189,6 +189,13 @@ HOUSING_MARKET_CONTEXT_TERMS = (
     "mieten",
     "house prices",
     "kaufpreise",
+    "immobilienfinanzierung",
+    "immobilienfinanzierungsindex",
+    "finanzierungsindex",
+    "difi",
+    "zinsen",
+    "real estate finance",
+    "property finance",
     "affordable housing",
     "build-to-rent",
     "btr",
@@ -265,6 +272,44 @@ HEAVY_INDUSTRIAL_AUTONOMY_TERMS = (
     "heavy equipment",
     "mine site",
     "off-road",
+)
+ROBOTIC_TIMBER_FABRICATION_TERMS = (
+    "robotic arm",
+    "robot mills",
+    "robotic fabrication",
+    "robotic mass timber",
+    "robotic timber",
+    "kuka",
+    "milling",
+    "precision",
+)
+ADAPTIVE_REUSE_HOUSING_DELIVERY_TERMS = (
+    "olympic village",
+    "student housing",
+    "student accommodation",
+    "reopen to students",
+    "converted",
+    "converting",
+    "conversion",
+    "four-month",
+    "four months",
+    "publicly supported student housing",
+)
+NATIONAL_ROBOTICS_STRATEGY_TERMS = (
+    "national strategy",
+    "five-year plan",
+    "industrial system",
+    "physical applications",
+    "international federation of robotics",
+)
+ROBOT_SAFETY_GOVERNANCE_TERMS = (
+    "rulebook",
+    "rulebooks",
+    "rules conflict",
+    "safer decisions",
+    "transparent decisions",
+    "real-world situations",
+    "real world situations",
 )
 WOOD_CENTRAL_HARD_CONSTRAINT_TERMS = (
     "cap",
@@ -518,6 +563,24 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
             or _contains_any(haystack, ("introduced", "introduces", "unveiled", "unveils", "launches", "launched"))
         )
     )
+    robotic_timber_fabrication_signal = (
+        item.source_id == "wood_central_api"
+        and event_flags.get("robotic_timber_fabrication_signal", False)
+        and _contains_any(haystack, ROBOTIC_TIMBER_FABRICATION_TERMS)
+    )
+    adaptive_reuse_housing_delivery_signal = (
+        item.source_id == "wood_central_api"
+        and event_flags.get("adaptive_reuse_housing_delivery_signal", False)
+        and _contains_any(haystack, ADAPTIVE_REUSE_HOUSING_DELIVERY_TERMS)
+    )
+    national_robotics_strategy_signal = (
+        event_flags.get("national_robotics_strategy_signal", False)
+        and _contains_any(haystack, NATIONAL_ROBOTICS_STRATEGY_TERMS)
+    )
+    robot_safety_governance_signal = (
+        event_flags.get("robot_safety_governance_signal", False)
+        and _contains_any(haystack, ROBOT_SAFETY_GOVERNANCE_TERMS)
+    )
     tangible_operational_signal = operational_detail or construction_execution or industrial_relevance
     product_or_platform_news = product_launch and tangible_operational_signal and (
         industrial_relevance or construction_execution or competitor_count > 0
@@ -537,6 +600,10 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         or strategic_capability_acquisition_alert_signal
         or robot_ai_training_infrastructure_signal
         or heavy_industrial_autonomy_signal
+        or robotic_timber_fabrication_signal
+        or adaptive_reuse_housing_delivery_signal
+        or national_robotics_strategy_signal
+        or robot_safety_governance_signal
     )
 
     flags = {
@@ -560,6 +627,10 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         "strategic_capability_acquisition_alert_signal": strategic_capability_acquisition_alert_signal,
         "robot_ai_training_infrastructure_signal": robot_ai_training_infrastructure_signal,
         "heavy_industrial_autonomy_signal": heavy_industrial_autonomy_signal,
+        "robotic_timber_fabrication_signal": robotic_timber_fabrication_signal,
+        "adaptive_reuse_housing_delivery_signal": adaptive_reuse_housing_delivery_signal,
+        "national_robotics_strategy_signal": national_robotics_strategy_signal,
+        "robot_safety_governance_signal": robot_safety_governance_signal,
         "tangible_operational_signal": tangible_operational_signal,
         "telegram_worthy": telegram_worthy,
     }

@@ -128,17 +128,20 @@ sources:
     disabled_reason: feed_url_returns_404
     tags: [ai, engineering]
 
-  - id: haufe_feed
-    name: Haufe
-    kind: rss
+  - id: haufe_immobilien_listing
+    name: Haufe Immobilien
+    kind: listing
     layer: direct
     is_direct_source: true
     is_wrapper: false
-    enabled: false
-    parser: generic_rss
-    url: https://www.haufe.de/rss
+    enabled: true
+    parser: haufe_immobilien
+    url: https://www.haufe.de/immobilien/
     priority: 60
-    disabled_reason: feed_url_returns_404
+    listing_urls:
+      - https://www.haufe.de/immobilien/investment/
+      - https://www.haufe.de/immobilien/entwicklung-vermarktung/marktanalysen/
+    article_limit: 20
     broad_feed: true
     origin_language: de
     delivery_language: en

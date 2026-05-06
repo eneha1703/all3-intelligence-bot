@@ -548,9 +548,17 @@ GERMANY_HOUSING_MARKET_TERMS = {
     "wohnungsbestand",
     "energieeffizienz",
     "investoren",
+    "immobilienfinanzierung",
+    "immobilienfinanzierungsindex",
+    "finanzierungsindex",
+    "difi",
+    "zinsen",
+    "zinssatz",
     "neubau",
     "residential market",
     "housing market",
+    "real estate finance",
+    "property finance",
     "building permits",
     "housing approvals",
     "rents",
@@ -932,6 +940,14 @@ def has_clear_all3_scope(item: StoredNormalizedItem, competitor_count: int, even
         return True
     if event_flags.get("timber_economics_signal"):
         return True
+    if event_flags.get("robotic_timber_fabrication_signal"):
+        return True
+    if event_flags.get("adaptive_reuse_housing_delivery_signal"):
+        return True
+    if event_flags.get("national_robotics_strategy_signal"):
+        return True
+    if event_flags.get("robot_safety_governance_signal"):
+        return True
     if is_construction_briefing_scope_signal(item):
         return True
     if is_interesting_engineering_scope_signal(item):
@@ -1019,6 +1035,8 @@ def compute_relevance_status(
             or event_flags.get("strategic_ai_major_deal_signal")
             or event_flags.get("strategic_capability_acquisition_signal")
             or event_flags.get("physical_industry_ai_megafunding_signal")
+            or event_flags.get("national_robotics_strategy_signal")
+            or event_flags.get("robot_safety_governance_signal")
             or is_construction_briefing_scope_signal(item)
             or is_interesting_engineering_scope_signal(item)
             or (event_flags.get("permitting_or_code_signal") and high_intent_scope)

@@ -103,6 +103,57 @@ TIMBER_PERFORMANCE_TERMS = (
 )
 SHOWCASE_TIMBER_TERMS = ("showcase", "design", "architecture", "pavilion", "residence", "award")
 CONSTRUCTION_INNOVATION_TERMS = ("modular", "prefab", "prefabrication", "offsite", "off-site", "factory-built")
+ROBOTIC_TIMBER_FABRICATION_TERMS = (
+    "robotic arm",
+    "robot mills",
+    "robotic fabrication",
+    "robotic mass timber",
+    "robotic timber",
+    "robotic construction",
+    "kuka",
+    "milling",
+    "millimetre precision",
+    "millimeter precision",
+)
+ADAPTIVE_REUSE_HOUSING_DELIVERY_TERMS = (
+    "olympic village",
+    "student housing",
+    "student accommodation",
+    "students",
+    "dormitory",
+    "dormitories",
+    "reopen to students",
+    "converted",
+    "converting",
+    "conversion",
+    "adaptive reuse",
+    "four-month",
+    "four months",
+    "works programme",
+    "publicly supported student housing",
+)
+NATIONAL_ROBOTICS_STRATEGY_TERMS = (
+    "national strategy",
+    "five-year plan",
+    "15th five-year plan",
+    "industrial system",
+    "core of national strategy",
+    "physical applications",
+    "ifr reports",
+    "international federation of robotics",
+)
+ROBOT_SAFETY_GOVERNANCE_TERMS = (
+    "rulebook",
+    "rulebooks",
+    "rules conflict",
+    "safer decisions",
+    "safe decisions",
+    "transparent decisions",
+    "safety",
+    "governance",
+    "real-world situations",
+    "real world situations",
+)
 INDUSTRIAL_ROBOTICS_TERMS = (
     "physical ai",
     "virtual twin",
@@ -379,6 +430,32 @@ def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
         (_contains_any(haystack, ("robot", "robots", "robotics", "humanoid", "automation", "autonomous", "driverless")) and _contains_any(haystack, INDUSTRIAL_ROBOTICS_TERMS))
         or (_contains_any(haystack, ("robot", "robots", "robotics", "humanoid")) and _contains_any(haystack, STRATEGIC_CONTEXT_TERMS))
     )
+    robotic_timber_fabrication_signal = (
+        item.source_id == "wood_central_api"
+        and timber_present
+        and _contains_any(haystack, ROBOTIC_TIMBER_FABRICATION_TERMS)
+        and (
+            industrial_robotics_signal
+            or _contains_any(haystack, ("robot", "robots", "robotic", "robotics", "automation"))
+        )
+    )
+    adaptive_reuse_housing_delivery_signal = (
+        item.source_id == "wood_central_api"
+        and timber_present
+        and _contains_any(haystack, ADAPTIVE_REUSE_HOUSING_DELIVERY_TERMS)
+        and _contains_any(haystack, ("student housing", "student accommodation", "students", "housing", "accommodation"))
+        and _contains_any(haystack, ("four months", "four-month", "reopen", "converted", "converting", "conversion"))
+    )
+    national_robotics_strategy_signal = (
+        bool(item.metadata.get("broad_feed"))
+        and _contains_any(haystack, ("robot", "robots", "robotics", "ai-powered robots", "physical ai"))
+        and _contains_any(haystack, NATIONAL_ROBOTICS_STRATEGY_TERMS)
+    )
+    robot_safety_governance_signal = (
+        _contains_any(haystack, ("robot", "robots", "robotics", "autonomous robots", "autonomous systems"))
+        and _contains_any(haystack, ROBOT_SAFETY_GOVERNANCE_TERMS)
+        and _contains_any(haystack, ("real-world", "real world", "rules conflict", "transparent", "decisions", "safety"))
+    )
     low_price_match = LOW_PRICE_RE.search(haystack)
     low_price_value = None
     if low_price_match:
@@ -462,6 +539,10 @@ def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
        "timber_strategic_signal": timber_strategic,
         "timber_performance_signal": timber_performance,
         "industrial_robotics_signal": industrial_robotics_signal,
+        "robotic_timber_fabrication_signal": robotic_timber_fabrication_signal,
+        "adaptive_reuse_housing_delivery_signal": adaptive_reuse_housing_delivery_signal,
+        "national_robotics_strategy_signal": national_robotics_strategy_signal,
+        "robot_safety_governance_signal": robot_safety_governance_signal,
         "humanoid_affordability_signal": humanoid_affordability_signal,
         "construction_innovation_signal": construction_innovation_signal,
         "construction_statistics_signal": construction_statistics_signal,
@@ -476,7 +557,8 @@ def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
         "physical_industry_ai_megafunding_signal": physical_industry_ai_megafunding_signal,
         "showcase_only_architecture_penalty": timber_present
         and _contains_any(haystack, SHOWCASE_TIMBER_TERMS)
-        and not timber_strategic,
+        and not timber_strategic
+        and not adaptive_reuse_housing_delivery_signal,
         "consumer_robotics_penalty": False,
         "adjacent_logistics_only": adjacent_logistics_only,
     }

@@ -14,6 +14,10 @@ signals:
   timber_strategic_signal: 15
   timber_performance_signal: 12
   industrial_robotics_signal: 8
+  robotic_timber_fabrication_signal: 14
+  adaptive_reuse_housing_delivery_signal: 22
+  national_robotics_strategy_signal: 16
+  robot_safety_governance_signal: 12
   humanoid_affordability_signal: 8
   strategic_capability_acquisition_signal: 12
   construction_innovation_signal: 6

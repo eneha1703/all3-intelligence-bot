@@ -401,3 +401,63 @@ def test_editorial_shaping_keeps_generic_ai_finance_blocked() -> None:
     assert editorial.allow_send is False
     assert editorial.reason == "editorial_not_telegram_worthy"
     assert editorial.flags["strategic_industrial_ai_alert_signal"] is False
+
+
+def test_editorial_shaping_keeps_robotic_timber_fabrication_story() -> None:
+    item = _make_item(
+        "Toronto Robot Mills Mass Timber to within 0.06-Millimetre Precision",
+        "Toronto researchers are milling mass timber components with a 3.5-metre KUKA robotic arm for construction.",
+        source_id="wood_central_api",
+    )
+    decision = _make_decision(robotic_timber_fabrication_signal=True, industrial_robotics_signal=True)
+
+    editorial = evaluate_send_stage_editorial(item, decision)
+
+    assert editorial.allow_send is True
+    assert editorial.flags["robotic_timber_fabrication_signal"] is True
+    assert editorial.flags["telegram_worthy"] is True
+
+
+def test_editorial_shaping_keeps_fast_student_housing_conversion_story() -> None:
+    item = _make_item(
+        "Milan's Olympic Village to Reopen to Students in Just Four Months",
+        "The mass timber Olympic Village is converting from athletes' accommodation into student housing in a four-month works programme.",
+        source_id="wood_central_api",
+    )
+    decision = _make_decision(adaptive_reuse_housing_delivery_signal=True)
+
+    editorial = evaluate_send_stage_editorial(item, decision)
+
+    assert editorial.allow_send is True
+    assert editorial.flags["adaptive_reuse_housing_delivery_signal"] is True
+    assert editorial.flags["telegram_worthy"] is True
+
+
+def test_editorial_shaping_keeps_national_robotics_strategy_story() -> None:
+    item = _make_item(
+        "IFR Reports China Making AI-Powered Robots Core of National Strategy",
+        "China's 15th Five-Year Plan places robotics at the heart of its industrial system and pushes AI research toward physical applications.",
+        source_id="ai_insider_rss",
+    )
+    decision = _make_decision(national_robotics_strategy_signal=True)
+
+    editorial = evaluate_send_stage_editorial(item, decision)
+
+    assert editorial.allow_send is True
+    assert editorial.flags["national_robotics_strategy_signal"] is True
+    assert editorial.flags["telegram_worthy"] is True
+
+
+def test_editorial_shaping_keeps_robot_rulebook_safety_story() -> None:
+    item = _make_item(
+        "Researchers Say Autonomous Robots Can Make Safer Decisions With Rulebooks System",
+        "The rulebooks framework helps autonomous robots make transparent decisions when rules conflict in real-world situations.",
+        source_id="ai_insider_rss",
+    )
+    decision = _make_decision(robot_safety_governance_signal=True)
+
+    editorial = evaluate_send_stage_editorial(item, decision)
+
+    assert editorial.allow_send is True
+    assert editorial.flags["robot_safety_governance_signal"] is True
+    assert editorial.flags["telegram_worthy"] is True

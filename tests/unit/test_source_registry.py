@@ -14,5 +14,9 @@ def test_source_registry_loads_typed_sources() -> None:
     assert google_source.layer == SourceLayer.GOOGLE_COMPETITOR
     assert google_source.is_wrapper is True
     assert registry.get("construction_briefing_rss").enabled is True
-    assert registry.get("haufe_feed").enabled is False
+    haufe_source = registry.get("haufe_immobilien_listing")
+    assert haufe_source.enabled is True
+    assert haufe_source.kind == SourceKind.LISTING
+    assert haufe_source.parser == "haufe_immobilien"
+    assert haufe_source.supports_first_slice is True
     assert registry.get("interesting_engineering_rss").enabled is True

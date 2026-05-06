@@ -5,12 +5,12 @@ from all3_radar.domain.models import StoredNormalizedItem
 from all3_radar.pipeline.ranking import derive_event_flags, rank_item
 
 
-def _make_item(title: str, preview: str, broad_feed: bool) -> StoredNormalizedItem:
+def _make_item(title: str, preview: str, broad_feed: bool, source_id: str = "source-1") -> StoredNormalizedItem:
     now = datetime.now(timezone.utc)
     return StoredNormalizedItem(
         normalized_item_id="item-1",
         raw_item_id="raw-1",
-        source_id="source-1",
+        source_id=source_id,
         canonical_url="https://example.com/story",
         domain="example.com",
         title=title,
@@ -41,6 +41,10 @@ RANKING_RULES = {
         "timber_strategic_signal": 15,
         "timber_performance_signal": 12,
         "industrial_robotics_signal": 8,
+        "robotic_timber_fabrication_signal": 14,
+        "adaptive_reuse_housing_delivery_signal": 22,
+        "national_robotics_strategy_signal": 16,
+        "robot_safety_governance_signal": 12,
         "humanoid_affordability_signal": 8,
         "strategic_capability_acquisition_signal": 12,
         "construction_innovation_signal": 6,
@@ -551,3 +555,66 @@ def test_funding_only_story_does_not_set_product_launch_event() -> None:
 
     assert flags["funding_event"] is True
     assert flags["product_launch_event"] is False
+
+
+def test_wood_central_robotic_mass_timber_fabrication_reaches_send_threshold() -> None:
+    item = _make_item(
+        "Toronto Robot Mills Mass Timber to within 0.06-Millimetre Precision",
+        "Toronto researchers are milling mass timber components with a 3.5-metre KUKA robotic arm for construction.",
+        broad_feed=False,
+        source_id="wood_central_api",
+    )
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["robotic_timber_fabrication_signal"] is True
+    assert decision.relevance_status == "keep"
+    assert decision.score >= 28
+
+
+def test_wood_central_fast_olympic_village_conversion_is_not_showcase_noise() -> None:
+    item = _make_item(
+        "Milan's Olympic Village to Reopen to Students in Just Four Months",
+        "The mass timber Olympic Village is converting from athletes' accommodation into student housing in a four-month works programme.",
+        broad_feed=False,
+        source_id="wood_central_api",
+    )
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["adaptive_reuse_housing_delivery_signal"] is True
+    assert flags["showcase_only_architecture_penalty"] is False
+    assert decision.relevance_status == "keep"
+    assert decision.score >= 28
+
+
+def test_broad_feed_national_robotics_strategy_is_strong_scope() -> None:
+    item = _make_item(
+        "IFR Reports China Making AI-Powered Robots Core of National Strategy",
+        "China's 15th Five-Year Plan places robotics at the heart of its industrial system and pushes AI research toward physical applications.",
+        broad_feed=True,
+    )
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["national_robotics_strategy_signal"] is True
+    assert decision.relevance_status == "keep"
+    assert decision.score >= 28
+
+
+def test_robot_rulebook_safety_research_has_narrow_governance_scope() -> None:
+    item = _make_item(
+        "Researchers Say Autonomous Robots Can Make Safer Decisions With Rulebooks System",
+        "The rulebooks framework helps autonomous robots make transparent decisions when rules conflict in real-world situations.",
+        broad_feed=True,
+    )
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["robot_safety_governance_signal"] is True
+    assert decision.relevance_status == "keep"
+    assert decision.score >= 28
