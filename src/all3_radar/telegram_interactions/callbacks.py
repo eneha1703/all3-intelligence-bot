@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -10,6 +11,8 @@ from dataclasses import dataclass
 from all3_radar.delivery.telegram import build_inline_reply_markup, build_shortlist_action_button
 from all3_radar.editorial_signals.service import EditorialSignalService
 from all3_radar.storage.repositories import RadarRepository
+
+LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -42,6 +45,33 @@ class TelegramBotApiClient:
         with urllib.request.urlopen(request, timeout=30):
             return
 
+    def _request_json(self, method: str, payload: dict[str, object], *, timeout_seconds: int) -> dict[str, object]:
+        if not self.is_configured:
+            return {"ok": False, "description": "telegram_not_configured"}
+        endpoint = f"https://api.telegram.org/bot{self.bot_token}/{method}"
+        request = urllib.request.Request(
+            endpoint,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
+            body = json.loads(response.read().decode("utf-8"))
+        if not isinstance(body, dict):
+            return {"ok": False, "description": "telegram_invalid_response_body"}
+        return body
+
+    def delete_webhook(self, *, drop_pending_updates: bool = False) -> None:
+        if not self.is_configured:
+            return
+        body = self._request_json(
+            "deleteWebhook",
+            {"drop_pending_updates": bool(drop_pending_updates)},
+            timeout_seconds=15,
+        )
+        if not body.get("ok", False):
+            LOGGER.warning("Telegram deleteWebhook failed: %s", body.get("description") or body)
+
     def get_updates(
         self,
         *,
@@ -59,15 +89,14 @@ class TelegramBotApiClient:
         }
         if offset is not None:
             payload["offset"] = offset
-        endpoint = f"https://api.telegram.org/bot{self.bot_token}/getUpdates"
-        request = urllib.request.Request(
-            endpoint,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
+        body = self._request_json(
+            "getUpdates",
+            payload,
+            timeout_seconds=max(timeout_seconds + 5, 10),
         )
-        with urllib.request.urlopen(request, timeout=max(timeout_seconds + 5, 10)) as response:
-            body = json.loads(response.read().decode("utf-8"))
+        if not body.get("ok", False):
+            LOGGER.warning("Telegram getUpdates failed: %s", body.get("description") or body)
+            return []
         result = body.get("result", [])
         return [update for update in result if isinstance(update, dict)]
 

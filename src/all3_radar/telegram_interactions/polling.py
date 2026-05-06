@@ -41,6 +41,8 @@ def poll_telegram_callback_updates(
 ) -> TelegramPollingResult:
     current_cursor = repository.get_integration_cursor(CALLBACK_POLLING_CURSOR_KEY)
     offset = int(current_cursor) if current_cursor else None
+    # If a webhook is configured, Telegram will not deliver updates via getUpdates.
+    bot_api_client.delete_webhook(drop_pending_updates=False)
     updates = bot_api_client.get_updates(
         offset=offset,
         limit=limit,
@@ -88,6 +90,8 @@ def poll_telegram_interaction_updates(
     allowed_updates = ["callback_query"]
     if curation_service is not None:
         allowed_updates.extend(["message", "channel_post", "message_reaction"])
+    # Ensure polling mode works even if a webhook was set in a previous deployment.
+    bot_api_client.delete_webhook(drop_pending_updates=False)
     updates = bot_api_client.get_updates(
         offset=offset,
         limit=limit,
