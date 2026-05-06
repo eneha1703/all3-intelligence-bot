@@ -46,6 +46,7 @@ RANKING_RULES = {
         "construction_innovation_signal": 6,
         "construction_statistics_signal": 18,
         "housing_market_signal": 12,
+        "construction_news_intelligence_signal": 12,
         "construction_briefing_scope_signal": 6,
         "interesting_engineering_scope_signal": 6,
         "timber_policy_signal": 18,
@@ -164,6 +165,81 @@ def test_interesting_engineering_robotics_story_gets_scope_signal() -> None:
     assert flags["interesting_engineering_scope_signal"] is True
     assert decision.relevance_status == "keep"
     assert decision.score >= 39
+
+
+def test_aeon_partnership_story_sets_partnership_event() -> None:
+    item = _make_item(
+        "AEON humanoid robot partnered with Fill to automate factory operations",
+        "The companies partnered to deploy humanoid robots for real-world autonomy across manufacturing operations.",
+        broad_feed=True,
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "source_id": "interesting_engineering_rss",
+            "metadata": {
+                "tags": ["engineering"],
+                "broad_feed": True,
+                "strict_scope": "industrial_robotics_physical_ai",
+            },
+        }
+    )
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["partnership_event"] is True
+    assert decision.relevance_status == "keep"
+    assert decision.score >= 55
+
+
+def test_heavy_autonomy_story_gets_industrial_robotics_signal() -> None:
+    item = _make_item(
+        "China unveils driverless mining truck with drive-by-wire corner modules",
+        "The 110 ton mining truck uses drive-by-wire corner modules for driverless off-road heavy equipment operations.",
+        broad_feed=True,
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "source_id": "interesting_engineering_rss",
+            "metadata": {
+                "tags": ["engineering"],
+                "broad_feed": True,
+                "strict_scope": "industrial_robotics_physical_ai",
+            },
+        }
+    )
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["interesting_engineering_scope_signal"] is True
+    assert flags["industrial_robotics_signal"] is True
+    assert decision.relevance_status == "keep"
+    assert decision.score >= 39
+
+
+def test_construction_news_market_story_gets_market_signal_and_score_lift() -> None:
+    item = _make_item(
+        "UK construction activity falls as infrastructure starts weaken",
+        "A new report says construction activity, project starts and main contract awards fell across infrastructure and commercial work.",
+        broad_feed=False,
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "source_id": "construction_news_intelligence_listing",
+            "metadata": {"tags": ["construction", "uk", "market"], "market_scope": "uk_construction_market"},
+        }
+    )
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["construction_news_intelligence_signal"] is True
+    assert decision.relevance_status == "keep"
+    assert decision.score >= 37
 
 
 def test_unitree_humanoid_affordability_story_gets_access_signal_and_score_lift() -> None:

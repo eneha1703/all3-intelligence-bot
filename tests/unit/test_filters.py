@@ -5,6 +5,7 @@ from all3_radar.domain.models import StoredNormalizedItem
 from all3_radar.pipeline.ranking import derive_event_flags
 from all3_radar.pipeline.filters import (
     compute_relevance_status,
+    is_construction_news_intelligence_signal,
     is_housing_market_signal,
     is_destatis_construction_statistics_signal,
     is_wood_central_timber_economics_signal,
@@ -321,6 +322,77 @@ def test_interesting_engineering_space_story_drops() -> None:
 
     assert status == "drop"
     assert reason == "obvious_off_scope"
+
+
+def test_interesting_engineering_heavy_autonomy_story_keeps_scope() -> None:
+    item = _make_item(
+        "China unveils driverless mining truck with drive-by-wire corner modules",
+        "The 110 ton mining truck uses drive-by-wire corner modules for driverless off-road heavy equipment operations.",
+        broad_feed=True,
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "source_id": "interesting_engineering_rss",
+            "metadata": {
+                "tags": ["engineering"],
+                "broad_feed": True,
+                "strict_scope": "industrial_robotics_physical_ai",
+            },
+        }
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "keep"
+    assert reason is None
+
+
+def test_construction_news_intelligence_signal_is_detected() -> None:
+    item = _make_item(
+        "UK construction activity falls as infrastructure starts weaken",
+        "A new report says construction activity, project starts and main contract awards fell across infrastructure and commercial work.",
+        broad_feed=False,
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "source_id": "construction_news_intelligence_listing",
+            "metadata": {"tags": ["construction", "uk", "market"], "market_scope": "uk_construction_market"},
+        }
+    )
+
+    assert is_construction_news_intelligence_signal(item) is True
+
+
+def test_construction_news_market_story_keeps_scope() -> None:
+    item = _make_item(
+        "UK construction activity falls as infrastructure starts weaken",
+        "A new report says construction activity, project starts and main contract awards fell across infrastructure and commercial work.",
+        broad_feed=False,
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "source_id": "construction_news_intelligence_listing",
+            "metadata": {"tags": ["construction", "uk", "market"], "market_scope": "uk_construction_market"},
+        }
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "keep"
+    assert reason is None
 
 
 def test_soft_wood_central_timber_economics_commentary_does_not_trigger_signal() -> None:

@@ -10,6 +10,7 @@ from all3_radar.domain.models import RankedDecision, StoredNormalizedItem
 from all3_radar.pipeline.filters import (
     compute_relevance_status,
     is_construction_briefing_scope_signal,
+    is_construction_news_intelligence_signal,
     is_destatis_construction_statistics_signal,
     is_housing_market_signal,
     is_interesting_engineering_scope_signal,
@@ -30,7 +31,7 @@ FUNDING_TERMS = (
     "investment",
     "financing",
 )
-PARTNERSHIP_TERMS = ("partnership", "partners with", "partnered with", "partnering", "collaboration")
+PARTNERSHIP_TERMS = ("partnership", "partners with", "partnered with", "partnered", "partnering", "collaboration")
 ACQUISITION_TERMS = (
     "acquires",
     "acquisition",
@@ -117,6 +118,18 @@ INDUSTRIAL_ROBOTICS_TERMS = (
     "production facilities",
     "factory floor",
     "factories",
+    "drive-by-wire",
+    "driverless",
+    "mining truck",
+    "haul truck",
+    "autonomous haulage",
+    "heavy equipment",
+    "off-road",
+    "mine site",
+    "surface finishing",
+    "data factory",
+    "real-world data",
+    "real world data",
 )
 HUMANOID_AFFORDABILITY_TERMS = (
     "entry-level",
@@ -363,7 +376,7 @@ def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
     timber_performance = timber_present and _contains_any(haystack, TIMBER_PERFORMANCE_TERMS)
     adjacent_logistics_only = _contains_any(haystack, WAREHOUSE_LOGISTICS_TERMS) and not _contains_any(haystack, STRATEGIC_CONTEXT_TERMS)
     industrial_robotics_signal = (
-        (_contains_any(haystack, ("robot", "robots", "robotics", "humanoid", "automation", "autonomous")) and _contains_any(haystack, INDUSTRIAL_ROBOTICS_TERMS))
+        (_contains_any(haystack, ("robot", "robots", "robotics", "humanoid", "automation", "autonomous", "driverless")) and _contains_any(haystack, INDUSTRIAL_ROBOTICS_TERMS))
         or (_contains_any(haystack, ("robot", "robots", "robotics", "humanoid")) and _contains_any(haystack, STRATEGIC_CONTEXT_TERMS))
     )
     low_price_match = LOW_PRICE_RE.search(haystack)
@@ -385,6 +398,7 @@ def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
     timber_policy_signal = is_wood_central_timber_policy_signal(item)
     timber_economics_signal = is_wood_central_timber_economics_signal(item)
     construction_briefing_scope_signal = is_construction_briefing_scope_signal(item)
+    construction_news_intelligence_signal = is_construction_news_intelligence_signal(item)
     interesting_engineering_scope_signal = is_interesting_engineering_scope_signal(item)
     funding_event = _contains_any(haystack, FUNDING_TERMS) and not _contains_any(haystack, NON_FUNDING_RAISED_PHRASES)
     acquisition_event = _contains_any(haystack, ACQUISITION_TERMS)
@@ -452,6 +466,7 @@ def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
         "construction_innovation_signal": construction_innovation_signal,
         "construction_statistics_signal": construction_statistics_signal,
         "housing_market_signal": housing_market_signal,
+        "construction_news_intelligence_signal": construction_news_intelligence_signal,
         "timber_policy_signal": timber_policy_signal,
         "timber_economics_signal": timber_economics_signal,
         "construction_briefing_scope_signal": construction_briefing_scope_signal,

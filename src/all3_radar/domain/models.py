@@ -34,7 +34,7 @@ class SourceDefinition:
             self.kind == SourceKind.RSS
             or (
                 self.kind == SourceKind.LISTING
-                and self.parser in {"destatis_press", "humanoid_robotics_technology"}
+                and self.parser in {"destatis_press", "humanoid_robotics_technology", "construction_news_intelligence"}
             )
             or (self.kind == SourceKind.API and self.parser == "wood_central_api")
         )

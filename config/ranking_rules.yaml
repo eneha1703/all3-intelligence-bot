@@ -19,6 +19,7 @@ signals:
   construction_innovation_signal: 6
   construction_statistics_signal: 18
   housing_market_signal: 12
+  construction_news_intelligence_signal: 12
   construction_briefing_scope_signal: 6
   interesting_engineering_scope_signal: 6
   timber_policy_signal: 18

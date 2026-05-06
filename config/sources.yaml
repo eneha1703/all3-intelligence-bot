@@ -159,6 +159,22 @@ sources:
     market_scope: uk_housing_market
     tags: [news, industry]
 
+  - id: construction_news_intelligence_listing
+    name: Construction News Intelligence
+    kind: listing
+    layer: direct
+    is_direct_source: true
+    is_wrapper: false
+    enabled: true
+    parser: construction_news_intelligence
+    url: https://www.constructionnews.co.uk/cn-intelligence/
+    priority: 72
+    listing_urls:
+      - https://www.constructionnews.co.uk/cn-intelligence/sector/
+    article_limit: 20
+    market_scope: uk_construction_market
+    tags: [construction, uk, market]
+
   - id: business_insider_feed
     name: Business Insider
     kind: rss

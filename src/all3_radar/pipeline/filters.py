@@ -579,6 +579,28 @@ UK_HOUSING_MARKET_TERMS = {
     "starts",
     "completions",
 }
+UK_CONSTRUCTION_MARKET_TERMS = {
+    "construction activity",
+    "construction output",
+    "project starts",
+    "main contract awards",
+    "planning approvals",
+    "starts on site",
+    "planning applications",
+    "construction sector",
+    "industry output",
+    "materials prices",
+    "workforce",
+    "regional",
+    "housing",
+    "infrastructure",
+    "industrial",
+    "commercial",
+    "civils",
+    "engineering order books",
+    "productivity",
+    "labour costs",
+}
 MARKET_SIGNAL_TERMS = {
     "%",
     "index",
@@ -635,6 +657,12 @@ INTERESTING_ENGINEERING_SCOPE_TERMS = {
     "robot cell",
     "warehouse automation",
     "construction automation",
+    "drive-by-wire",
+    "driverless",
+    "mining truck",
+    "haul truck",
+    "heavy equipment",
+    "off-road",
 }
 INTERESTING_ENGINEERING_OFF_SCOPE_TERMS = {
     "space",
@@ -761,6 +789,13 @@ def is_housing_market_signal(item: StoredNormalizedItem) -> bool:
     return has_any_term(haystack, terms) and has_any_term(haystack, MARKET_SIGNAL_TERMS)
 
 
+def is_construction_news_intelligence_signal(item: StoredNormalizedItem) -> bool:
+    if item.source_id != "construction_news_intelligence_listing":
+        return False
+    haystack = _normalize_text(f"{item.title} {item.text_preview or ''}")
+    return has_any_term(haystack, UK_CONSTRUCTION_MARKET_TERMS) and has_any_term(haystack, MARKET_SIGNAL_TERMS)
+
+
 def is_construction_briefing_scope_signal(item: StoredNormalizedItem) -> bool:
     if _source_extra(item, "strict_scope") != "construction_timber_innovation":
         return False
@@ -818,6 +853,8 @@ def has_clear_all3_scope(item: StoredNormalizedItem, competitor_count: int, even
     if event_flags.get("physical_industry_ai_megafunding_signal"):
         return True
     if event_flags.get("construction_statistics_signal"):
+        return True
+    if event_flags.get("construction_news_intelligence_signal"):
         return True
     if event_flags.get("housing_market_signal"):
         return True

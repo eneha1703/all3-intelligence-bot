@@ -91,6 +91,16 @@ OPERATIONAL_DETAIL_TERMS = (
     "modular teaching spaces",
     "jobsite",
     "worksite",
+    "data factory",
+    "real-world data",
+    "real world data",
+    "drive-by-wire",
+    "driverless",
+    "haul truck",
+    "mining truck",
+    "heavy equipment",
+    "mine site",
+    "surface finishing",
 )
 CONSTRUCTION_EXECUTION_TERMS = (
     "modular",
@@ -202,6 +212,59 @@ HOUSING_MARKET_QUANTIFIED_TERMS = (
     "decrease",
     "rise",
     "fall",
+)
+UK_CONSTRUCTION_MARKET_CONTEXT_TERMS = (
+    "construction activity",
+    "construction output",
+    "project starts",
+    "main contract awards",
+    "planning approvals",
+    "planning applications",
+    "construction sector",
+    "infrastructure",
+    "commercial",
+    "housing",
+    "industrial",
+    "regional",
+    "materials prices",
+    "workforce",
+    "labour costs",
+)
+UK_CONSTRUCTION_MARKET_QUANTIFIED_TERMS = (
+    "%",
+    "index",
+    "report",
+    "forecast",
+    "fall",
+    "fell",
+    "drop",
+    "decline",
+    "rise",
+    "rose",
+    "increase",
+    "higher",
+    "lower",
+)
+ROBOT_AI_TRAINING_INFRASTRUCTURE_TERMS = (
+    "data factory",
+    "train robot ai",
+    "training robot ai",
+    "robot ai",
+    "real-world data",
+    "real world data",
+    "real-world autonomy",
+    "real world autonomy",
+    "mobile manipulator",
+)
+HEAVY_INDUSTRIAL_AUTONOMY_TERMS = (
+    "drive-by-wire",
+    "driverless",
+    "mining truck",
+    "haul truck",
+    "autonomous haulage",
+    "heavy equipment",
+    "mine site",
+    "off-road",
 )
 WOOD_CENTRAL_HARD_CONSTRAINT_TERMS = (
     "cap",
@@ -385,6 +448,12 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         and _contains_any(haystack, HOUSING_MARKET_CONTEXT_TERMS)
         and _contains_any(haystack, HOUSING_MARKET_QUANTIFIED_TERMS)
     )
+    uk_construction_market_alert_signal = (
+        _source_extra(item, "market_scope") == "uk_construction_market"
+        and event_flags.get("construction_news_intelligence_signal", False)
+        and _contains_any(haystack, UK_CONSTRUCTION_MARKET_CONTEXT_TERMS)
+        and _contains_any(haystack, UK_CONSTRUCTION_MARKET_QUANTIFIED_TERMS)
+    )
     # Ranking already computes this narrowly from low humanoid price + affordability/access language.
     # At editorial time the RSS preview is often shorter, so trust the derived signal instead of
     # requiring the excerpt to repeat AliExpress/global-availability details.
@@ -427,6 +496,28 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         and event_flags.get("acquisition_event", False)
         and _contains_any(haystack, STRATEGIC_CAPABILITY_ACQUISITION_TERMS)
     )
+    robot_ai_training_infrastructure_signal = (
+        event_flags.get("industrial_robotics_signal", False)
+        and _contains_any(haystack, ROBOT_AI_TRAINING_INFRASTRUCTURE_TERMS)
+        and (
+            operational_detail
+            or event_flags.get("quantified_scale_signal", False)
+            or "100 " in haystack
+        )
+    )
+    heavy_industrial_autonomy_signal = (
+        _contains_any(haystack, HEAVY_INDUSTRIAL_AUTONOMY_TERMS)
+        and (
+            event_flags.get("industrial_robotics_signal", False)
+            or event_flags.get("interesting_engineering_scope_signal", False)
+        )
+        and (
+            event_flags.get("deployment_event", False)
+            or event_flags.get("product_launch_event", False)
+            or event_flags.get("quantified_scale_signal", False)
+            or _contains_any(haystack, ("introduced", "introduces", "unveiled", "unveils", "launches", "launched"))
+        )
+    )
     tangible_operational_signal = operational_detail or construction_execution or industrial_relevance
     product_or_platform_news = product_launch and tangible_operational_signal and (
         industrial_relevance or construction_execution or competitor_count > 0
@@ -437,12 +528,15 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         or (construction_execution and event_flags.get("quantified_scale_signal", False))
         or official_construction_market_signal
         or housing_market_alert_signal
+        or uk_construction_market_alert_signal
         or humanoid_access_signal
         or timber_adoption_barrier_signal
         or timber_economics_alert_signal
         or timber_performance_alert_signal
         or strategic_industrial_ai_alert_signal
         or strategic_capability_acquisition_alert_signal
+        or robot_ai_training_infrastructure_signal
+        or heavy_industrial_autonomy_signal
     )
 
     flags = {
@@ -457,12 +551,15 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         "adjacent_logistics_only": adjacent_logistics_only,
         "official_construction_market_signal": official_construction_market_signal,
         "housing_market_alert_signal": housing_market_alert_signal,
+        "uk_construction_market_alert_signal": uk_construction_market_alert_signal,
         "humanoid_access_signal": humanoid_access_signal,
         "timber_adoption_barrier_signal": timber_adoption_barrier_signal,
         "timber_economics_alert_signal": timber_economics_alert_signal,
         "timber_performance_alert_signal": timber_performance_alert_signal,
         "strategic_industrial_ai_alert_signal": strategic_industrial_ai_alert_signal,
         "strategic_capability_acquisition_alert_signal": strategic_capability_acquisition_alert_signal,
+        "robot_ai_training_infrastructure_signal": robot_ai_training_infrastructure_signal,
+        "heavy_industrial_autonomy_signal": heavy_industrial_autonomy_signal,
         "tangible_operational_signal": tangible_operational_signal,
         "telegram_worthy": telegram_worthy,
     }
