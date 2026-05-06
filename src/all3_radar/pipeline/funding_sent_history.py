@@ -27,6 +27,28 @@ AMOUNT_RE = re.compile(
     re.IGNORECASE,
 )
 ROUND_RE = re.compile(r"\b(pre-seed|seed round|seed|series\s+[a-f])\b", re.IGNORECASE)
+VALUATION_TERMS = (
+    "valuation",
+    "valued at",
+    "targets",
+    "targeting",
+    "next funding round",
+    "completed financing",
+    "series b+",
+)
+ROBOTIC_HAND_PATTERNS = (
+    re.compile(r"\brobotic hands?\b", re.IGNORECASE),
+    re.compile(r"\brobot hands?\b", re.IGNORECASE),
+    re.compile(r"\bhumanoid hands?\b", re.IGNORECASE),
+    re.compile(r"\bdexterous hands?\b", re.IGNORECASE),
+    re.compile(r"\brobotic hand maker\b", re.IGNORECASE),
+    re.compile(r"\bdexterous robotic systems\b", re.IGNORECASE),
+)
+GRIPPER_PATTERNS = (
+    re.compile(r"\bgrippers?\b", re.IGNORECASE),
+    re.compile(r"\bend-effectors?\b", re.IGNORECASE),
+    re.compile(r"\bend effectors?\b", re.IGNORECASE),
+)
 
 
 @dataclass(frozen=True)
@@ -35,6 +57,8 @@ class FundingSemanticKey:
     amount: tuple[str, str, str]
     round_marker: str | None
     published_date: date
+    valuation_story: bool
+    component_category: str | None
 
 
 def funding_key_from_candidate(item: StoredNormalizedItem, decision: RankedDecision) -> FundingSemanticKey | None:
@@ -69,6 +93,8 @@ def funding_key_from_text(
         amount=amount,
         round_marker=_extract_round(text),
         published_date=published_ts.date(),
+        valuation_story=_is_valuation_story(text, amount),
+        component_category=_extract_component_category(text),
     )
 
 
@@ -79,11 +105,25 @@ def same_funding_event(
 ) -> bool:
     if current.entity != previous.entity:
         return False
+    if abs((current.published_date - previous.published_date).days) > max_day_delta:
+        return False
+    if _is_same_component_valuation_story(current, previous):
+        return True
     if current.amount != previous.amount:
         return False
     if current.round_marker != previous.round_marker:
         return False
-    return abs((current.published_date - previous.published_date).days) <= max_day_delta
+    return True
+
+
+def _is_same_component_valuation_story(current: FundingSemanticKey, previous: FundingSemanticKey) -> bool:
+    if not current.valuation_story or not previous.valuation_story:
+        return False
+    if current.component_category is None or previous.component_category is None:
+        return False
+    if current.component_category != previous.component_category:
+        return False
+    return current.amount[2] == "b" and previous.amount[2] == "b"
 
 
 def _extract_primary_entity(text: str) -> str | None:
@@ -131,3 +171,16 @@ def _extract_round(text: str) -> str | None:
     if not match:
         return None
     return re.sub(r"\s+", " ", match.group(1).lower())
+
+
+def _is_valuation_story(text: str, amount: tuple[str, str, str]) -> bool:
+    lowered = text.lower()
+    return amount[2] == "b" and any(term in lowered for term in VALUATION_TERMS)
+
+
+def _extract_component_category(text: str) -> str | None:
+    if any(pattern.search(text) for pattern in ROBOTIC_HAND_PATTERNS):
+        return "robotic_hand"
+    if any(pattern.search(text) for pattern in GRIPPER_PATTERNS):
+        return "gripper"
+    return None

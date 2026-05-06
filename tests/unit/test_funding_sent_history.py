@@ -54,6 +54,26 @@ def test_different_company_same_amount_does_not_match() -> None:
     assert same_funding_event(left, right) is False
 
 
+def test_same_robotic_hand_company_valuation_variants_do_match() -> None:
+    left = _funding_key(
+        "Report: China Robotic Hand Maker Linkerbot Targets $6B Valuation",
+        (
+            "Chinese robotics startup Linkerbot is targeting a $6 billion valuation in its next funding round, "
+            "doubling the valuation it secured in a recently completed financing as investor interest rises."
+        ),
+    )
+    right = _funding_key(
+        "Linkerbot hits $3B valuation with Ant Group, HongShan to produce robotic hands that perform delicate tasks",
+        (
+            "Chinese robotics startup Linkerbot has closed a Series B+ round at a $3 billion valuation "
+            "to scale robotic hands for humanoid robots."
+        ),
+    )
+
+    assert left is not None and right is not None
+    assert same_funding_event(left, right) is True
+
+
 def test_generic_profile_without_funding_signal_has_no_key() -> None:
     key = funding_key_from_text(
         title="Inside All3's push into construction robotics",
