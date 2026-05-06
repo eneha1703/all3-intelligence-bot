@@ -32,7 +32,15 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.command == "shortlist":
-        print(f"Digest shortlist skeleton for week={args.week}")
+        repo_root = Path(__file__).resolve().parents[3]
+        service = DigestService(repo_root=repo_root)
+        result = service.build_shortlist(args.week)
+        print(f"Digest shortlist complete: week={result.week_key} candidates={result.candidate_count}")
+        for index, candidate in enumerate(result.candidates, start=1):
+            print(
+                f"{index}. {candidate.title} | score={candidate.score} | source={candidate.source_id} | "
+                f"url={candidate.canonical_url}"
+            )
         return 0
 
     if args.command == "build":
@@ -53,7 +61,17 @@ def main() -> int:
         return 0
 
     if args.command == "inspect":
-        print(f"Digest inspect skeleton for week={args.week}")
+        repo_root = Path(__file__).resolve().parents[3]
+        service = DigestService(repo_root=repo_root)
+        result = service.build_shortlist(args.week)
+        print(f"Digest inspect: week={result.week_key} candidates={result.candidate_count}")
+        for index, candidate in enumerate(result.candidates, start=1):
+            published_ts = candidate.published_ts.isoformat() if candidate.published_ts else "unknown"
+            print(f"{index}. {candidate.title}")
+            print(f"   source={candidate.source_id} score={candidate.score} published_ts={published_ts}")
+            print(f"   canonical_event_id={candidate.canonical_event_id}")
+            print(f"   normalized_item_id={candidate.normalized_item_id}")
+            print(f"   url={candidate.canonical_url}")
         return 0
 
     parser.error("Unknown command")

@@ -611,3 +611,70 @@ def test_digest_build_includes_active_manual_shortlist_signal_in_candidate_pool(
     candidate_event_ids = {row[0] for row in candidate_rows}
     assert "event-6" in candidate_event_ids
     assert any("Taco Bell adds AI menu personalization" in row[1] for row in candidate_rows)
+
+
+def test_digest_shortlist_includes_telegram_reaction_candidates(monkeypatch, tmp_path) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "digest.db"
+    schema_path = repo_root / "src" / "all3_radar" / "storage" / "schema.sql"
+    _seed_digest_db(db_path, schema_path)
+
+    repository = RadarRepository(db_path)
+    repository.upsert_telegram_group_message(
+        chat_id="-100123",
+        telegram_message_id="77",
+        sent_by_bot=False,
+        sender_user_id="42",
+        sender_chat_id="",
+        message_ts="2026-05-01T12:05:00+00:00",
+        message_text="Worth saving: https://example.com/destatis-orders",
+        message_caption="",
+        message_urls=("https://example.com/destatis-orders",),
+        has_links=True,
+        normalized_item_id=None,
+        canonical_event_id=None,
+        raw_update={},
+    )
+    repository.upsert_telegram_reaction_pick(
+        chat_id="-100123",
+        telegram_message_id="77",
+        reactor_user_id="42",
+        actor_chat_id="",
+        reaction_key="emoji:star",
+        is_active=True,
+        picked_at="2026-05-06T12:30:00+00:00",
+        source_update_kind="message_reaction",
+        raw_update={},
+    )
+
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("CLAUDE_DIGEST_ENABLED", "false")
+    monkeypatch.setenv("TELEGRAM_GROUP_CURATION_ENABLED", "true")
+    monkeypatch.setenv("TELEGRAM_REACTION_SHORTLIST_ENABLED", "true")
+    monkeypatch.setenv("TELEGRAM_SHORTLIST_REACTION_ALLOWLIST", "emoji:star")
+    monkeypatch.setenv("TELEGRAM_SHORTLIST_WINDOW_DAYS", "7")
+    monkeypatch.setenv("TELEGRAM_SHORTLIST_MIN_UNIQUE_REACTORS", "1")
+
+    service = DigestService(repo_root=repo_root, repository=repository)
+    result = service.build_shortlist("2026-W18")
+
+    assert result.candidate_count >= 1
+    assert any(candidate.canonical_event_id == "event-1" for candidate in result.candidates)
+
+    with sqlite3.connect(db_path) as connection:
+        shortlist_json = connection.execute(
+            "SELECT shortlist_json FROM weekly_digest_runs WHERE id = ?",
+            (result.digest_run_id,),
+        ).fetchone()[0]
+        candidate_rows = connection.execute(
+            """
+            SELECT canonical_event_id, rationale_json
+            FROM weekly_digest_candidates
+            WHERE digest_run_id = ?
+            ORDER BY canonical_event_id
+            """,
+            (result.digest_run_id,),
+        ).fetchall()
+
+    assert "event-1" in {row[0] for row in candidate_rows}
+    assert shortlist_json is not None

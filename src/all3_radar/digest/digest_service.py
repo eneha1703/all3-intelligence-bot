@@ -61,6 +61,15 @@ class WeeklyDigestBuildResult:
     fallback_reason: str | None
 
 
+@dataclass(frozen=True)
+class WeeklyDigestShortlistResult:
+    pipeline_run_id: str
+    digest_run_id: str
+    week_key: str
+    candidate_count: int
+    candidates: list[DigestCandidate]
+
+
 def _settings_snapshot(settings: object) -> dict:
     snapshot = asdict(settings)
     snapshot["app"]["database_path"] = str(snapshot["app"]["database_path"])
@@ -474,6 +483,79 @@ class DigestService:
         )
         initialize_database(self.settings.app.database_path, repo_root / "src" / "all3_radar" / "storage" / "schema.sql")
 
+    def _load_shortlist_rows(self, window) -> list[dict[str, object]]:
+        rows = self.repository.load_digest_candidates_for_week(
+            start_date=window.previous_thursday.isoformat(),
+            end_date=window.current_thursday.isoformat(),
+            limit=self.settings.digest.shortlist_size_before_claude,
+            require_canonical_events=self.settings.digest.require_canonical_events,
+        )
+        manual_rows = self.repository.load_active_shortlist_candidates_for_week(
+            start_date=window.previous_thursday.isoformat(),
+            end_date=window.current_thursday.isoformat(),
+            limit=self.settings.digest.shortlist_size_before_claude,
+            require_canonical_events=self.settings.digest.require_canonical_events,
+        )
+        for row in manual_rows:
+            row["manual_shortlist_signal"] = True
+        if self.settings.telegram_group_curation.enabled and self.settings.telegram_group_curation.reaction_shortlist_enabled:
+            reaction_window_start = window.current_thursday - timedelta(
+                days=self.settings.telegram_group_curation.shortlist_window_days
+            )
+            telegram_reaction_rows = self.repository.load_telegram_reaction_digest_candidates_for_week(
+                start_date=reaction_window_start.isoformat(),
+                end_date=window.current_thursday.isoformat(),
+                allowed_reaction_keys=self.settings.telegram_group_curation.shortlist_reaction_allowlist,
+                min_unique_reactors=self.settings.telegram_group_curation.shortlist_min_unique_reactors,
+                limit=self.settings.digest.shortlist_size_before_claude,
+                require_canonical_events=self.settings.digest.require_canonical_events,
+            )
+            for row in telegram_reaction_rows:
+                row["manual_shortlist_signal"] = True
+                row["telegram_reaction_shortlist_signal"] = True
+            manual_rows.extend(telegram_reaction_rows)
+        for row in rows:
+            row.setdefault("manual_shortlist_signal", False)
+        rows = manual_rows + rows
+        rows = _dedupe_candidate_rows(rows)
+        return _prepare_digest_rows(rows, limit=self.settings.digest.shortlist_size_before_claude)
+
+    def build_shortlist(self, week_key: str) -> WeeklyDigestShortlistResult:
+        window = resolve_digest_window(week_key)
+        pipeline_run_id = self.repository.create_pipeline_run(PipelineName.DIGEST, _settings_snapshot(self.settings))
+        digest_run_id = self.repository.create_weekly_digest_run(pipeline_run_id, window.week_key)
+        rows = self._load_shortlist_rows(window)
+        candidates = hydrate_digest_candidates(rows)
+        shortlist_payload = json.dumps(
+            [
+                {
+                    "canonical_event_id": candidate.canonical_event_id,
+                    "normalized_item_id": candidate.normalized_item_id,
+                    "source_id": candidate.source_id,
+                    "title": candidate.title,
+                    "canonical_url": candidate.canonical_url,
+                    "published_ts": candidate.published_ts.isoformat() if candidate.published_ts else None,
+                    "score": candidate.score,
+                }
+                for candidate in candidates
+            ],
+            sort_keys=True,
+        )
+        self.repository.replace_weekly_digest_candidates(digest_run_id, rows)
+        self.repository.finish_weekly_digest_run(
+            digest_run_id,
+            PipelineStatus.COMPLETED,
+            shortlist_payload,
+            None,
+        )
+        return WeeklyDigestShortlistResult(
+            pipeline_run_id=pipeline_run_id,
+            digest_run_id=digest_run_id,
+            week_key=window.week_key,
+            candidate_count=len(candidates),
+            candidates=candidates,
+        )
+
     def build_digest(self, week_key: str, output_path: Path | None = None) -> WeeklyDigestBuildResult:
         window = resolve_digest_window(week_key)
         normalized_week_key = window.week_key
@@ -489,44 +571,7 @@ class DigestService:
         claude_used = False
 
         try:
-            rows = self.repository.load_digest_candidates_for_week(
-                start_date=window.previous_thursday.isoformat(),
-                end_date=window.current_thursday.isoformat(),
-                limit=self.settings.digest.shortlist_size_before_claude,
-                require_canonical_events=self.settings.digest.require_canonical_events,
-            )
-            manual_rows = self.repository.load_active_shortlist_candidates_for_week(
-                start_date=window.previous_thursday.isoformat(),
-                end_date=window.current_thursday.isoformat(),
-                limit=self.settings.digest.shortlist_size_before_claude,
-                require_canonical_events=self.settings.digest.require_canonical_events,
-            )
-            for row in manual_rows:
-                row["manual_shortlist_signal"] = True
-            if (
-                self.settings.telegram_group_curation.enabled
-                and self.settings.telegram_group_curation.reaction_shortlist_enabled
-            ):
-                reaction_window_start = window.current_thursday - timedelta(
-                    days=self.settings.telegram_group_curation.shortlist_window_days
-                )
-                telegram_reaction_rows = self.repository.load_telegram_reaction_digest_candidates_for_week(
-                    start_date=reaction_window_start.isoformat(),
-                    end_date=window.current_thursday.isoformat(),
-                    allowed_reaction_keys=self.settings.telegram_group_curation.shortlist_reaction_allowlist,
-                    min_unique_reactors=self.settings.telegram_group_curation.shortlist_min_unique_reactors,
-                    limit=self.settings.digest.shortlist_size_before_claude,
-                    require_canonical_events=self.settings.digest.require_canonical_events,
-                )
-                for row in telegram_reaction_rows:
-                    row["manual_shortlist_signal"] = True
-                    row["telegram_reaction_shortlist_signal"] = True
-                manual_rows.extend(telegram_reaction_rows)
-            for row in rows:
-                row.setdefault("manual_shortlist_signal", False)
-            rows = manual_rows + rows
-            rows = _dedupe_candidate_rows(rows)
-            rows = _prepare_digest_rows(rows, limit=self.settings.digest.shortlist_size_before_claude)
+            rows = self._load_shortlist_rows(window)
             candidates = hydrate_digest_candidates(rows)
             shortlist_payload = json.dumps(
                 [
