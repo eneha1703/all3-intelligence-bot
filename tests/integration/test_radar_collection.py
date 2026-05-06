@@ -1544,7 +1544,7 @@ def test_claude_final_card_success_updates_final_card_and_stage_counters(
                 send_ok=True,
                 reject_reason=None,
                 title="Claude edited headline",
-                summary="Claude edited summary for the final Telegram card.",
+                summary="Kewazo raised funding to scale construction robot deployments across factory and jobsite operations.",
                 why_it_matters="Internal only.",
                 duplicate_risk="low",
                 confidence="high",
@@ -1580,7 +1580,7 @@ def test_claude_final_card_success_updates_final_card_and_stage_counters(
     assert fake_claude.call_count == 1
     assert len(fake_sender.sent_cards) == 1
     assert "<b>Claude edited headline</b>" in fake_sender.sent_cards[0].text
-    assert "Claude edited summary for the final Telegram card." in fake_sender.sent_cards[0].text
+    assert "Kewazo raised funding to scale construction robot deployments" in fake_sender.sent_cards[0].text
     assert captured_stage_counters["claude_final_card_attempted"] == 1
     assert captured_stage_counters["claude_final_card_used"] == 1
     send_status, skip_reason, signals, used_gemini = _load_radar_decision_for_title(

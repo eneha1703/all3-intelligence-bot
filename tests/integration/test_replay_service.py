@@ -73,7 +73,7 @@ def test_replay_allowlist_sends_only_allowlisted_urls_in_order_without_label(
     )
 
     seed_run_id = repository.create_pipeline_run(PipelineName.RADAR, {"seed": True})
-    now = datetime.now(timezone.utc)
+    now = datetime(2026, 4, 29, 12, 0, tzinfo=timezone.utc)
 
     def persist_item(
         *,

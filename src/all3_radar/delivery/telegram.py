@@ -14,20 +14,80 @@ from all3_radar.domain.models import TelegramActionButton, TelegramCard
 from all3_radar.summarization.fallback_summary import sanitize_summary_text
 
 WHITESPACE_RE = re.compile(r"\s+")
+BOILERPLATE_CARD_RE = re.compile(r"\bthe post\b.*\bappeared first on\b", re.IGNORECASE)
+LOW_INFORMATION_CARD_PATTERNS = (
+    re.compile(r"\bdiscusses the future\b", re.IGNORECASE),
+    re.compile(r"\bshares insights\b", re.IGNORECASE),
+    re.compile(r"\bexplores where\b", re.IGNORECASE),
+    re.compile(r"\bhuman-robot interactions\b", re.IGNORECASE),
+)
+CONCRETE_CARD_TERMS = (
+    "acquired",
+    "announced",
+    "automation",
+    "construction",
+    "contract",
+    "customer",
+    "deploy",
+    "deployment",
+    "factory",
+    "funding",
+    "investment",
+    "launched",
+    "manufacturing",
+    "opened",
+    "partnership",
+    "pilot",
+    "plant",
+    "production",
+    "raised",
+    "robot",
+    "robotics",
+    "timber",
+    "unveiled",
+    "valuation",
+)
+CONCRETE_EVENT_CARD_TERMS = tuple(
+    term for term in CONCRETE_CARD_TERMS if term not in {"robot", "robotics", "automation", "construction", "timber"}
+)
+
+
+def _has_concrete_card_signal(text: str) -> bool:
+    lowered = text.lower()
+    return bool(re.search(r"\d", lowered)) or any(term in lowered for term in CONCRETE_CARD_TERMS)
+
+
+def _is_low_information_card_summary(text: str) -> bool:
+    lowered = text.lower()
+    has_low_info_pattern = any(pattern.search(lowered) for pattern in LOW_INFORMATION_CARD_PATTERNS)
+    has_event_signal = bool(re.search(r"\d", lowered)) or any(term in lowered for term in CONCRETE_EVENT_CARD_TERMS)
+    return has_low_info_pattern and not has_event_signal
 
 
 def _normalize_card_summary(headline: str, summary_text: str) -> str | None:
+    raw_summary = WHITESPACE_RE.sub(" ", summary_text).strip()
+    if not raw_summary:
+        return None
+    if (BOILERPLATE_CARD_RE.search(raw_summary) and ("..." in raw_summary or "\u2026" in raw_summary)) or (
+        _is_low_information_card_summary(raw_summary)
+    ):
+        return None
+
     sanitized = sanitize_summary_text(headline, summary_text)
     if sanitized:
         return sanitized
 
-    normalized = WHITESPACE_RE.sub(" ", summary_text).strip()
-    if not normalized:
+    normalized = raw_summary
+    if BOILERPLATE_CARD_RE.search(normalized) or "..." in normalized or "\u2026" in normalized:
+        return None
+    if _is_low_information_card_summary(normalized):
         return None
     if normalized.lower().startswith(headline.strip().lower()):
         normalized = normalized[len(headline.strip()) :].lstrip(" .:-")
     normalized = WHITESPACE_RE.sub(" ", normalized).strip()
     if len(normalized.split()) < 6:
+        return None
+    if not _has_concrete_card_signal(normalized):
         return None
     if normalized[-1] not in ".!?":
         normalized = f"{normalized}."

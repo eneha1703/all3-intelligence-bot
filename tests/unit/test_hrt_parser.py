@@ -36,7 +36,7 @@ def test_parse_hrt_article_extracts_meta_and_json_ld_dates() -> None:
     sereact = parse_humanoid_robotics_article(sereact_html)
     hexagon = parse_humanoid_robotics_article(hexagon_html)
 
-    assert sereact.title == "Sereact announces €110M Series B round"
+    assert sereact.title == "Sereact announces EUR 110M Series B round"
     assert sereact.published_ts == datetime(2026, 4, 27, 9, 15, tzinfo=timezone.utc)
     assert "AI robotics stack" in (sereact.snippet or "")
 
