@@ -130,6 +130,15 @@ def _mark_claude_editorial_not_reviewed(context: CurrentRunContext, reason: str)
     )
 
 
+def _should_skip_claude_final_card(context: CurrentRunContext) -> bool:
+    if context.decision is None:
+        return False
+    editorial_flags = context.decision.signals.get("editorial_flags", {})
+    if not isinstance(editorial_flags, dict):
+        return False
+    return bool(editorial_flags.get("robot_ai_training_infrastructure_signal", False))
+
+
 def _record_claude_editorial_result_signals(
     context: CurrentRunContext,
     *,
@@ -1256,6 +1265,15 @@ class RadarService:
                 filtered_sendable_contexts: list[CurrentRunContext] = []
                 for context in sendable_contexts:
                     if context not in claude_contexts:
+                        filtered_sendable_contexts.append(context)
+                        continue
+                    if _should_skip_claude_final_card(context):
+                        _with_context_signals(
+                            context,
+                            claude_final_card_reviewed=False,
+                            claude_final_card_outcome="not_attempted",
+                            claude_final_card_reason="specialized_robot_data_infrastructure_passthrough",
+                        )
                         filtered_sendable_contexts.append(context)
                         continue
                     increment_stage_counter("claude_final_card_attempted")

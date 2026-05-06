@@ -1867,6 +1867,121 @@ def test_claude_final_card_rejection_marks_stored_only_and_skips_send(
     assert row == ("stored_only", "claude_final_card_rejected")
 
 
+def test_robot_data_infrastructure_story_skips_claude_final_card_rejection_path(
+    monkeypatch, tmp_path
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "radar_claude_skip_robot_data.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("CLAUDE_FINAL_CARD_ENABLED", "true")
+
+    now = datetime.now(timezone.utc)
+    feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Tutor Intelligence builds Data Factory to train robot AI in the real world</title>
+    <link>https://example.com/tutor</link>
+    <description>Tutor Intelligence is running 100 Sonny semi-humanoid robots while sharing real-world data with its mobile manipulator platform.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=1))}</pubDate>
+    <guid>a1</guid>
+  </item>
+</channel></rss>"""
+
+    registry = SourceRegistry(
+        (
+            SourceDefinition(
+                id="robot_data_feed",
+                name="Robot Data Feed",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://example.com/robot-data.xml",
+                priority=100,
+                tags=("robotics",),
+            ),
+        )
+    )
+
+    class FakeGeminiClient:
+        is_available = True
+
+        def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
+            return (
+                "Tutor Intelligence is running 100 Sonny semi-humanoid robots and using the fleet to collect real-world data for its mobile manipulator platform. "
+                "The setup turns live robot operations into a data factory for training robot AI in production-like conditions.",
+                None,
+            )
+
+    class FakeTelegramSender:
+        def __init__(self) -> None:
+            self.sent_cards = []
+
+        def send_card(self, card):
+            self.sent_cards.append(card)
+            return [
+                TelegramDelivery(
+                    chat_id="123",
+                    status="sent",
+                    telegram_message_id="msg-1",
+                    error_text=None,
+                    payload_text=card.text,
+                )
+            ]
+
+    class FakeClaudeClient:
+        is_available = True
+
+        def __init__(self) -> None:
+            self.call_count = 0
+
+        def generate_final_card(self, **kwargs):
+            self.call_count += 1
+            return ClaudeFinalCardResult(
+                send_ok=False,
+                reject_reason="internal_r_and_d_story",
+                title=None,
+                summary=None,
+                why_it_matters=None,
+                duplicate_risk="low",
+                confidence="high",
+                used_claude=True,
+            )
+
+    def fake_fetch_text(url: str) -> str:
+        assert url == "https://example.com/robot-data.xml"
+        return feed
+
+    fake_sender = FakeTelegramSender()
+    fake_claude = FakeClaudeClient()
+    service = RadarService(
+        repo_root=repo_root,
+        registry=registry,
+        fetch_text_fn=fake_fetch_text,
+        gemini_client=FakeGeminiClient(),
+        claude_final_card_client=fake_claude,
+        telegram_sender=fake_sender,
+    )
+
+    result = service.run(dry_run=False)
+
+    assert result.sent_items == 1
+    assert fake_claude.call_count == 0
+    assert len(fake_sender.sent_cards) == 1
+    assert "Tutor Intelligence builds Data Factory to train robot AI in the real world" in fake_sender.sent_cards[0].text
+    send_status, skip_reason, signals, used_gemini = _load_radar_decision_for_title(
+        db_path, "Tutor Intelligence builds Data Factory to train robot AI in the real world"
+    )
+    assert send_status == "sent"
+    assert skip_reason is None
+    assert used_gemini == 1
+    assert signals["claude_final_card_reviewed"] is False
+    assert signals["claude_final_card_outcome"] == "not_attempted"
+    assert signals["claude_final_card_reason"] == "specialized_robot_data_infrastructure_passthrough"
+
+
 def test_claude_final_card_failure_falls_back_to_deterministic_send_and_cap(
     monkeypatch, tmp_path
 ) -> None:

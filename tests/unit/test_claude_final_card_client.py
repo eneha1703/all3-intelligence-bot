@@ -97,6 +97,7 @@ def test_prompt_includes_explicit_scope_and_rejection_instructions() -> None:
     assert "industrial robotics" in prompt
     assert "construction automation" in prompt
     assert "timber adoption" in prompt
+    assert "robot AI training infrastructure" in prompt
     assert "generic automotive capex" in prompt
     assert "gas-car production investment" in prompt
     assert "EV demand or sales slowdown" in prompt

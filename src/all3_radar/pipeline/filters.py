@@ -601,6 +601,23 @@ UK_CONSTRUCTION_MARKET_TERMS = {
     "productivity",
     "labour costs",
 }
+UK_CONSTRUCTION_PRIORITY_TERMS = {
+    "housing",
+    "residential",
+    "infrastructure",
+    "industrial",
+    "materials prices",
+    "material prices",
+    "labour costs",
+    "labor costs",
+    "planning approvals",
+    "planning applications",
+    "timber",
+    "mass timber",
+    "modular",
+    "prefab",
+    "prefabrication",
+}
 MARKET_SIGNAL_TERMS = {
     "%",
     "index",
@@ -793,7 +810,60 @@ def is_construction_news_intelligence_signal(item: StoredNormalizedItem) -> bool
     if item.source_id != "construction_news_intelligence_listing":
         return False
     haystack = _normalize_text(f"{item.title} {item.text_preview or ''}")
-    return has_any_term(haystack, UK_CONSTRUCTION_MARKET_TERMS) and has_any_term(haystack, MARKET_SIGNAL_TERMS)
+    return (
+        has_any_term(haystack, UK_CONSTRUCTION_MARKET_TERMS)
+        and has_any_term(haystack, MARKET_SIGNAL_TERMS)
+        and has_any_term(haystack, UK_CONSTRUCTION_PRIORITY_TERMS)
+    )
+
+
+def is_business_insider_all3_signal(item: StoredNormalizedItem, event_flags: dict[str, bool]) -> bool:
+    if item.source_id != "business_insider_feed":
+        return True
+    haystack = _normalize_text(f"{item.title} {item.text_preview or ''}")
+    return any(
+        (
+            event_flags.get("industrial_robotics_signal", False),
+            event_flags.get("construction_innovation_signal", False),
+            event_flags.get("housing_market_signal", False),
+            event_flags.get("timber_strategic_signal", False),
+            event_flags.get("timber_policy_signal", False),
+            event_flags.get("timber_economics_signal", False),
+            event_flags.get("strategic_capability_acquisition_signal", False),
+            event_flags.get("physical_industry_ai_megafunding_signal", False),
+            event_flags.get("humanoid_affordability_signal", False),
+        )
+    ) or (
+        has_any_term(
+            haystack,
+            {
+                "robot",
+                "robots",
+                "robotics",
+                "humanoid",
+                "physical ai",
+                "factory automation",
+                "industrial automation",
+                "construction",
+                "housing",
+                "timber",
+                "mass timber",
+                "prefab",
+                "prefabrication",
+                "modular",
+            },
+        )
+        and any(
+            (
+                event_flags.get("funding_event", False),
+                event_flags.get("partnership_event", False),
+                event_flags.get("acquisition_event", False),
+                event_flags.get("deployment_event", False),
+                event_flags.get("product_launch_event", False),
+                event_flags.get("quantified_scale_signal", False),
+            )
+        )
+    )
 
 
 def is_construction_briefing_scope_signal(item: StoredNormalizedItem) -> bool:
@@ -937,6 +1007,8 @@ def compute_relevance_status(
     if is_general_business_profile_noise(item, event_flags):
         return "drop", "general_business_profile_noise"
     if not has_clear_all3_scope(item, competitor_count, event_flags):
+        return "drop", "no_clear_all3_scope"
+    if not is_business_insider_all3_signal(item, event_flags):
         return "drop", "no_clear_all3_scope"
     if is_broad_feed_source(item):
         haystack = f"{item.title} {item.text_preview or ''}"

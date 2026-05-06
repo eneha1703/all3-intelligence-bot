@@ -310,6 +310,7 @@ def build_claude_final_card_prompt(
         "Approve only when the story has a concrete All3-relevant operational signal such as physical AI, industrial robotics, "
         "factory automation directly tied to robotics, AI, or autonomous systems, construction automation, housing industrialization or productivity, "
         "timber adoption, scaling, economics, or policy, or strategically relevant robotics, automation, or platform funding or deployment. "
+        "Treat real-world robot AI training infrastructure, robot data factories, operational fleet data collection, and physical-world training systems as valid operational signals when the story is clearly about robotics capability building in production-like environments. "
         "Reject generic automotive capex, gas-car production investment, EV demand or sales slowdown, tariff refund or trade policy stories, "
         "ordinary vehicle production investment, generic manufacturing investment without a robotics, AI, or automation signal, and generic executive, profile, or finance stories. "
         "Do not add a separate why-it-matters paragraph. Do not explain why the story matters to All3, the radar, or the industry. "

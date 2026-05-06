@@ -5,6 +5,7 @@ from all3_radar.domain.models import StoredNormalizedItem
 from all3_radar.pipeline.ranking import derive_event_flags
 from all3_radar.pipeline.filters import (
     compute_relevance_status,
+    is_business_insider_all3_signal,
     is_construction_news_intelligence_signal,
     is_housing_market_signal,
     is_destatis_construction_statistics_signal,
@@ -227,6 +228,50 @@ def test_uk_housing_market_story_from_broad_feed_keeps_scope() -> None:
 
     assert status == "keep"
     assert reason is None
+
+
+def test_business_insider_generic_ai_exec_story_is_dropped() -> None:
+    item = _make_item(
+        "3 AI execs on why tiny teams work, and where they could fall apart",
+        "Executives discuss how AI startups organize small teams, hiring, and management tradeoffs.",
+        broad_feed=True,
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "source_id": "business_insider_feed",
+            "metadata": {"tags": ["business"], "broad_feed": True},
+        }
+    )
+
+    event_flags = derive_event_flags(item)
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=event_flags,
+    )
+
+    assert is_business_insider_all3_signal(item, event_flags) is False
+    assert status == "drop"
+    assert reason == "no_clear_all3_scope"
+
+
+def test_construction_news_hotel_and_leisure_story_is_not_treated_as_target_market_signal() -> None:
+    item = _make_item(
+        "UK construction activity March 2026: Hotel & leisure",
+        "A new report says hotel and leisure project starts and main contract awards fell across the UK market.",
+        broad_feed=False,
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "source_id": "construction_news_intelligence_listing",
+            "metadata": {"tags": ["construction", "uk", "market"], "market_scope": "uk_construction_market"},
+        }
+    )
+
+    assert is_construction_news_intelligence_signal(item) is False
 
 
 def test_wood_central_timber_policy_signal_is_detected() -> None:
