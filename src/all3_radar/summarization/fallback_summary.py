@@ -128,6 +128,7 @@ TRAILING_FRAGMENT_PATTERNS = [
     re.compile(r",?\s*while\.?$", re.IGNORECASE),
     re.compile(r",?\s*with\.?$", re.IGNORECASE),
     re.compile(r",?\s*after\.?$", re.IGNORECASE),
+    re.compile(r",?\s*at\s+(?:a|an|the)\.?\s*$", re.IGNORECASE),
 ]
 CAPTION_MARKERS = (
     "getty images",
@@ -360,6 +361,9 @@ def _has_dangling_tail(sentence: str) -> bool:
             " which.",
             " including.",
             " such as.",
+            " at a.",
+            " at an.",
+            " at the.",
         )
     )
 

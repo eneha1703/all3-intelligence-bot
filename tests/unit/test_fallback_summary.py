@@ -42,3 +42,13 @@ def test_generate_fallback_summary_rejects_dangling_comparison_tail() -> None:
     assert summary is not None
     assert summary.endswith("identical typology.")
     assert " once." not in summary
+
+
+def test_generate_fallback_summary_strips_dangling_location_fragment() -> None:
+    summary = generate_fallback_summary(
+        "University of Toronto installs KUKA KR210 arm for sub-0.1mm mass timber milling",
+        "The department commissioned a 3.5-metre KUKA Quantec KR210 robotic arm, described as among the largest installed at a.",
+    )
+
+    assert summary is not None
+    assert "installed at a." not in summary
