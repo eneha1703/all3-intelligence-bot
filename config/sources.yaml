@@ -141,7 +141,7 @@ sources:
     listing_urls:
       - https://www.haufe.de/immobilien/investment/
       - https://www.haufe.de/immobilien/entwicklung-vermarktung/marktanalysen/
-    article_limit: 20
+    article_limit: 10
     broad_feed: true
     origin_language: de
     delivery_language: en
@@ -174,7 +174,7 @@ sources:
     priority: 72
     listing_urls:
       - https://www.constructionnews.co.uk/cn-intelligence/sector/
-    article_limit: 20
+    article_limit: 10
     market_scope: uk_construction_market
     tags: [construction, uk, market]
 

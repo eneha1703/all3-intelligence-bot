@@ -687,9 +687,12 @@ class RadarService:
             historical_dedupe_started = perf_counter()
             competitor_catalog = load_competitor_catalog(self.repo_root / "config" / "competitors.yaml")
             current_ids = {context.item.normalized_item_id for context in contexts}
+            # Clustering against the full recent history can get expensive quickly and does not materially improve
+            # alert dedupe quality once we also guard on canonical_url at send time.
+            dedupe_history_hours = max(72, int(self.settings.radar.lookback_hours) * 2)
             historical_items = [
                 item
-                for item in self.repository.load_recent_items_for_dedupe()
+                for item in self.repository.load_recent_items_for_dedupe(limit_hours=dedupe_history_hours)
                 if item.normalized_item_id not in current_ids
             ]
             source_priority_map = {source.id: source.priority for source in self.registry.all()}
@@ -907,11 +910,13 @@ class RadarService:
             record_stage_timing("summary_generation", summary_generation_started)
 
             def is_claude_editorial_eligible(context: CurrentRunContext) -> bool:
+                claude_editorial_score_floor = max(30, send_threshold)
                 return (
                     context.decision is not None
                     and context.freshness.is_fresh
                     and context.decision.relevance_status == "keep"
                     and context.decision.send_status != "skip"
+                    and context.decision.score >= claude_editorial_score_floor
                     and (
                         context.decision.is_shortlisted
                         or context.decision.is_borderline
@@ -1261,7 +1266,13 @@ class RadarService:
                 and self.claude_final_card_client is not None
                 and self.claude_final_card_client.is_available
             ):
-                claude_contexts = sendable_contexts[: self.settings.radar.claude_final_card_max_candidates]
+                # Claude is the most expensive step. Restrict to higher-scoring candidates first to reduce token burn.
+                claude_score_floor = 40
+                claude_contexts = [
+                    context
+                    for context in sendable_contexts
+                    if context.decision is not None and context.decision.score >= claude_score_floor
+                ][: self.settings.radar.claude_final_card_max_candidates]
                 filtered_sendable_contexts: list[CurrentRunContext] = []
                 for context in sendable_contexts:
                     if context not in claude_contexts:
