@@ -1,0 +1,147 @@
+name: Digest Vote
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Which digest vote action to run
+        required: true
+        default: preview
+        type: choice
+        options:
+          - preview
+          - send
+          - close
+      week_key:
+        description: ISO week key, for example 2026-W19
+        required: false
+        type: string
+      chat_id:
+        description: Telegram chat id for vote-send, for example -1003766785618
+        required: false
+        type: string
+      round_id:
+        description: Digest vote round id for vote-close
+        required: false
+        type: string
+
+jobs:
+  digest-vote:
+    runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      CLAUDE_DIGEST_ENABLED: "true"
+      CLAUDE_DIGEST_MODEL: "claude-sonnet-4-6"
+      CLAUDE_DIGEST_TIMEOUT_SECONDS: "30"
+      CLAUDE_DIGEST_MAX_INPUT_ITEMS: "12"
+      CLAUDE_DIGEST_MAX_TOKENS: "1400"
+      TELEGRAM_ALERT_BOT_TOKEN: ${{ secrets.TELEGRAM_ALERT_BOT_TOKEN }}
+      DATABASE_PATH: data/all3_radar.db
+      TELEGRAM_GROUP_CURATION_ENABLED: ${{ vars.TELEGRAM_GROUP_CURATION_ENABLED }}
+      TELEGRAM_GROUP_MESSAGE_INGEST_ENABLED: ${{ vars.TELEGRAM_GROUP_MESSAGE_INGEST_ENABLED }}
+      TELEGRAM_REACTION_SHORTLIST_ENABLED: ${{ vars.TELEGRAM_REACTION_SHORTLIST_ENABLED }}
+      TELEGRAM_SHORTLIST_REACTION_ALLOWLIST: ${{ vars.TELEGRAM_SHORTLIST_REACTION_ALLOWLIST }}
+      TELEGRAM_SHORTLIST_WINDOW_DAYS: ${{ vars.TELEGRAM_SHORTLIST_WINDOW_DAYS }}
+      TELEGRAM_SHORTLIST_MIN_UNIQUE_REACTORS: ${{ vars.TELEGRAM_SHORTLIST_MIN_UNIQUE_REACTORS }}
+      PYTHONPATH: src
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure data directory exists
+        run: mkdir -p data
+
+      - name: Restore Bot 1 state
+        id: restore-radar-db
+        uses: actions/cache/restore@v4
+        with:
+          path: data/all3_radar.db
+          key: radar-db-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            radar-db-${{ github.ref_name }}-
+
+      - name: Log DB restore status
+        run: |
+          if [ -f data/all3_radar.db ]; then
+            echo "Bot 1 DB file is present before digest vote action."
+            ls -lh data/all3_radar.db
+          else
+            echo "Bot 1 DB file is not present before digest vote action."
+          fi
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -e .[dev]
+
+      - name: Initialize database
+        run: python -m all3_radar.app.admin_cli db init
+
+      - name: Validate send inputs
+        if: ${{ github.event.inputs.action == 'send' }}
+        run: |
+          if [ -z "${{ github.event.inputs.week_key }}" ]; then
+            echo "week_key is required for action=send" >&2
+            exit 1
+          fi
+          if [ -z "${{ github.event.inputs.chat_id }}" ]; then
+            echo "chat_id is required for action=send" >&2
+            exit 1
+          fi
+
+      - name: Validate preview inputs
+        if: ${{ github.event.inputs.action == 'preview' }}
+        run: |
+          if [ -z "${{ github.event.inputs.week_key }}" ]; then
+            echo "week_key is required for action=preview" >&2
+            exit 1
+          fi
+
+      - name: Validate close inputs
+        if: ${{ github.event.inputs.action == 'close' }}
+        run: |
+          if [ -z "${{ github.event.inputs.round_id }}" ]; then
+            echo "round_id is required for action=close" >&2
+            exit 1
+          fi
+
+      - name: Build vote preview
+        if: ${{ github.event.inputs.action == 'preview' }}
+        run: python -m all3_radar.app.digest_cli vote-preview --week "${{ github.event.inputs.week_key }}"
+
+      - name: Send vote message
+        if: ${{ github.event.inputs.action == 'send' }}
+        run: python -m all3_radar.app.digest_cli vote-send --week "${{ github.event.inputs.week_key }}" --chat-id "${{ github.event.inputs.chat_id }}"
+
+      - name: Close vote round
+        if: ${{ github.event.inputs.action == 'close' }}
+        run: python -m all3_radar.app.digest_cli vote-close --round-id "${{ github.event.inputs.round_id }}"
+
+      - name: Check DB file for persistence steps
+        if: always()
+        id: db-file
+        run: |
+          if [ -f data/all3_radar.db ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Bot 1 DB snapshot available for save/upload."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Bot 1 DB snapshot missing after digest vote action."
+          fi
+
+      - name: Save Bot 1 state
+        if: success() && steps.db-file.outputs.exists == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: data/all3_radar.db
+          key: radar-db-${{ github.ref_name }}-${{ github.run_id }}
+
+      - name: Upload DB snapshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-vote-${{ github.run_id }}
+          path: data/all3_radar.db
+          if-no-files-found: ignore
+          retention-days: 3
