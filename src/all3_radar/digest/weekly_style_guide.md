@@ -37,6 +37,17 @@ Weekly Digest House Style
 - When possible, open with the strongest fact, metric, or market detail instead.
 - Use only facts present in the provided input.
 - Do not invent investors, customers, timelines, outcomes, or implications not grounded in the source.
+- Prefer a sharp observed angle over a vague strategic abstraction.
+- Avoid phrases like:
+  "meaningful bet"
+  "broader recognition"
+  "the direction is interesting"
+  "this reflects growing interest"
+  unless the sentence immediately says what exactly changed and why.
+- Avoid consultant-style wording that sounds polished but empty.
+- If the source is not very strong, write a tighter, plainer paragraph instead of trying to sound insightful.
+- For studies and performance stories, explain what was measured and why that changes a real decision.
+- For funding stories, explain what investors are actually betting on, not just that capital is flowing.
 - Always format currencies as:
   USD 120B
   USD 25M
@@ -66,3 +77,4 @@ Avoid:
 - empty statements like "important development" without a concrete implication
 - generic endings that could fit any story
 - thesis language that feels templated rather than observed from the facts
+- timber logistics or supply-chain stories framed as if they were equal to direct deployment, building delivery, or performance proof unless the source clearly justifies that leap

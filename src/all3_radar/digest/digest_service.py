@@ -45,8 +45,9 @@ WEEKLY_BUCKET_RANK = {
     "construction_statistics": 5,
     "industrial_deployment": 6,
     "general_relevant": 7,
-    "weak_generic_funding": 8,
-    "weak_off_thesis": 9,
+    "timber_supply_chain": 8,
+    "weak_generic_funding": 9,
+    "weak_off_thesis": 10,
 }
 
 
@@ -204,6 +205,22 @@ def _weekly_bucket(row: dict[str, object]) -> str:
     summary = _normalize_digest_text(str(row.get("summary_text") or ""))
     combined = f"{title} {summary}".strip()
     flags = _row_event_flags(row)
+
+    if _has_any_phrase(
+        combined,
+        (
+            "marine terminal",
+            "portland marine terminal",
+            "distribution hub",
+            "production and distribution hub",
+            "one stop shop",
+            "timber supply",
+            "mass timber supply",
+            "former terminal",
+            "willamette river",
+        ),
+    ):
+        return "timber_supply_chain"
 
     if _has_any_phrase(
         combined,
@@ -498,6 +515,7 @@ class DigestService:
         )
         for row in manual_rows:
             row["manual_shortlist_signal"] = True
+        manual_rows.extend(self._load_configured_override_rows(window.week_key))
         if self.settings.telegram_group_curation.enabled and self.settings.telegram_group_curation.reaction_shortlist_enabled:
             reaction_window_start = window.current_thursday - timedelta(
                 days=self.settings.telegram_group_curation.shortlist_window_days
@@ -519,6 +537,61 @@ class DigestService:
         rows = manual_rows + rows
         rows = _dedupe_candidate_rows(rows)
         return _prepare_digest_rows(rows, limit=self.settings.digest.shortlist_size_before_claude)
+
+    def _load_configured_override_rows(self, week_key: str) -> list[dict[str, object]]:
+        path = self.repo_root / "config" / "digest_overrides.json"
+        if not path.exists():
+            return []
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        week_rows = payload.get(week_key, []) if isinstance(payload, dict) else []
+        if not isinstance(week_rows, list):
+            return []
+        rows: list[dict[str, object]] = []
+        for entry in week_rows:
+            if not isinstance(entry, dict):
+                continue
+            override_id = str(entry.get("id") or "").strip()
+            title = str(entry.get("title") or "").strip()
+            canonical_url = str(entry.get("canonical_url") or "").strip()
+            if not override_id or not title or not canonical_url:
+                continue
+            signals_json = json.dumps(
+                {"event_flags": entry.get("event_flags", {}) if isinstance(entry.get("event_flags"), dict) else {}},
+                sort_keys=True,
+            )
+            source_id = str(entry.get("source_id") or "editorial_override")
+            source_name = str(entry.get("source_name") or "Editorial Override")
+            published_ts = str(entry.get("published_ts") or "") or None
+            score = int(entry.get("score") or 100)
+            summary_text = str(entry.get("summary_text") or "").strip() or None
+            self.repository.upsert_manual_digest_override_candidate(
+                item_id=override_id,
+                source_id=source_id,
+                source_name=source_name,
+                canonical_url=canonical_url,
+                title=title,
+                summary_text=summary_text,
+                published_ts=published_ts,
+                score=score,
+                signals_json=signals_json,
+            )
+            rows.append(
+                {
+                    "canonical_event_id": override_id,
+                    "normalized_item_id": override_id,
+                    "source_id": source_id,
+                    "title": title,
+                    "canonical_url": canonical_url,
+                    "published_ts": published_ts or "",
+                    "score": score,
+                    "send_status": "manual_override",
+                    "summary_text": summary_text,
+                    "signals_json": signals_json,
+                    "manual_shortlist_signal": True,
+                    "manual_digest_force_include": True,
+                }
+            )
+        return rows
 
     def build_shortlist(self, week_key: str) -> WeeklyDigestShortlistResult:
         window = resolve_digest_window(week_key)
@@ -572,6 +645,11 @@ class DigestService:
 
         try:
             rows = self._load_shortlist_rows(window)
+            mandatory_event_ids = tuple(
+                str(row["canonical_event_id"])
+                for row in rows
+                if bool(row.get("manual_shortlist_signal")) or bool(row.get("manual_digest_force_include"))
+            )
             candidates = hydrate_digest_candidates(rows)
             shortlist_payload = json.dumps(
                 [
@@ -591,11 +669,15 @@ class DigestService:
             self.repository.replace_weekly_digest_candidates(digest_run_id, rows)
 
             selected_candidates = _select_distinct_candidates(candidates, candidates[:5], limit=5)
+            mandatory_candidates = [
+                candidate for candidate in candidates if candidate.canonical_event_id in set(mandatory_event_ids)
+            ]
             if candidates and self.claude_client.is_available:
                 selection_prompt = build_claude_selection_prompt(
                     window,
                     candidates,
                     self.settings.digest.claude_digest_max_input_items,
+                    mandatory_ids=mandatory_event_ids,
                 )
                 try:
                     selected_ids = self.claude_client.select_top_story_ids(
@@ -607,13 +689,23 @@ class DigestService:
                         candidate for candidate in candidates if candidate.canonical_event_id in set(selected_ids)
                     ]
                     selected_candidates.sort(key=lambda candidate: selected_ids.index(candidate.canonical_event_id))
-                    selected_candidates = _select_distinct_candidates(candidates, selected_candidates, limit=5)
+                    selected_candidates = _select_distinct_candidates(
+                        candidates,
+                        mandatory_candidates + selected_candidates,
+                        limit=5,
+                    )
                 except ClaudeDigestUnavailableError as exc:
                     fallback_reason = str(exc)
                     LOGGER.warning("Claude digest selection unavailable for week=%s reason=%s", normalized_week_key, exc)
             elif self.settings.digest.claude_digest_enabled:
                 fallback_reason = "Claude digest synthesis is enabled but not fully configured."
                 LOGGER.warning("Claude digest selection skipped for week=%s reason=%s", normalized_week_key, fallback_reason)
+
+            selected_candidates = _select_distinct_candidates(
+                candidates,
+                mandatory_candidates + selected_candidates,
+                limit=5,
+            )
 
             final_markdown = build_digest_html(window.title, selected_candidates)
             if selected_candidates and self.claude_client.is_available and fallback_reason is None:

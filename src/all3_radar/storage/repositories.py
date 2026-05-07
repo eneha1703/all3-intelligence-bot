@@ -415,6 +415,182 @@ class RadarRepository:
             )
             connection.commit()
 
+    def upsert_manual_digest_override_candidate(
+        self,
+        *,
+        item_id: str,
+        source_id: str,
+        source_name: str,
+        canonical_url: str,
+        title: str,
+        summary_text: str | None,
+        published_ts: str | None,
+        score: int,
+        signals_json: str,
+    ) -> None:
+        now = _utc_now_iso()
+        raw_item_id = f"raw-{item_id}"
+        pipeline_run_id = f"manual-digest-override-run-{item_id}"
+        domain = canonical_url.split("/")[2].lower() if "://" in canonical_url else "manual.override"
+        with connect(self.database_path) as connection:
+            connection.execute(
+                """
+                INSERT INTO sources (id, name, kind, layer, is_direct_source, is_wrapper, enabled, base_url, config_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                  name=excluded.name,
+                  enabled=excluded.enabled,
+                  base_url=excluded.base_url,
+                  config_json=excluded.config_json
+                """,
+                (
+                    source_id,
+                    source_name,
+                    "manual",
+                    SourceLayer.DIRECT.value,
+                    1,
+                    0,
+                    1,
+                    canonical_url,
+                    "{}",
+                    now,
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO pipeline_runs (id, pipeline, started_at, finished_at, status, config_snapshot_json, summary_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                  finished_at=excluded.finished_at,
+                  status=excluded.status
+                """,
+                (
+                    pipeline_run_id,
+                    PipelineName.DIGEST.value,
+                    now,
+                    now,
+                    PipelineStatus.COMPLETED.value,
+                    "{}",
+                    "{}",
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO raw_items (id, run_id, source_id, external_id, url, title, snippet, author, published_ts, collected_ts, raw_payload_json, fetch_status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                  url=excluded.url,
+                  title=excluded.title,
+                  snippet=excluded.snippet,
+                  published_ts=excluded.published_ts,
+                  collected_ts=excluded.collected_ts,
+                  raw_payload_json=excluded.raw_payload_json,
+                  fetch_status=excluded.fetch_status
+                """,
+                (
+                    raw_item_id,
+                    pipeline_run_id,
+                    source_id,
+                    item_id,
+                    canonical_url,
+                    title,
+                    summary_text,
+                    None,
+                    published_ts,
+                    now,
+                    "{}",
+                    "manual_override",
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO normalized_items (id, raw_item_id, source_id, canonical_url, domain, title, dek, text_preview, published_ts, collected_ts, language, layer, is_wrapper, directness_rank, metadata_json)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                  source_id=excluded.source_id,
+                  canonical_url=excluded.canonical_url,
+                  domain=excluded.domain,
+                  title=excluded.title,
+                  text_preview=excluded.text_preview,
+                  published_ts=excluded.published_ts,
+                  collected_ts=excluded.collected_ts,
+                  metadata_json=excluded.metadata_json
+                """,
+                (
+                    item_id,
+                    raw_item_id,
+                    source_id,
+                    canonical_url,
+                    domain,
+                    title,
+                    None,
+                    summary_text,
+                    published_ts,
+                    now,
+                    "en",
+                    SourceLayer.DIRECT.value,
+                    0,
+                    100,
+                    "{}",
+                ),
+            )
+            connection.execute(
+                """
+                INSERT INTO canonical_events (id, representative_item_id, event_key, cluster_title, first_published_ts, last_published_ts, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                  representative_item_id=excluded.representative_item_id,
+                  cluster_title=excluded.cluster_title,
+                  first_published_ts=excluded.first_published_ts,
+                  last_published_ts=excluded.last_published_ts,
+                  updated_at=excluded.updated_at
+                """,
+                (
+                    item_id,
+                    item_id,
+                    item_id,
+                    title,
+                    published_ts,
+                    published_ts,
+                    now,
+                    now,
+                ),
+            )
+            connection.execute(
+                """
+                INSERT OR REPLACE INTO event_members (canonical_event_id, normalized_item_id, is_representative)
+                VALUES (?, ?, ?)
+                """,
+                (item_id, item_id, 1),
+            )
+            connection.execute(
+                """
+                INSERT INTO radar_decisions (normalized_item_id, canonical_event_id, freshness_status, relevance_status, send_status, skip_reason, score, signals_json, summary_text, used_gemini, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(normalized_item_id) DO UPDATE SET
+                  canonical_event_id=excluded.canonical_event_id,
+                  relevance_status=excluded.relevance_status,
+                  send_status=excluded.send_status,
+                  score=excluded.score,
+                  signals_json=excluded.signals_json,
+                  summary_text=excluded.summary_text
+                """,
+                (
+                    item_id,
+                    item_id,
+                    "fresh",
+                    "keep",
+                    "manual_override",
+                    None,
+                    score,
+                    signals_json,
+                    summary_text,
+                    0,
+                    now,
+                ),
+            )
+            connection.commit()
+
     def finish_weekly_digest_run(
         self,
         digest_run_id: str,

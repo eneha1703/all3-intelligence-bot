@@ -169,7 +169,12 @@ def build_claude_corpus_prompt(week_key: str, candidates: list[DigestCandidate],
     return "\n".join(lines)
 
 
-def build_claude_selection_prompt(window: DigestWindow, candidates: list[DigestCandidate], max_items: int) -> str:
+def build_claude_selection_prompt(
+    window: DigestWindow,
+    candidates: list[DigestCandidate],
+    max_items: int,
+    mandatory_ids: tuple[str, ...] = (),
+) -> str:
     selected = candidates[:max_items]
     payload = [
         {
@@ -185,15 +190,26 @@ def build_claude_selection_prompt(window: DigestWindow, candidates: list[DigestC
         }
         for candidate in selected
     ]
-    return "\n".join(
-        [
+    lines = [
             "You are selecting the Top 5 weekly digest stories for Bot 2.",
             f"Digest title: {window.title}",
             f"Digest window: {window.previous_thursday.isoformat()} through {window.current_thursday.isoformat()}",
             "Select exactly 5 distinct stories from the provided candidates.",
             "Prioritize All3 relevance, physical AI, industrial robotics, construction automation, housing industrialization, timber adoption/scaling/economics/policy, infrastructure automation, strategic signal strength, novelty, and hard operational evidence.",
+            "Prefer stories with a sharp operational takeaway, not just category relevance.",
+            "Do not elevate timber logistics, marine terminal redevelopment, distribution hubs, or generic supply-chain positioning unless the story clearly changes adoption economics, building delivery, code acceptance, or project execution.",
             "Reject duplicate coverage of the same event and weak generic commentary.",
             "Consumer AI, restaurant/menu personalization AI, generic automotive capex, generic trade-policy stories, and generic executive/profile stories should not make the Top 5 unless robotics/automation is central.",
+    ]
+    if mandatory_ids:
+        lines.extend(
+            [
+                "The following canonical_event_id values are mandatory and must be included in selected_ids:",
+                json.dumps(list(mandatory_ids), ensure_ascii=False, sort_keys=True),
+            ]
+        )
+    lines.extend(
+        [
             "Return only compact JSON with this exact schema:",
             '{"selected_ids":["canonical_event_id_1","canonical_event_id_2","canonical_event_id_3","canonical_event_id_4","canonical_event_id_5"]}',
             "",
@@ -201,6 +217,7 @@ def build_claude_selection_prompt(window: DigestWindow, candidates: list[DigestC
             json.dumps(payload, ensure_ascii=False, sort_keys=True),
         ]
     )
+    return "\n".join(lines)
 
 
 def build_claude_writer_prompt(window: DigestWindow, candidates: list[DigestCandidate]) -> str:
@@ -225,6 +242,7 @@ def build_claude_writer_prompt(window: DigestWindow, candidates: list[DigestCand
             "English only, even when a source is non-English.",
             "Write like a smart human editor producing a short weekly strategic note.",
             "Be concise, analytical, natural, and non-hyped.",
+            "Sound like a sharp human editor, not a consultant memo and not an AI summary engine.",
             "Do not sound like an AI assistant, a press release, or a database recap.",
             "Use exactly 5 items and keep each item to one compact paragraph.",
             "Aim for roughly 55 to 90 words per item.",
@@ -236,6 +254,7 @@ def build_claude_writer_prompt(window: DigestWindow, candidates: list[DigestCand
             "Do not show raw URLs in visible text.",
             "Do not invent facts beyond the provided input.",
             "Lead each paragraph with the strongest fact, then add one concise implication.",
+            "Make the implication specific and observed from the facts, not broad and generic.",
             "Vary the framing across items instead of repeating the same conclusion formula.",
             "Use currency formatting like USD 120B, USD 25M, and EUR 100M.",
             "Do not use first-person company framing such as 'we', 'our', 'our need', 'our goals', or 'our strategy'.",
@@ -247,6 +266,10 @@ def build_claude_writer_prompt(window: DigestWindow, candidates: list[DigestCand
             "Do not default to starting every paragraph with the company name.",
             "Often it is better to start with the strongest fact, metric, market shift, deployment scale, or construction detail.",
             "Do not write bland summaries like 'Company X raised money for Y' unless the deeper point is made clear.",
+            "Avoid vague abstractions such as 'recognition', 'direction', 'logic', 'meaningful bet', or 'important signal' unless you immediately tie them to a concrete mechanism.",
+            "Do not use padded strategy-speak like 'this reflects broader recognition' when a sharper factual angle is available.",
+            "Do not overstate with speculative lines like 'this could compress the gap' unless the provided facts directly support that claim.",
+            "If a better sharp angle is not available, stay concrete and restrained rather than sounding clever.",
             "Do not end every item with generic phrases like 'the signal is', 'this highlights', or 'this underscores'.",
             "Mix the editorial voice across items so the digest reads like it was written by a person, not a template.",
             "If an item does not support a strong interpretive angle from the provided facts, stay concrete and restrained rather than inventing significance.",

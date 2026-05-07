@@ -331,6 +331,7 @@ def test_digest_build_generates_telegram_ready_artifact_with_claude(monkeypatch,
     output_path = tmp_path / "weekly_digest_2026-W18.md"
     schema_path = repo_root / "src" / "all3_radar" / "storage" / "schema.sql"
     _seed_digest_db(db_path, schema_path)
+    repository = RadarRepository(db_path)
 
     monkeypatch.setenv("DATABASE_PATH", str(db_path))
     monkeypatch.setenv("CLAUDE_DIGEST_ENABLED", "true")
@@ -389,6 +390,7 @@ def test_digest_build_prefers_sent_stories_before_stored_only_backfill(monkeypat
     output_path = tmp_path / "weekly_digest_2026-W18.md"
     schema_path = repo_root / "src" / "all3_radar" / "storage" / "schema.sql"
     _seed_digest_db(db_path, schema_path)
+    repository = RadarRepository(db_path)
 
     monkeypatch.setenv("DATABASE_PATH", str(db_path))
     monkeypatch.setenv("CLAUDE_DIGEST_ENABLED", "false")
@@ -413,6 +415,7 @@ def test_digest_build_falls_back_to_deterministic_artifact_without_claude(monkey
     output_path = tmp_path / "weekly_digest_2026-W18.md"
     schema_path = repo_root / "src" / "all3_radar" / "storage" / "schema.sql"
     _seed_digest_db(db_path, schema_path)
+    repository = RadarRepository(db_path)
 
     monkeypatch.setenv("DATABASE_PATH", str(db_path))
     monkeypatch.setenv("CLAUDE_DIGEST_ENABLED", "true")
@@ -678,3 +681,56 @@ def test_digest_shortlist_includes_telegram_reaction_candidates(monkeypatch, tmp
 
     assert "event-1" in {row[0] for row in candidate_rows}
     assert shortlist_json is not None
+
+
+def test_digest_build_forces_manual_override_candidate_into_final_selection(monkeypatch, tmp_path) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "digest.db"
+    output_path = tmp_path / "weekly_digest_2026-W18.md"
+    schema_path = repo_root / "src" / "all3_radar" / "storage" / "schema.sql"
+    _seed_digest_db(db_path, schema_path)
+    repository = RadarRepository(db_path)
+
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("CLAUDE_DIGEST_ENABLED", "false")
+
+    service = DigestService(repo_root=repo_root)
+    original_loader = service._load_configured_override_rows
+
+    def _patched_override_loader(week_key: str) -> list[dict[str, object]]:
+        rows = original_loader(week_key)
+        repository.upsert_manual_digest_override_candidate(
+            item_id="manual-force-1",
+            source_id="editorial_override",
+            source_name="Editorial Override",
+            canonical_url="https://example.com/manual-force",
+            title="Forced weekly override story",
+            summary_text="A forced override story should stay in the final five.",
+            published_ts="2026-05-01T12:00:00+00:00",
+            score=99,
+            signals_json='{"event_flags":{"industrial_robotics_signal":true}}',
+        )
+        rows.append(
+            {
+                "canonical_event_id": "manual-force-1",
+                "normalized_item_id": "manual-force-1",
+                "source_id": "editorial_override",
+                "title": "Forced weekly override story",
+                "canonical_url": "https://example.com/manual-force",
+                "published_ts": "2026-05-01T12:00:00+00:00",
+                "score": 99,
+                "send_status": "manual_override",
+                "summary_text": "A forced override story should stay in the final five.",
+                "signals_json": '{"event_flags":{"industrial_robotics_signal":true}}',
+                "manual_shortlist_signal": True,
+                "manual_digest_force_include": True,
+            }
+        )
+        return rows
+
+    service._load_configured_override_rows = _patched_override_loader  # type: ignore[method-assign]
+    result = service.build_digest("2026-W18", output_path=output_path)
+
+    assert result.candidate_count >= 5
+    digest_text = output_path.read_text(encoding="utf-8")
+    assert "Forced weekly override story" in digest_text

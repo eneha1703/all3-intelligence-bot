@@ -1,0 +1,17 @@
+{
+  "2026-W19": [
+    {
+      "id": "manual-2026-w19-figure-bmw-linkedin",
+      "source_id": "editorial_override",
+      "title": "Figure AI humanoids were retired from BMW after 11 months of weekday operation",
+      "canonical_url": "https://www.linkedin.com/posts/camilla-mazzoleni_figure-ai-just-retired-its-humanoids-from-share-7455907323148918784-SQH4?utm_source=share&utm_medium=member_desktop&rcm=ACoAADP37Y4BtKVvXhN0azDX3qlu760Msc4HmeA",
+      "published_ts": "2026-05-04T12:00:00+00:00",
+      "score": 99,
+      "summary_text": "A LinkedIn post reviewing Figure AI's BMW deployment says the humanoids were retired after 11 months of weekday operation, with 50% uptime cited alongside output claims tied to more than 30,000 cars and over 90,000 handled sheet-metal parts. The more useful angle is not the headline deployment itself but the operating math: time on site does not automatically translate into a breakthrough if utilization and per-robot contribution still look modest.",
+      "event_flags": {
+        "industrial_robotics_signal": true,
+        "deployment_event": true
+      }
+    }
+  ]
+}
