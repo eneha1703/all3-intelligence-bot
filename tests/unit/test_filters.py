@@ -457,6 +457,33 @@ def test_construction_news_market_story_keeps_scope() -> None:
     assert reason is None
 
 
+def test_construction_news_output_and_inflation_story_is_detected() -> None:
+    item = _make_item(
+        "Double whammy hits April construction output",
+        "A combination of lower activity and higher inflation has resulted in the steepest monthly decline in UK construction output since last November.",
+        broad_feed=False,
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "source_id": "construction_news_intelligence_listing",
+            "metadata": {"tags": ["construction", "uk", "market"], "market_scope": "uk_construction_market"},
+        }
+    )
+
+    assert is_construction_news_intelligence_signal(item) is True
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags={"construction_news_intelligence_signal": True},
+    )
+
+    assert status == "keep"
+    assert reason is None
+
+
 def test_soft_wood_central_timber_economics_commentary_does_not_trigger_signal() -> None:
     item = _make_item(
         "Why mass timber economics deserve a broader conversation",

@@ -31,7 +31,19 @@ FUNDING_TERMS = (
     "investment",
     "financing",
 )
-PARTNERSHIP_TERMS = ("partnership", "partners with", "partnered with", "partnered", "partnering", "collaboration")
+PARTNERSHIP_TERMS = (
+    "partnership",
+    "partners with",
+    "partnered with",
+    "partnered",
+    "partnering",
+    "partner on",
+    "partners on",
+    "collaboration",
+    "collaborating with",
+    "co-development",
+    "joint development",
+)
 ACQUISITION_TERMS = (
     "acquires",
     "acquisition",

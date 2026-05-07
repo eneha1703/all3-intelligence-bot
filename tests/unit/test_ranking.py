@@ -246,6 +246,45 @@ def test_construction_news_market_story_gets_market_signal_and_score_lift() -> N
     assert decision.score >= 37
 
 
+def test_construction_news_output_and_inflation_story_gets_market_signal() -> None:
+    item = _make_item(
+        "Double whammy hits April construction output",
+        "A combination of lower activity and higher inflation has resulted in the steepest monthly decline in UK construction output since last November.",
+        broad_feed=False,
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "source_id": "construction_news_intelligence_listing",
+            "metadata": {"tags": ["construction", "uk", "market"], "market_scope": "uk_construction_market"},
+        }
+    )
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["construction_news_intelligence_signal"] is True
+    assert decision.relevance_status == "keep"
+    assert decision.score >= 37
+
+
+def test_comau_aptiv_partnership_story_sets_partnership_event() -> None:
+    item = _make_item(
+        "Comau and Aptiv partner on AI-powered robotics and autonomous industrial automation systems",
+        "Comau is collaborating with Aptiv to explore the co-development of next-generation intelligent automation solutions for industrial customers.",
+        broad_feed=False,
+        source_id="robotics_automation_news_rss",
+    )
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["partnership_event"] is True
+    assert flags["industrial_robotics_signal"] is True
+    assert decision.relevance_status == "keep"
+    assert decision.score >= 49
+
+
 def test_unitree_humanoid_affordability_story_gets_access_signal_and_score_lift() -> None:
     item = _make_item(
         "China’s Unitree reshapes entry-level humanoid robot market with $4,290 droid",

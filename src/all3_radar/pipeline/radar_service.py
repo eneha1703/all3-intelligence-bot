@@ -136,7 +136,10 @@ def _should_skip_claude_final_card(context: CurrentRunContext) -> bool:
     editorial_flags = context.decision.signals.get("editorial_flags", {})
     if not isinstance(editorial_flags, dict):
         return False
-    return bool(editorial_flags.get("robot_ai_training_infrastructure_signal", False))
+    return bool(
+        editorial_flags.get("robot_ai_training_infrastructure_signal", False)
+        or editorial_flags.get("industrial_automation_partnership_signal", False)
+    )
 
 
 def _record_claude_editorial_result_signals(

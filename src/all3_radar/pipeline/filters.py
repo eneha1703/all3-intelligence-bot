@@ -610,10 +610,13 @@ UK_CONSTRUCTION_MARKET_TERMS = {
     "labour costs",
 }
 UK_CONSTRUCTION_PRIORITY_TERMS = {
+    "activity",
+    "output",
     "housing",
     "residential",
     "infrastructure",
     "industrial",
+    "inflation",
     "materials prices",
     "material prices",
     "labour costs",
@@ -625,6 +628,11 @@ UK_CONSTRUCTION_PRIORITY_TERMS = {
     "modular",
     "prefab",
     "prefabrication",
+}
+UK_CONSTRUCTION_OFF_SCOPE_SECTOR_TERMS = {
+    "hotel",
+    "hotels",
+    "leisure",
 }
 MARKET_SIGNAL_TERMS = {
     "%",
@@ -825,6 +833,7 @@ def is_construction_news_intelligence_signal(item: StoredNormalizedItem) -> bool
         has_any_term(haystack, UK_CONSTRUCTION_MARKET_TERMS)
         and has_any_term(haystack, MARKET_SIGNAL_TERMS)
         and has_any_term(haystack, UK_CONSTRUCTION_PRIORITY_TERMS)
+        and not has_any_term(haystack, UK_CONSTRUCTION_OFF_SCOPE_SECTOR_TERMS)
     )
 
 
