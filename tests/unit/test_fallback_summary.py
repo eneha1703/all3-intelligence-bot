@@ -52,3 +52,14 @@ def test_generate_fallback_summary_strips_dangling_location_fragment() -> None:
 
     assert summary is not None
     assert "installed at a." not in summary
+
+
+def test_generate_fallback_summary_strips_dangling_automated_tail() -> None:
+    summary = generate_fallback_summary(
+        "Comau and Aptiv partner on AI-powered robotics and autonomous industrial automation systems",
+        "Industrial automation specialist Comau is collaborating with technology company Aptiv to explore the co-development of next-generation intelligent automation solutions designed to help industrial customers operate more safely. The agreement establishes a framework for the two companies to evaluate joint development in key areas of focus including advanced robotics, autonomous systems, and automated.",
+    )
+
+    assert summary is not None
+    assert "and automated." not in summary
+    assert "advanced robotics, autonomous systems." in summary
