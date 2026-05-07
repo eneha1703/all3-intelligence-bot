@@ -461,3 +461,19 @@ def test_editorial_shaping_keeps_robot_rulebook_safety_story() -> None:
     assert editorial.allow_send is True
     assert editorial.flags["robot_safety_governance_signal"] is True
     assert editorial.flags["telegram_worthy"] is True
+
+
+def test_editorial_shaping_keeps_industrial_automation_partnership_story() -> None:
+    item = _make_item(
+        "Comau and Aptiv partner on AI-powered robotics and autonomous industrial automation systems",
+        "The partnership combines AI-powered robotics with autonomous industrial automation systems for manufacturing and factory production environments.",
+        source_id="robotics_automation_news_rss",
+    )
+    decision = _make_decision(partnership_event=True, industrial_robotics_signal=True)
+
+    editorial = evaluate_send_stage_editorial(item, decision)
+
+    assert editorial.allow_send is True
+    assert editorial.reason is None
+    assert editorial.flags["industrial_automation_partnership_signal"] is True
+    assert editorial.flags["telegram_worthy"] is True

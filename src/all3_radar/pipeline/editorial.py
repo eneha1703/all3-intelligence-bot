@@ -101,6 +101,10 @@ OPERATIONAL_DETAIL_TERMS = (
     "heavy equipment",
     "mine site",
     "surface finishing",
+    "industrial automation systems",
+    "autonomous industrial automation",
+    "automation systems",
+    "factory automation systems",
 )
 CONSTRUCTION_EXECUTION_TERMS = (
     "modular",
@@ -310,6 +314,27 @@ ROBOT_SAFETY_GOVERNANCE_TERMS = (
     "transparent decisions",
     "real-world situations",
     "real world situations",
+)
+INDUSTRIAL_AUTOMATION_PARTNERSHIP_TERMS = (
+    "partner on",
+    "partners on",
+    "partnership",
+    "collaboration",
+    "joint solution",
+    "joint offering",
+    "integrated solution",
+    "combined offering",
+)
+INDUSTRIAL_AUTOMATION_PLATFORM_TERMS = (
+    "industrial automation",
+    "autonomous industrial automation",
+    "automation systems",
+    "factory automation",
+    "factory automation systems",
+    "robotics platform",
+    "automation platform",
+    "ai-powered robotics",
+    "ai powered robotics",
 )
 WOOD_CENTRAL_HARD_CONSTRAINT_TERMS = (
     "cap",
@@ -581,6 +606,16 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         event_flags.get("robot_safety_governance_signal", False)
         and _contains_any(haystack, ROBOT_SAFETY_GOVERNANCE_TERMS)
     )
+    industrial_automation_partnership_signal = (
+        event_flags.get("partnership_event", False)
+        and event_flags.get("industrial_robotics_signal", False)
+        and _contains_any(haystack, INDUSTRIAL_AUTOMATION_PARTNERSHIP_TERMS)
+        and _contains_any(haystack, INDUSTRIAL_AUTOMATION_PLATFORM_TERMS)
+        and (
+            operational_detail
+            or _contains_any(haystack, ("manufacturing", "factory", "production", "industrial"))
+        )
+    )
     tangible_operational_signal = operational_detail or construction_execution or industrial_relevance
     product_or_platform_news = product_launch and tangible_operational_signal and (
         industrial_relevance or construction_execution or competitor_count > 0
@@ -604,6 +639,7 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         or adaptive_reuse_housing_delivery_signal
         or national_robotics_strategy_signal
         or robot_safety_governance_signal
+        or industrial_automation_partnership_signal
     )
 
     flags = {
@@ -631,6 +667,7 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         "adaptive_reuse_housing_delivery_signal": adaptive_reuse_housing_delivery_signal,
         "national_robotics_strategy_signal": national_robotics_strategy_signal,
         "robot_safety_governance_signal": robot_safety_governance_signal,
+        "industrial_automation_partnership_signal": industrial_automation_partnership_signal,
         "tangible_operational_signal": tangible_operational_signal,
         "telegram_worthy": telegram_worthy,
     }
