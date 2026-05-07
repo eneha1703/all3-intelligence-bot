@@ -241,3 +241,56 @@ CREATE TABLE IF NOT EXISTS weekly_digest_candidates (
   FOREIGN KEY(digest_run_id) REFERENCES weekly_digest_runs(id),
   FOREIGN KEY(canonical_event_id) REFERENCES canonical_events(id)
 );
+
+CREATE TABLE IF NOT EXISTS digest_vote_rounds (
+  id TEXT PRIMARY KEY,
+  pipeline_run_id TEXT NOT NULL,
+  week_key TEXT NOT NULL,
+  status TEXT NOT NULL,
+  seats_to_fill INTEGER NOT NULL,
+  shortlisted_count INTEGER NOT NULL,
+  candidate_count INTEGER NOT NULL,
+  summary_json TEXT,
+  telegram_chat_id TEXT,
+  telegram_message_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  closed_at TEXT,
+  FOREIGN KEY(pipeline_run_id) REFERENCES pipeline_runs(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_digest_vote_rounds_week
+  ON digest_vote_rounds(week_key, status, created_at);
+
+CREATE TABLE IF NOT EXISTS digest_vote_candidates (
+  vote_round_id TEXT NOT NULL,
+  canonical_event_id TEXT NOT NULL,
+  normalized_item_id TEXT NOT NULL,
+  candidate_rank INTEGER NOT NULL,
+  score INTEGER NOT NULL,
+  is_preselected INTEGER NOT NULL,
+  rationale_json TEXT NOT NULL,
+  PRIMARY KEY(vote_round_id, canonical_event_id),
+  FOREIGN KEY(vote_round_id) REFERENCES digest_vote_rounds(id),
+  FOREIGN KEY(canonical_event_id) REFERENCES canonical_events(id),
+  FOREIGN KEY(normalized_item_id) REFERENCES normalized_items(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_digest_vote_candidates_round
+  ON digest_vote_candidates(vote_round_id, candidate_rank);
+
+CREATE TABLE IF NOT EXISTS digest_votes (
+  id TEXT PRIMARY KEY,
+  vote_round_id TEXT NOT NULL,
+  canonical_event_id TEXT NOT NULL,
+  voter_user_id TEXT NOT NULL DEFAULT '',
+  actor_chat_id TEXT NOT NULL DEFAULT '',
+  is_active INTEGER NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  FOREIGN KEY(vote_round_id) REFERENCES digest_vote_rounds(id),
+  UNIQUE(vote_round_id, canonical_event_id, voter_user_id, actor_chat_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_digest_votes_round
+  ON digest_votes(vote_round_id, is_active, updated_at);

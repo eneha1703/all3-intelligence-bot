@@ -87,6 +87,9 @@ class _FakePollingBotApiClient(TelegramBotApiClient):
         self.get_updates_calls.append((offset, limit, timeout_seconds, allowed_updates))
         return self.updates
 
+    def delete_webhook(self, *, drop_pending_updates: bool = False) -> None:
+        return
+
     def answer_callback_query(self, callback_query_id: str, text: str) -> None:
         self.callback_answers.append((callback_query_id, text))
 

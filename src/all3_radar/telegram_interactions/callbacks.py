@@ -140,13 +140,11 @@ def handle_telegram_callback_update(
         return TelegramCallbackResult(False, None, None, None, "No callback_query in update.")
 
     callback_data = str(callback_query.get("data") or "")
-    if not callback_data.startswith("shortlist:toggle:"):
-        return TelegramCallbackResult(False, None, None, None, "Unsupported callback action.")
-
-    normalized_item_id = callback_data.removeprefix("shortlist:toggle:")
     message = callback_query.get("message") or {}
     from_user = callback_query.get("from") or {}
     chat = message.get("chat") if isinstance(message, dict) else {}
+    if not isinstance(chat, dict):
+        chat = {}
 
     chat_id = str(chat.get("id") or "")
     telegram_message_id = str(message.get("message_id") or "")
@@ -154,40 +152,109 @@ def handle_telegram_callback_update(
     username = str(from_user.get("username") or "")
     callback_query_id = str(callback_query.get("id") or "")
 
-    mapping = repository.get_item_event_mapping(normalized_item_id)
-    canonical_event_id = mapping["canonical_event_id"] if mapping else None
+    if callback_data.startswith("shortlist:toggle:"):
+        normalized_item_id = callback_data.removeprefix("shortlist:toggle:")
 
-    signal_service = EditorialSignalService(repository)
-    result = signal_service.toggle_shortlist(
-        normalized_item_id=normalized_item_id,
-        canonical_event_id=canonical_event_id,
-        chat_id=chat_id,
-        telegram_message_id=telegram_message_id,
-        user_id=user_id,
-        username=username,
-    )
+        mapping = repository.get_item_event_mapping(normalized_item_id)
+        canonical_event_id = mapping["canonical_event_id"] if mapping else None
 
-    response_text = "Added to shortlist" if result.is_active else "Removed from shortlist"
-    if callback_query_id:
-        try:
-            bot_api_client.answer_callback_query(callback_query_id, response_text)
-        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
-            pass
-    if chat_id and telegram_message_id:
-        try:
-            bot_api_client.edit_shortlist_button(
-                chat_id,
-                telegram_message_id,
-                normalized_item_id=normalized_item_id,
-                is_active=result.is_active,
+        signal_service = EditorialSignalService(repository)
+        result = signal_service.toggle_shortlist(
+            normalized_item_id=normalized_item_id,
+            canonical_event_id=canonical_event_id,
+            chat_id=chat_id,
+            telegram_message_id=telegram_message_id,
+            user_id=user_id,
+            username=username,
+        )
+
+        response_text = "Added to shortlist" if result.is_active else "Removed from shortlist"
+        if callback_query_id:
+            try:
+                bot_api_client.answer_callback_query(callback_query_id, response_text)
+            except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+                pass
+        if chat_id and telegram_message_id:
+            try:
+                bot_api_client.edit_shortlist_button(
+                    chat_id,
+                    telegram_message_id,
+                    normalized_item_id=normalized_item_id,
+                    is_active=result.is_active,
+                )
+            except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError):
+                pass
+
+        return TelegramCallbackResult(
+            handled=True,
+            action="shortlist_toggle",
+            normalized_item_id=normalized_item_id,
+            is_active=result.is_active,
+            message=response_text,
+        )
+
+    if callback_data.startswith("digest_vote:toggle:"):
+        parts = callback_data.split(":", 3)
+        if len(parts) != 4:
+            return TelegramCallbackResult(False, None, None, None, "Unsupported callback action.")
+        _, _, vote_round_id, canonical_event_id = parts
+        vote_round = repository.get_digest_vote_round(vote_round_id)
+        if vote_round is None or str(vote_round.get("status") or "").lower() == "closed":
+            response_text = "Voting is closed."
+            if callback_query_id:
+                try:
+                    bot_api_client.answer_callback_query(callback_query_id, response_text)
+                except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+                    pass
+            return TelegramCallbackResult(True, "digest_vote_toggle", None, False, response_text)
+        if not repository.has_digest_vote_candidate(vote_round_id, canonical_event_id):
+            return TelegramCallbackResult(False, None, None, None, "Unsupported callback action.")
+
+        current_state = repository.get_digest_vote_state(
+            vote_round_id=vote_round_id,
+            canonical_event_id=canonical_event_id,
+            voter_user_id=user_id,
+            actor_chat_id="",
+        )
+        seats_to_fill = int(vote_round.get("seats_to_fill") or 0)
+        if not current_state:
+            active_votes = repository.count_active_digest_votes_for_voter(
+                vote_round_id=vote_round_id,
+                voter_user_id=user_id,
+                actor_chat_id="",
             )
-        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, json.JSONDecodeError, ValueError):
-            pass
+            if seats_to_fill > 0 and active_votes >= seats_to_fill:
+                response_text = f"You can vote for up to {seats_to_fill} stor{'y' if seats_to_fill == 1 else 'ies'}."
+                if callback_query_id:
+                    try:
+                        bot_api_client.answer_callback_query(callback_query_id, response_text)
+                    except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+                        pass
+                return TelegramCallbackResult(True, "digest_vote_toggle", None, False, response_text)
 
-    return TelegramCallbackResult(
-        handled=True,
-        action="shortlist_toggle",
-        normalized_item_id=normalized_item_id,
-        is_active=result.is_active,
-        message=response_text,
-    )
+        next_state = not current_state
+        repository.upsert_digest_vote(
+            vote_round_id=vote_round_id,
+            canonical_event_id=canonical_event_id,
+            voter_user_id=user_id,
+            actor_chat_id="",
+            is_active=next_state,
+        )
+        active_votes = repository.count_active_digest_votes_for_voter(
+            vote_round_id=vote_round_id,
+            voter_user_id=user_id,
+            actor_chat_id="",
+        )
+        response_text = (
+            f"Vote saved ({active_votes}/{seats_to_fill})"
+            if next_state
+            else f"Vote removed ({active_votes}/{seats_to_fill})"
+        )
+        if callback_query_id:
+            try:
+                bot_api_client.answer_callback_query(callback_query_id, response_text)
+            except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+                pass
+        return TelegramCallbackResult(True, "digest_vote_toggle", None, next_state, response_text)
+
+    return TelegramCallbackResult(False, None, None, None, "Unsupported callback action.")

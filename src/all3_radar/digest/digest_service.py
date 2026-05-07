@@ -5,14 +5,17 @@ from __future__ import annotations
 import json
 import logging
 import re
+import html
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
 
 from all3_radar.config.loader import load_settings
+from all3_radar.delivery.telegram import TelegramSender
 from all3_radar.digest.claude_client import ClaudeDigestClient, ClaudeDigestUnavailableError
 from all3_radar.digest.corpus import (
     DigestCandidate,
+    build_claude_vote_selection_prompt,
     build_claude_selection_prompt,
     build_claude_writer_prompt,
     build_default_output_path,
@@ -20,6 +23,7 @@ from all3_radar.digest.corpus import (
     resolve_digest_window,
 )
 from all3_radar.digest.writer import build_digest_html, build_digest_markdown
+from all3_radar.domain.models import EditorialSignal, TelegramActionButton
 from all3_radar.domain.enums import PipelineName, PipelineStatus
 from all3_radar.observability.logging import configure_logging
 from all3_radar.pipeline.funding_sent_history import funding_key_from_text
@@ -69,6 +73,41 @@ class WeeklyDigestShortlistResult:
     week_key: str
     candidate_count: int
     candidates: list[DigestCandidate]
+
+
+@dataclass(frozen=True)
+class WeeklyDigestVotePreviewResult:
+    pipeline_run_id: str
+    vote_round_id: str
+    week_key: str
+    seats_to_fill: int
+    shortlisted_count: int
+    candidate_count: int
+    shortlisted_candidates: list[DigestCandidate]
+    vote_candidates: list[DigestCandidate]
+
+
+@dataclass(frozen=True)
+class WeeklyDigestVoteSendResult:
+    pipeline_run_id: str
+    vote_round_id: str
+    week_key: str
+    chat_id: str
+    telegram_message_id: str | None
+    seats_to_fill: int
+    shortlisted_count: int
+    candidate_count: int
+    status: str
+
+
+@dataclass(frozen=True)
+class WeeklyDigestVoteCloseResult:
+    vote_round_id: str
+    week_key: str
+    seats_to_fill: int
+    shortlisted_count: int
+    promoted_count: int
+    winner_candidates: list[DigestCandidate]
 
 
 def _settings_snapshot(settings: object) -> dict:
@@ -480,6 +519,64 @@ def _select_distinct_candidates(
     return distinct_selected
 
 
+def _is_fixed_shortlist_row(row: dict[str, object]) -> bool:
+    return bool(row.get("manual_shortlist_signal")) or bool(row.get("manual_digest_force_include"))
+
+
+def _build_vote_button(candidate_index: int, vote_round_id: str, canonical_event_id: str) -> TelegramActionButton:
+    return TelegramActionButton(
+        text=f"Vote {chr(ord('A') + candidate_index)}",
+        callback_data=f"digest_vote:toggle:{vote_round_id}:{canonical_event_id}",
+    )
+
+
+def _one_line_preview(candidate: DigestCandidate) -> str:
+    summary = WHITESPACE_RE.sub(" ", candidate.summary_text or "").strip()
+    if not summary:
+        return "Open the link for details."
+    if len(summary) > 180:
+        clipped = summary[:177].rstrip(" ,;:")
+        summary = f"{clipped}..."
+    if summary[-1] not in ".!?":
+        summary = f"{summary}."
+    return summary
+
+
+def _build_vote_message_text(
+    *,
+    week_title: str,
+    seats_to_fill: int,
+    shortlisted_candidates: list[DigestCandidate],
+    vote_candidates: list[DigestCandidate],
+) -> str:
+    lines = [f"<b>{html.escape(week_title)}</b>", ""]
+    if shortlisted_candidates:
+        lines.append("<b>Already shortlisted</b>")
+        for index, candidate in enumerate(shortlisted_candidates, start=1):
+            lines.append(
+                f"{index}. {html.escape(candidate.title)}"
+            )
+        lines.append("")
+    lines.append(
+        html.escape(
+            f"We need {seats_to_fill} more stor{'y' if seats_to_fill == 1 else 'ies'} to complete this week's Top 5. "
+            "Please vote from the candidates below."
+        )
+    )
+    lines.append("")
+    for index, candidate in enumerate(vote_candidates, start=1):
+        label = chr(ord("A") + index - 1)
+        lines.extend(
+            [
+                f"<b>{label}. {html.escape(candidate.title)}</b>",
+                html.escape(_one_line_preview(candidate)),
+                f'<a href="{html.escape(candidate.canonical_url, quote=True)}">Link</a>',
+                "",
+            ]
+        )
+    return "\n".join(lines).strip()
+
+
 class DigestService:
     def __init__(
         self,
@@ -627,6 +724,217 @@ class DigestService:
             week_key=window.week_key,
             candidate_count=len(candidates),
             candidates=candidates,
+        )
+
+    def build_vote_preview(self, week_key: str) -> WeeklyDigestVotePreviewResult:
+        window = resolve_digest_window(week_key)
+        pipeline_run_id = self.repository.create_pipeline_run(PipelineName.DIGEST, _settings_snapshot(self.settings))
+        rows = self._load_shortlist_rows(window)
+        shortlisted_rows = _dedupe_candidate_rows([row for row in rows if _is_fixed_shortlist_row(row)])
+        shortlisted_candidates = _dedupe_candidates(hydrate_digest_candidates(shortlisted_rows))
+        seats_to_fill = max(self.settings.digest.stories_per_digest - len(shortlisted_candidates), 0)
+
+        shortlisted_ids = {candidate.canonical_event_id for candidate in shortlisted_candidates}
+        candidate_rows = _dedupe_candidate_rows(
+            [row for row in rows if str(row["canonical_event_id"]) not in shortlisted_ids]
+        )
+        vote_offer_count = min(len(candidate_rows), max(3, min(5, seats_to_fill + 2))) if seats_to_fill > 0 else 0
+        candidate_rows = _prepare_digest_rows(candidate_rows, limit=max(vote_offer_count, seats_to_fill))
+        all_vote_candidates = hydrate_digest_candidates(candidate_rows)
+        selected_vote_candidates = _select_distinct_candidates(
+            all_vote_candidates,
+            all_vote_candidates[:vote_offer_count],
+            limit=vote_offer_count,
+        )
+
+        if selected_vote_candidates and self.claude_client.is_available:
+            prompt = build_claude_vote_selection_prompt(
+                window,
+                shortlisted_candidates=shortlisted_candidates,
+                vote_candidates=all_vote_candidates,
+                max_items=self.settings.digest.claude_digest_max_input_items,
+                seats_to_fill=seats_to_fill,
+            )
+            try:
+                selected_ids = self.claude_client.select_top_story_ids(
+                    prompt,
+                    allowed_ids={candidate.canonical_event_id for candidate in all_vote_candidates},
+                    exact_count=vote_offer_count,
+                )
+                selected_vote_candidates = [
+                    candidate for candidate in all_vote_candidates if candidate.canonical_event_id in set(selected_ids)
+                ]
+                selected_vote_candidates.sort(key=lambda candidate: selected_ids.index(candidate.canonical_event_id))
+                selected_vote_candidates = _select_distinct_candidates(
+                    all_vote_candidates,
+                    selected_vote_candidates,
+                    limit=vote_offer_count,
+                )
+            except ClaudeDigestUnavailableError as exc:
+                LOGGER.warning("Claude vote preview selection unavailable for week=%s reason=%s", window.week_key, exc)
+
+        shortlisted_payload = [
+            {
+                "canonical_event_id": candidate.canonical_event_id,
+                "normalized_item_id": candidate.normalized_item_id,
+                "source_id": candidate.source_id,
+                "title": candidate.title,
+                "canonical_url": candidate.canonical_url,
+                "published_ts": candidate.published_ts.isoformat() if candidate.published_ts else None,
+                "score": candidate.score,
+            }
+            for candidate in shortlisted_candidates
+        ]
+        vote_payload = [
+            {
+                "canonical_event_id": candidate.canonical_event_id,
+                "normalized_item_id": candidate.normalized_item_id,
+                "source_id": candidate.source_id,
+                "title": candidate.title,
+                "canonical_url": candidate.canonical_url,
+                "published_ts": candidate.published_ts.isoformat() if candidate.published_ts else None,
+                "score": candidate.score,
+            }
+            for candidate in selected_vote_candidates
+        ]
+        summary_json = json.dumps(
+            {
+                "shortlisted_count": len(shortlisted_candidates),
+                "candidate_count": len(selected_vote_candidates),
+                "seats_to_fill": seats_to_fill,
+            },
+            sort_keys=True,
+        )
+        vote_round_id = self.repository.create_digest_vote_round(
+            pipeline_run_id=pipeline_run_id,
+            week_key=window.week_key,
+            seats_to_fill=seats_to_fill,
+            shortlisted_count=len(shortlisted_candidates),
+            candidate_count=len(selected_vote_candidates),
+            summary_json=summary_json,
+        )
+        self.repository.replace_digest_vote_candidates(
+            vote_round_id,
+            shortlisted_candidates=shortlisted_payload,
+            vote_candidates=vote_payload,
+        )
+        self.repository.finish_pipeline_run(
+            pipeline_run_id,
+            PipelineStatus.COMPLETED,
+            {
+                "week_key": window.week_key,
+                "shortlisted_count": len(shortlisted_candidates),
+                "candidate_count": len(selected_vote_candidates),
+                "seats_to_fill": seats_to_fill,
+            },
+        )
+        return WeeklyDigestVotePreviewResult(
+            pipeline_run_id=pipeline_run_id,
+            vote_round_id=vote_round_id,
+            week_key=window.week_key,
+            seats_to_fill=seats_to_fill,
+            shortlisted_count=len(shortlisted_candidates),
+            candidate_count=len(selected_vote_candidates),
+            shortlisted_candidates=shortlisted_candidates,
+            vote_candidates=selected_vote_candidates,
+        )
+
+    def send_vote_preview(self, week_key: str, *, chat_id: str) -> WeeklyDigestVoteSendResult:
+        window = resolve_digest_window(week_key)
+        preview = self.build_vote_preview(window.week_key)
+        message_text = _build_vote_message_text(
+            week_title=window.title,
+            seats_to_fill=preview.seats_to_fill,
+            shortlisted_candidates=preview.shortlisted_candidates,
+            vote_candidates=preview.vote_candidates,
+        )
+        action_buttons = tuple(
+            _build_vote_button(index, preview.vote_round_id, candidate.canonical_event_id)
+            for index, candidate in enumerate(preview.vote_candidates)
+        )
+        sender = TelegramSender(self.settings.integrations.telegram_alert_bot_token, (chat_id,))
+        delivery = sender.send_html_message(
+            message_text,
+            action_buttons=action_buttons,
+            disable_web_page_preview=False,
+        )[0]
+        if delivery.status == "sent" and delivery.telegram_message_id:
+            self.repository.attach_digest_vote_round_message(
+                preview.vote_round_id,
+                telegram_chat_id=chat_id,
+                telegram_message_id=delivery.telegram_message_id,
+            )
+        return WeeklyDigestVoteSendResult(
+            pipeline_run_id=preview.pipeline_run_id,
+            vote_round_id=preview.vote_round_id,
+            week_key=preview.week_key,
+            chat_id=chat_id,
+            telegram_message_id=delivery.telegram_message_id,
+            seats_to_fill=preview.seats_to_fill,
+            shortlisted_count=preview.shortlisted_count,
+            candidate_count=preview.candidate_count,
+            status=delivery.status,
+        )
+
+    def close_vote_round(self, vote_round_id: str) -> WeeklyDigestVoteCloseResult:
+        vote_round = self.repository.get_digest_vote_round(vote_round_id)
+        if vote_round is None:
+            raise ValueError(f"Unknown digest vote round: {vote_round_id}")
+        rows = self.repository.load_digest_vote_candidates_with_totals(vote_round_id)
+        preselected_rows = [row for row in rows if int(row.get("is_preselected") or 0) == 1]
+        candidate_rows = [row for row in rows if int(row.get("is_preselected") or 0) == 0]
+        seats_to_fill = int(vote_round.get("seats_to_fill") or 0)
+        candidate_rows.sort(
+            key=lambda row: (
+                -int(row.get("active_votes") or 0),
+                -int(row.get("score") or 0),
+                int(row.get("candidate_rank") or 0),
+                str(row.get("canonical_event_id") or ""),
+            )
+        )
+        winner_rows = candidate_rows[:seats_to_fill]
+        for row in winner_rows:
+            rationale = json.loads(str(row.get("rationale_json") or "{}"))
+            self.repository.upsert_editorial_signal(
+                EditorialSignal(
+                    signal_type="shortlist",
+                    signal_state="active",
+                    source_kind="digest_vote_round",
+                    normalized_item_id=str(row["normalized_item_id"]),
+                    canonical_event_id=str(row["canonical_event_id"]),
+                    chat_id=str(vote_round.get("telegram_chat_id") or ""),
+                    telegram_message_id=str(vote_round.get("telegram_message_id") or ""),
+                    user_id=vote_round_id,
+                    username="digest_vote_round",
+                    raw_value=f"votes:{int(row.get('active_votes') or 0)}",
+                )
+            )
+        self.repository.close_digest_vote_round(vote_round_id)
+        winner_candidates = [
+            DigestCandidate(
+                canonical_event_id=str(row["canonical_event_id"]),
+                normalized_item_id=str(row["normalized_item_id"]),
+                source_id=str(json.loads(str(row.get("rationale_json") or "{}")).get("source_id") or ""),
+                title=str(json.loads(str(row.get("rationale_json") or "{}")).get("title") or ""),
+                canonical_url=str(json.loads(str(row.get("rationale_json") or "{}")).get("canonical_url") or ""),
+                published_ts=(
+                    datetime.fromisoformat(str(json.loads(str(row.get("rationale_json") or "{}")).get("published_ts")))
+                    if json.loads(str(row.get("rationale_json") or "{}")).get("published_ts")
+                    else None
+                ),
+                score=int(row.get("score") or 0),
+                summary_text=None,
+                event_flags={},
+            )
+            for row in winner_rows
+        ]
+        return WeeklyDigestVoteCloseResult(
+            vote_round_id=vote_round_id,
+            week_key=str(vote_round["week_key"]),
+            seats_to_fill=seats_to_fill,
+            shortlisted_count=len(preselected_rows),
+            promoted_count=len(winner_rows),
+            winner_candidates=winner_candidates,
         )
 
     def build_digest(self, week_key: str, output_path: Path | None = None) -> WeeklyDigestBuildResult:

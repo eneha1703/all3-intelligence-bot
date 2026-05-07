@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
@@ -681,6 +682,301 @@ def test_digest_shortlist_includes_telegram_reaction_candidates(monkeypatch, tmp
 
     assert "event-1" in {row[0] for row in candidate_rows}
     assert shortlist_json is not None
+
+
+def test_digest_vote_preview_uses_shortlisted_items_and_builds_fill_candidates(monkeypatch, tmp_path) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "digest.db"
+    schema_path = repo_root / "src" / "all3_radar" / "storage" / "schema.sql"
+    _seed_digest_db(db_path, schema_path)
+
+    repository = RadarRepository(db_path)
+    repository.upsert_editorial_signal(
+        EditorialSignal(
+            signal_type="shortlist",
+            signal_state="active",
+            source_kind="telegram_reaction",
+            normalized_item_id="item-1",
+            canonical_event_id="event-1",
+            chat_id="chat-1",
+            telegram_message_id="msg-1",
+            user_id="user-1",
+            username="editor-1",
+            raw_value="🏆",
+        )
+    )
+    repository.upsert_editorial_signal(
+        EditorialSignal(
+            signal_type="shortlist",
+            signal_state="active",
+            source_kind="telegram_reaction",
+            normalized_item_id="item-2",
+            canonical_event_id="event-2",
+            chat_id="chat-1",
+            telegram_message_id="msg-2",
+            user_id="user-2",
+            username="editor-2",
+            raw_value="🏆",
+        )
+    )
+    repository.upsert_editorial_signal(
+        EditorialSignal(
+            signal_type="shortlist",
+            signal_state="active",
+            source_kind="telegram_reaction",
+            normalized_item_id="item-3",
+            canonical_event_id="event-3",
+            chat_id="chat-1",
+            telegram_message_id="msg-3",
+            user_id="user-3",
+            username="editor-3",
+            raw_value="🏆",
+        )
+    )
+
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("CLAUDE_DIGEST_ENABLED", "false")
+
+    service = DigestService(repo_root=repo_root, repository=repository)
+    result = service.build_vote_preview("2026-W18")
+
+    assert result.shortlisted_count == 3
+    assert result.seats_to_fill == 2
+    assert result.candidate_count >= 3
+    assert {candidate.canonical_event_id for candidate in result.shortlisted_candidates} == {"event-1", "event-2", "event-3"}
+    assert not ({candidate.canonical_event_id for candidate in result.vote_candidates} & {"event-1", "event-2", "event-3"})
+
+    with sqlite3.connect(db_path) as connection:
+        round_row = connection.execute(
+            """
+            SELECT week_key, seats_to_fill, shortlisted_count, candidate_count
+            FROM digest_vote_rounds
+            WHERE id = ?
+            """,
+            (result.vote_round_id,),
+        ).fetchone()
+        candidate_rows = connection.execute(
+            """
+            SELECT canonical_event_id, is_preselected, candidate_rank
+            FROM digest_vote_candidates
+            WHERE vote_round_id = ?
+            ORDER BY candidate_rank
+            """,
+            (result.vote_round_id,),
+        ).fetchall()
+
+    assert round_row == ("2026-W18", 2, 3, result.candidate_count)
+    assert [row[1] for row in candidate_rows[:3]] == [1, 1, 1]
+    assert all(row[1] == 0 for row in candidate_rows[3:])
+
+
+def test_digest_vote_send_records_telegram_message(monkeypatch, tmp_path) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "digest.db"
+    schema_path = repo_root / "src" / "all3_radar" / "storage" / "schema.sql"
+    _seed_digest_db(db_path, schema_path)
+
+    repository = RadarRepository(db_path)
+    repository.upsert_editorial_signal(
+        EditorialSignal(
+            signal_type="shortlist",
+            signal_state="active",
+            source_kind="telegram_reaction",
+            normalized_item_id="item-1",
+            canonical_event_id="event-1",
+            chat_id="chat-1",
+            telegram_message_id="msg-1",
+            user_id="user-1",
+            username="editor-1",
+            raw_value="🏆",
+        )
+    )
+    repository.upsert_editorial_signal(
+        EditorialSignal(
+            signal_type="shortlist",
+            signal_state="active",
+            source_kind="telegram_reaction",
+            normalized_item_id="item-2",
+            canonical_event_id="event-2",
+            chat_id="chat-1",
+            telegram_message_id="msg-2",
+            user_id="user-2",
+            username="editor-2",
+            raw_value="🏆",
+        )
+    )
+    repository.upsert_editorial_signal(
+        EditorialSignal(
+            signal_type="shortlist",
+            signal_state="active",
+            source_kind="telegram_reaction",
+            normalized_item_id="item-3",
+            canonical_event_id="event-3",
+            chat_id="chat-1",
+            telegram_message_id="msg-3",
+            user_id="user-3",
+            username="editor-3",
+            raw_value="🏆",
+        )
+    )
+
+    sent_payloads: list[dict[str, object]] = []
+
+    def _fake_urlopen(request, timeout=30):  # type: ignore[no-untyped-def]
+        sent_payloads.append(json.loads(request.data.decode("utf-8")))
+
+        class _Response:
+            def __enter__(self):  # type: ignore[no-untyped-def]
+                return self
+
+            def __exit__(self, exc_type, exc, tb):  # type: ignore[no-untyped-def]
+                return False
+
+            def read(self):  # type: ignore[no-untyped-def]
+                return b'{"ok": true, "result": {"message_id": 999}}'
+
+        return _Response()
+
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("CLAUDE_DIGEST_ENABLED", "false")
+    monkeypatch.setenv("TELEGRAM_ALERT_BOT_TOKEN", "test-token")
+    monkeypatch.setattr("urllib.request.urlopen", _fake_urlopen)
+
+    service = DigestService(repo_root=repo_root, repository=repository)
+    result = service.send_vote_preview("2026-W18", chat_id="-100555")
+
+    assert result.status == "sent"
+    assert result.telegram_message_id == "999"
+    assert len(sent_payloads) == 1
+    payload = sent_payloads[0]
+    assert payload["chat_id"] == "-100555"
+    assert "Already shortlisted" in str(payload["text"])
+    assert "Please vote from the candidates below." in str(payload["text"])
+    assert "reply_markup" in payload
+
+    with sqlite3.connect(db_path) as connection:
+        stored = connection.execute(
+            """
+            SELECT telegram_chat_id, telegram_message_id
+            FROM digest_vote_rounds
+            WHERE id = ?
+            """,
+            (result.vote_round_id,),
+        ).fetchone()
+
+    assert stored == ("-100555", "999")
+
+
+def test_digest_vote_close_promotes_winners_to_shortlist(monkeypatch, tmp_path) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "digest.db"
+    schema_path = repo_root / "src" / "all3_radar" / "storage" / "schema.sql"
+    _seed_digest_db(db_path, schema_path)
+
+    repository = RadarRepository(db_path)
+    repository.upsert_editorial_signal(
+        EditorialSignal(
+            signal_type="shortlist",
+            signal_state="active",
+            source_kind="telegram_reaction",
+            normalized_item_id="item-1",
+            canonical_event_id="event-1",
+            chat_id="chat-1",
+            telegram_message_id="msg-1",
+            user_id="user-1",
+            username="editor-1",
+            raw_value="🏆",
+        )
+    )
+    repository.upsert_editorial_signal(
+        EditorialSignal(
+            signal_type="shortlist",
+            signal_state="active",
+            source_kind="telegram_reaction",
+            normalized_item_id="item-2",
+            canonical_event_id="event-2",
+            chat_id="chat-1",
+            telegram_message_id="msg-2",
+            user_id="user-2",
+            username="editor-2",
+            raw_value="🏆",
+        )
+    )
+    repository.upsert_editorial_signal(
+        EditorialSignal(
+            signal_type="shortlist",
+            signal_state="active",
+            source_kind="telegram_reaction",
+            normalized_item_id="item-3",
+            canonical_event_id="event-3",
+            chat_id="chat-1",
+            telegram_message_id="msg-3",
+            user_id="user-3",
+            username="editor-3",
+            raw_value="🏆",
+        )
+    )
+
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("CLAUDE_DIGEST_ENABLED", "false")
+    service = DigestService(repo_root=repo_root, repository=repository)
+    preview = service.build_vote_preview("2026-W18")
+    vote_rows = repository.load_digest_vote_candidates_with_totals(preview.vote_round_id)
+    vote_candidate_rows = [row for row in vote_rows if int(row["is_preselected"]) == 0]
+    assert len(vote_candidate_rows) >= 2
+
+    top_row = vote_candidate_rows[0]
+    second_row = vote_candidate_rows[1]
+    repository.upsert_digest_vote(
+        vote_round_id=preview.vote_round_id,
+        canonical_event_id=str(top_row["canonical_event_id"]),
+        voter_user_id="101",
+        actor_chat_id="",
+        is_active=True,
+    )
+    repository.upsert_digest_vote(
+        vote_round_id=preview.vote_round_id,
+        canonical_event_id=str(top_row["canonical_event_id"]),
+        voter_user_id="102",
+        actor_chat_id="",
+        is_active=True,
+    )
+    repository.upsert_digest_vote(
+        vote_round_id=preview.vote_round_id,
+        canonical_event_id=str(second_row["canonical_event_id"]),
+        voter_user_id="103",
+        actor_chat_id="",
+        is_active=True,
+    )
+
+    result = service.close_vote_round(preview.vote_round_id)
+
+    assert result.seats_to_fill == 2
+    assert result.promoted_count == 2
+    assert [candidate.canonical_event_id for candidate in result.winner_candidates] == [
+        str(top_row["canonical_event_id"]),
+        str(second_row["canonical_event_id"]),
+    ]
+
+    with sqlite3.connect(db_path) as connection:
+        round_status = connection.execute(
+            "SELECT status FROM digest_vote_rounds WHERE id = ?",
+            (preview.vote_round_id,),
+        ).fetchone()[0]
+        promoted_rows = connection.execute(
+            """
+            SELECT normalized_item_id, signal_state, source_kind, user_id
+            FROM editorial_signals
+            WHERE source_kind = 'digest_vote_round'
+            ORDER BY normalized_item_id
+            """
+        ).fetchall()
+
+    assert round_status == "closed"
+    assert len(promoted_rows) == 2
+    assert all(row[1] == "active" for row in promoted_rows)
+    assert all(row[2] == "digest_vote_round" for row in promoted_rows)
+    assert all(row[3] == preview.vote_round_id for row in promoted_rows)
 
 
 def test_digest_build_forces_manual_override_candidate_into_final_selection(monkeypatch, tmp_path) -> None:
