@@ -15,13 +15,6 @@ def _seed_db(db_path: Path, schema_path: Path) -> RadarRepository:
     initialize_database(db_path, schema_path)
     now = datetime.now(timezone.utc).isoformat()
     with sqlite3.connect(db_path) as connection:
-        connection.execute(
-            """
-            INSERT INTO pipeline_runs (id, pipeline, started_at, finished_at, status, config_snapshot_json, summary_json)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-            """,
-            ("pipeline-1", "digest", now, now, "completed", "{}", "{}"),
-        )
         for item_id, raw_id, event_id, url, title, score in (
             ("item-1", "raw-1", "event-1", "https://example.com/story", "Test story", 50),
             ("item-2", "raw-2", "event-2", "https://example.com/story-2", "Second story", 49),
@@ -151,84 +144,4 @@ def test_callback_handler_ignores_non_shortlist_callbacks(tmp_path) -> None:
         message="Unsupported callback action.",
     )
     assert api_client.callback_answers == []
-    assert api_client.button_updates == []
-
-
-def test_callback_handler_toggles_digest_vote_and_enforces_limit(tmp_path) -> None:
-    repo_root = Path(__file__).resolve().parents[2]
-    repository = _seed_db(tmp_path / "callbacks.db", repo_root / "src" / "all3_radar" / "storage" / "schema.sql")
-    api_client = _FakeBotApiClient()
-    round_id = repository.create_digest_vote_round(
-        pipeline_run_id="pipeline-1",
-        week_key="2026-W18",
-        seats_to_fill=1,
-        shortlisted_count=4,
-        candidate_count=2,
-        summary_json="{}",
-    )
-    repository.replace_digest_vote_candidates(
-        round_id,
-        shortlisted_candidates=[],
-        vote_candidates=[
-            {
-                "canonical_event_id": "event-1",
-                "normalized_item_id": "item-1",
-                "source_id": "robot_report_rss",
-                "title": "Test story",
-                "canonical_url": "https://example.com/story",
-                "published_ts": "2026-05-01T00:00:00+00:00",
-                "score": 50,
-            },
-            {
-                "canonical_event_id": "event-2",
-                "normalized_item_id": "item-2",
-                "source_id": "robot_report_rss",
-                "title": "Second story",
-                "canonical_url": "https://example.com/story-2",
-                "published_ts": "2026-05-01T00:00:00+00:00",
-                "score": 49,
-            },
-        ],
-    )
-
-    first_update = {
-        "callback_query": {
-            "id": "cb-3",
-            "data": f"digest_vote:toggle:{round_id}:event-1",
-            "from": {"id": 42, "username": "editor"},
-            "message": {"message_id": 100, "chat": {"id": 1001}},
-        }
-    }
-    second_update = {
-        "callback_query": {
-            "id": "cb-4",
-            "data": f"digest_vote:toggle:{round_id}:event-2",
-            "from": {"id": 42, "username": "editor"},
-            "message": {"message_id": 100, "chat": {"id": 1001}},
-        }
-    }
-
-    first = handle_telegram_callback_update(first_update, repository=repository, bot_api_client=api_client)
-    blocked = handle_telegram_callback_update(second_update, repository=repository, bot_api_client=api_client)
-    removed = handle_telegram_callback_update(first_update, repository=repository, bot_api_client=api_client)
-
-    assert first.handled is True
-    assert first.action == "digest_vote_toggle"
-    assert first.is_active is True
-    assert first.message == "Vote saved (1/1)"
-
-    assert blocked.handled is True
-    assert blocked.action == "digest_vote_toggle"
-    assert blocked.is_active is False
-    assert blocked.message == "You can vote for up to 1 story."
-
-    assert removed.handled is True
-    assert removed.is_active is False
-    assert removed.message == "Vote removed (0/1)"
-
-    assert api_client.callback_answers == [
-        ("cb-3", "Vote saved (1/1)"),
-        ("cb-4", "You can vote for up to 1 story."),
-        ("cb-3", "Vote removed (0/1)"),
-    ]
     assert api_client.button_updates == []

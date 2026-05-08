@@ -220,58 +220,6 @@ def build_claude_selection_prompt(
     return "\n".join(lines)
 
 
-def build_claude_vote_selection_prompt(
-    window: DigestWindow,
-    *,
-    shortlisted_candidates: list[DigestCandidate],
-    vote_candidates: list[DigestCandidate],
-    max_items: int,
-    seats_to_fill: int,
-) -> str:
-    selected = vote_candidates[:max_items]
-    payload = [
-        {
-            "canonical_event_id": candidate.canonical_event_id,
-            "normalized_item_id": candidate.normalized_item_id,
-            "source": candidate.source_id,
-            "title": candidate.title,
-            "url": candidate.canonical_url,
-            "published_ts": candidate.published_ts.isoformat() if candidate.published_ts else None,
-            "score": candidate.score,
-            "summary": candidate.summary_text,
-            "signals": candidate.event_flags,
-        }
-        for candidate in selected
-    ]
-    fixed_payload = [
-        {
-            "canonical_event_id": candidate.canonical_event_id,
-            "title": candidate.title,
-            "url": candidate.canonical_url,
-            "score": candidate.score,
-        }
-        for candidate in shortlisted_candidates
-    ]
-    lines = [
-        "You are preparing a Telegram voting slate for the weekly digest.",
-        f"Digest title: {window.title}",
-        f"Already shortlisted count: {len(shortlisted_candidates)}",
-        f"Seats still to fill: {seats_to_fill}",
-        f"Select exactly {min(len(selected), max(3, seats_to_fill + 2))} distinct candidates for the vote slate.",
-        "The vote slate should help the team choose the remaining digest stories.",
-        "Prefer sharp, non-duplicative, high-signal stories with a good topic mix.",
-        "Do not include candidates that are too close to each other or to the already shortlisted stories.",
-        "Avoid generic funding, generic supply-chain, weak commentary, and duplicate event coverage.",
-        "Return only compact JSON with this exact schema:",
-        '{"selected_ids":["canonical_event_id_1","canonical_event_id_2","canonical_event_id_3"]}',
-        "",
-        "Already shortlisted JSON:",
-        json.dumps(fixed_payload, ensure_ascii=False, sort_keys=True),
-        "",
-        "Vote candidates JSON:",
-        json.dumps(payload, ensure_ascii=False, sort_keys=True),
-    ]
-    return "\n".join(lines)
 
 
 def build_claude_writer_prompt(window: DigestWindow, candidates: list[DigestCandidate]) -> str:

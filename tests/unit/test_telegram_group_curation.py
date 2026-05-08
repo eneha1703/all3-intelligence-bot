@@ -410,6 +410,9 @@ class _FakeGroupPollingBotApiClient(TelegramBotApiClient):
         self.get_updates_calls.append((offset, limit, timeout_seconds, allowed_updates))
         return self.updates
 
+    def delete_webhook(self, *, drop_pending_updates: bool = False) -> None:
+        return
+
 
 def test_interaction_polling_handles_group_curation_with_one_shared_cursor(tmp_path) -> None:
     repository = _repository(tmp_path)

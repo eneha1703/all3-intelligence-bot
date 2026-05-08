@@ -25,15 +25,6 @@ def build_parser() -> argparse.ArgumentParser:
     inspect_parser = subparsers.add_parser("inspect", help="Inspect digest candidates and output")
     inspect_parser.add_argument("--week", required=True, help="ISO week key, for example 2026-W17")
 
-    vote_preview_parser = subparsers.add_parser("vote-preview", help="Build a weekly digest vote preview")
-    vote_preview_parser.add_argument("--week", required=True, help="ISO week key, for example 2026-W17")
-
-    vote_send_parser = subparsers.add_parser("vote-send", help="Send a weekly digest vote message to Telegram")
-    vote_send_parser.add_argument("--week", required=True, help="ISO week key, for example 2026-W17")
-    vote_send_parser.add_argument("--chat-id", required=True, help="Telegram chat id to receive the vote message")
-
-    vote_close_parser = subparsers.add_parser("vote-close", help="Close a digest vote round and promote winners")
-    vote_close_parser.add_argument("--round-id", required=True, help="Digest vote round id")
     return parser
 
 
@@ -82,46 +73,6 @@ def main() -> int:
             print(f"   canonical_event_id={candidate.canonical_event_id}")
             print(f"   normalized_item_id={candidate.normalized_item_id}")
             print(f"   url={candidate.canonical_url}")
-        return 0
-
-    if args.command == "vote-preview":
-        repo_root = Path(__file__).resolve().parents[3]
-        service = DigestService(repo_root=repo_root)
-        result = service.build_vote_preview(args.week)
-        print(
-            f"Digest vote preview: week={result.week_key} shortlisted={result.shortlisted_count} "
-            f"seats_to_fill={result.seats_to_fill} candidates={result.candidate_count}"
-        )
-        print("Already shortlisted:")
-        for index, candidate in enumerate(result.shortlisted_candidates, start=1):
-            print(f"{index}. {candidate.title} | score={candidate.score} | url={candidate.canonical_url}")
-        print("Vote candidates:")
-        for index, candidate in enumerate(result.vote_candidates, start=1):
-            print(f"{index}. {candidate.title} | score={candidate.score} | url={candidate.canonical_url}")
-        return 0
-
-    if args.command == "vote-send":
-        repo_root = Path(__file__).resolve().parents[3]
-        service = DigestService(repo_root=repo_root)
-        result = service.send_vote_preview(args.week, chat_id=args.chat_id)
-        print(
-            f"Digest vote send: week={result.week_key} chat_id={result.chat_id} status={result.status} "
-            f"shortlisted={result.shortlisted_count} seats_to_fill={result.seats_to_fill} "
-            f"candidates={result.candidate_count} message_id={result.telegram_message_id or 'none'}"
-        )
-        return 0
-
-    if args.command == "vote-close":
-        repo_root = Path(__file__).resolve().parents[3]
-        service = DigestService(repo_root=repo_root)
-        result = service.close_vote_round(args.round_id)
-        print(
-            f"Digest vote close: round_id={result.vote_round_id} week={result.week_key} "
-            f"shortlisted={result.shortlisted_count} seats_to_fill={result.seats_to_fill} "
-            f"promoted={result.promoted_count}"
-        )
-        for index, candidate in enumerate(result.winner_candidates, start=1):
-            print(f"{index}. {candidate.title} | score={candidate.score} | url={candidate.canonical_url}")
         return 0
 
     parser.error("Unknown command")
