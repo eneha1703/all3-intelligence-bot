@@ -7,9 +7,11 @@ import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from all3_radar.domain.models import ClaudeFinalCardResult
+from all3_radar.editorial_memory.prompt_context import build_radar_summary_memory_context
 
 VALID_RISK_LEVELS = {"low", "medium", "high"}
 VALID_CONFIDENCE_LEVELS = {"low", "medium", "high"}
@@ -75,6 +77,7 @@ HYPE_TERMS = (
     "poised to disrupt",
     "significant milestone",
 )
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 
 class ClaudeFinalCardUnavailableError(RuntimeError):
@@ -302,6 +305,7 @@ def build_claude_final_card_prompt(
         "signals": signals,
         "existing_summary": existing_summary,
     }
+    memory_context = build_radar_summary_memory_context(REPO_ROOT)
     return (
         "You are reviewing one already-selected Bot 1 News Radar candidate. "
         "Do not select news from scratch. Do not broaden scope. Do not invent facts. "
@@ -323,6 +327,8 @@ def build_claude_final_card_prompt(
         "If the article has a funding round plus a product launch, include both. If the title already states the main event, the body should add concrete details rather than repeat the title. "
         "Do not mostly repeat the headline. Do not reduce a rich article to a funding blurb when product, launch, customer, deployment, technical, location, timeline, or business details are present. "
         "Do not add broad industry analysis. Do not mention this article. Do not use hype language such as revolutionary, game-changing, transformative, pivotal, cutting-edge, or poised to disrupt. "
+        "Avoid synthetic editorial phrasing, padded strategic commentary, and weekly-digest style essay writing. "
+        "Stay close to the observed facts and write like a sharp daily news editor. "
         "Return only a single JSON object. Do not use markdown. Do not wrap the response in code fences. "
         "Do not include explanation outside JSON. "
         "Return JSON only with this exact schema: "
@@ -330,6 +336,7 @@ def build_claude_final_card_prompt(
         '"why_it_matters": string|null, "duplicate_risk": "low|medium|high"|null, "confidence": "low|medium|high"|null}. '
         "Keep title concrete and news-like, usually about 8 to 16 words. Keep summary factual, compact, and detail-rich. "
         "Set why_it_matters to null unless a brief factual note is truly necessary, and never use it for broad analysis.\n\n"
+        f"{memory_context}\n\n"
         f"Candidate JSON:\n{json.dumps(payload, ensure_ascii=True, sort_keys=True)}"
     )
 

@@ -111,6 +111,10 @@ def test_prompt_includes_explicit_scope_and_rejection_instructions() -> None:
     assert "Target about 45 to 90 words for the summary body" in prompt
     assert "Do not mostly repeat the headline." in prompt
     assert "Do not reduce a rich article to a funding blurb" in prompt
+    assert "Editorial memory rules:" in prompt
+    assert "summary_no_broken_tails" in prompt
+    assert "Editorial memory good writing examples:" in prompt
+    assert "Editorial memory bad writing examples:" in prompt
 
 
 def test_client_parses_valid_send_ok_json(monkeypatch: pytest.MonkeyPatch) -> None:
