@@ -26,7 +26,7 @@ jobs:
       CLAUDE_DIGEST_ENABLED: ${{ github.event.inputs.claude_digest_enabled == 'true' && 'true' || 'false' }}
       CLAUDE_DIGEST_MODEL: "claude-sonnet-4-6"
       CLAUDE_DIGEST_TIMEOUT_SECONDS: "30"
-      CLAUDE_DIGEST_MAX_INPUT_ITEMS: "12"
+      CLAUDE_DIGEST_MAX_INPUT_ITEMS: "16"
       CLAUDE_DIGEST_MAX_TOKENS: "1400"
       TELEGRAM_DIGEST_BOT_TOKEN: ${{ secrets.TELEGRAM_DIGEST_BOT_TOKEN }}
       TELEGRAM_DIGEST_CHAT_IDS: ${{ vars.TELEGRAM_DIGEST_CHAT_IDS }}
