@@ -1,6 +1,6 @@
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from all3_radar.domain.enums import SourceKind, SourceLayer
@@ -12,6 +12,10 @@ from all3_radar.sources.registry import SourceRegistry
 def test_construction_news_listing_collects_into_normal_pipeline(monkeypatch, tmp_path, caplog) -> None:
     repo_root = Path(__file__).resolve().parents[2]
     db_path = tmp_path / "radar_construction_news.db"
+    now = datetime.now(timezone.utc)
+    article_one_published = (now - timedelta(hours=3)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    article_two_published = (now - timedelta(hours=2)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    article_three_published = (now - timedelta(hours=1)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
     monkeypatch.setenv("DATABASE_PATH", str(db_path))
 
@@ -35,34 +39,34 @@ def test_construction_news_listing_collects_into_normal_pipeline(monkeypatch, tm
       <head>
         <meta property="og:title" content="UK construction activity falls as infrastructure starts weaken" />
         <meta name="description" content="A new report says construction activity, project starts and main contract awards fell across infrastructure and commercial work." />
-        <meta property="article:published_time" content="2026-05-05T08:30:00Z" />
+        <meta property="article:published_time" content="{article_one_published}" />
       </head>
       <body></body>
     </html>
-    """
+    """.format(article_one_published=article_one_published)
     article_two = """
     <html>
       <head>
         <meta property="og:title" content="Materials prices rise as labour costs bite across UK construction" />
         <script type="application/ld+json">
-          {"@type":"NewsArticle","datePublished":"2026-05-06T07:00:00Z"}
+          {{"@type":"NewsArticle","datePublished":"{article_two_published}"}}
         </script>
       </head>
       <body>
         <p>Materials prices and labour costs rose across regional construction markets in the latest report.</p>
       </body>
     </html>
-    """
+    """.format(article_two_published=article_two_published)
     article_three = """
     <html>
       <head>
         <meta property="og:title" content="Double whammy hits April construction output" />
         <meta name="description" content="April construction output fell as project starts dropped and main contract awards weakened across UK housing and infrastructure." />
-        <meta property="article:published_time" content="2026-05-07T07:45:00Z" />
+        <meta property="article:published_time" content="{article_three_published}" />
       </head>
       <body></body>
     </html>
-    """
+    """.format(article_three_published=article_three_published)
     page_map = {
         "https://www.constructionnews.co.uk/cn-intelligence/": listing_html,
         "https://www.constructionnews.co.uk/cn-intelligence/sector/": sector_html,
