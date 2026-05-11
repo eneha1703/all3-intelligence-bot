@@ -206,4 +206,4 @@ jobs:
           name: weekly-digest-${{ github.event.inputs.week_key || 'latest' }}
           path: data/weekly_digest_*.md
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 2

@@ -136,4 +136,4 @@ jobs:
           name: claude-final-card-preview-${{ github.run_id }}
           path: tmp_claude_final_card_preview.md
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 1

@@ -111,4 +111,4 @@ jobs:
           name: radar-replay-db-${{ github.run_id }}
           path: data/radar_replay.db
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 1

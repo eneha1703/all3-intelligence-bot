@@ -45,6 +45,16 @@ jobs:
             echo "Bot 1 DB file is not present before Telegram polling."
           fi
 
+      - name: Capture DB fingerprint before polling
+        id: db-before
+        shell: bash
+        run: |
+          if [ -f data/all3_radar.db ]; then
+            echo "hash=$(sha256sum data/all3_radar.db | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          else
+            echo "hash=missing" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -70,18 +80,24 @@ jobs:
             echo "Bot 1 DB snapshot missing after Telegram polling."
           fi
 
+      - name: Capture DB fingerprint after polling
+        if: always() && steps.db-file.outputs.exists == 'true'
+        id: db-after
+        shell: bash
+        run: echo "hash=$(sha256sum data/all3_radar.db | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
       - name: Save Bot 1 state
-        if: success() && steps.db-file.outputs.exists == 'true'
+        if: success() && steps.db-file.outputs.exists == 'true' && steps.db-before.outputs.hash != steps.db-after.outputs.hash
         uses: actions/cache/save@v4
         with:
           path: data/all3_radar.db
           key: radar-db-${{ github.ref_name }}-${{ github.run_id }}
 
       - name: Upload DB snapshot
-        if: always()
+        if: failure() || github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: telegram-shortlist-poll-${{ github.run_id }}
           path: data/all3_radar.db
           if-no-files-found: ignore
-          retention-days: 3
+          retention-days: 1
