@@ -175,7 +175,10 @@ def parse_construction_news_listing(
     listing_urls = [source.url, *tuple(str(url) for url in source.extra_config.get("listing_urls", ()))]
     listing_article_groups: list[list[str]] = []
     for listing_url in listing_urls:
-        current_html = listing_html if listing_url == source.url else fetch_text_fn(listing_url)
+        try:
+            current_html = listing_html if listing_url == source.url else fetch_text_fn(listing_url)
+        except Exception:
+            continue
         listing_article_groups.append(_extract_article_urls_from_listing_html(current_html, listing_url))
 
     article_limit = int(source.extra_config.get("article_limit", 20))
@@ -201,7 +204,10 @@ def parse_construction_news_listing(
     skipped_missing_dates = 0
 
     for article_url in article_urls[:article_limit]:
-        article_html = fetch_text_fn(article_url)
+        try:
+            article_html = fetch_text_fn(article_url)
+        except Exception:
+            continue
         parsed = parse_construction_news_article(article_html)
         if parsed.published_ts is None:
             skipped_missing_dates += 1

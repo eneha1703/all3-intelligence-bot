@@ -180,6 +180,43 @@ def test_parse_construction_news_listing_collects_contracts_pages() -> None:
     assert items[0].url == "https://www.constructionnews.co.uk/contracts/1-25bn-housing-and-demolition-framework-launched-11-05-2026/"
 
 
+def test_parse_construction_news_listing_tolerates_failed_primary_listing_fetch() -> None:
+    contracts_html = """
+    <html><body>
+      <a href="/contracts/1-25bn-housing-and-demolition-framework-launched-11-05-2026/">Story one</a>
+    </body></html>
+    """
+    article_html = """
+    <html>
+      <head>
+        <meta property="og:title" content="£1.25bn housing and demolition framework launched" />
+        <meta name="description" content="A new UK framework covers housing, demolition and public-sector procurement." />
+        <meta property="article:published_time" content="2026-05-11T08:00:00Z" />
+      </head>
+      <body></body>
+    </html>
+    """
+
+    def fake_fetch(url: str) -> str:
+        if url == "https://www.constructionnews.co.uk/cn-intelligence/sector/":
+            raise RuntimeError("403")
+        if url == "https://www.constructionnews.co.uk/sections/data/":
+            raise RuntimeError("403")
+        if url == "https://www.constructionnews.co.uk/contracts/":
+            return contracts_html
+        return article_html
+
+    items = parse_construction_news_listing(
+        listing_html="<html><body></body></html>",
+        source=_construction_news_source(),
+        collected_at=datetime(2026, 5, 11, tzinfo=timezone.utc),
+        fetch_text_fn=fake_fetch,
+    )
+
+    assert len(items) == 1
+    assert items[0].title == "£1.25bn housing and demolition framework launched"
+
+
 def test_parse_construction_news_listing_fails_without_trustworthy_dates() -> None:
     listing_html = """
     <html><body>

@@ -98,6 +98,9 @@ def test_build_claude_editorial_review_prompt_includes_scope_rules() -> None:
     assert "Do not reject strategic capability acquisitions" in prompt
     assert "buying robotics, humanoid, industrial automation, construction automation, prefab, modular, contech, or physical-AI capability" in prompt
     assert "Do not reject quantified timber building-performance evidence as mere thought leadership" in prompt
+    assert "Do not append source attribution like 'Destatis reports' to the headline" in prompt
+    assert "Put source attribution in the first sentence of the summary instead" in prompt
+    assert "Avoid repeating the same lead number in both the headline and the first sentence" in prompt
     assert "prefer low or medium confidence over a high-confidence rejection" in prompt
     assert "Return only a single JSON object" in prompt
     assert "Do not use markdown" in prompt
