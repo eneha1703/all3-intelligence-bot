@@ -79,6 +79,7 @@ def test_build_claude_editorial_review_prompt_includes_scope_rules() -> None:
     assert "factory automation tied to robotics, AI, or autonomous systems" in prompt
     assert "construction automation" in prompt
     assert "housing industrialization or productivity" in prompt
+    assert "large quantified UK public-sector housing or regeneration frameworks" in prompt
     assert "timber adoption, scaling, economics, or policy" in prompt
     assert "timber building-performance evidence" in prompt
     assert "quantified heat-loss" in prompt
@@ -93,6 +94,7 @@ def test_build_claude_editorial_review_prompt_includes_scope_rules() -> None:
     assert "generic enterprise AI, ERP, workflow, procurement, or back-office automation" in prompt
     assert "access-control, security, or generic Industrial IoT security automation" in prompt
     assert "generic manufacturing without robotics, AI, or automation" in prompt
+    assert "Do not dismiss large UK housing, regeneration, or demolition frameworks as generic contracting vehicle stories" in prompt
     assert "Do not reject strategic capability acquisitions" in prompt
     assert "buying robotics, humanoid, industrial automation, construction automation, prefab, modular, contech, or physical-AI capability" in prompt
     assert "Do not reject quantified timber building-performance evidence as mere thought leadership" in prompt

@@ -64,6 +64,7 @@ KNOWN_CLAUDE_EDITORIAL_FALLBACK_REASONS = {
     "response_invalid_rejection",
     "response_invalid_promotion",
     "low_or_medium_confidence",
+    "protected_market_signal",
     "unknown",
 }
 
@@ -488,12 +489,55 @@ def _is_allowed_medium_claude_editorial_promotion(
     if claude_result.edited_title is None or claude_result.edited_summary is None:
         return False
 
-    return _claude_editorial_taxonomy_bucket(context) in {
-        "robotics_led_infrastructure",
-        "robotics_business_performance",
-        "industrial_automation_engineering_enablement",
-        "humanoid_robotics_component_funding",
-    }
+    editorial_flags = evaluate_send_stage_editorial(context.item, context.decision).flags
+
+    return (
+        _claude_editorial_taxonomy_bucket(context) in {
+            "robotics_led_infrastructure",
+            "robotics_business_performance",
+            "industrial_automation_engineering_enablement",
+            "humanoid_robotics_component_funding",
+        }
+        or editorial_flags.get("official_construction_market_signal", False)
+        or editorial_flags.get("housing_market_alert_signal", False)
+        or _is_protected_uk_housing_framework_story(context)
+    )
+
+
+def _is_protected_uk_housing_framework_story(context: CurrentRunContext) -> bool:
+    if context.decision is None:
+        return False
+
+    editorial_flags = evaluate_send_stage_editorial(context.item, context.decision).flags
+    if not editorial_flags.get("uk_construction_market_alert_signal", False):
+        return False
+
+    haystack = f"{context.item.title} {context.item.text_preview or ''}".lower()
+    return any(
+        term in haystack
+        for term in (
+            "framework",
+            "housing framework",
+            "demolition framework",
+            "public sector",
+            "procurement",
+            "housing upgrade programme",
+            "regeneration",
+            "council",
+        )
+    )
+
+
+def _should_protect_from_high_confidence_claude_editorial_rejection(context: CurrentRunContext) -> bool:
+    if context.decision is None:
+        return False
+
+    editorial_flags = evaluate_send_stage_editorial(context.item, context.decision).flags
+    return bool(
+        editorial_flags.get("official_construction_market_signal", False)
+        or editorial_flags.get("housing_market_alert_signal", False)
+        or _is_protected_uk_housing_framework_story(context)
+    )
 
 
 def _settings_snapshot(settings: object) -> dict:
@@ -1045,6 +1089,25 @@ class RadarService:
                     )
 
                     if claude_result.is_high_confidence_rejection:
+                        if _should_protect_from_high_confidence_claude_editorial_rejection(context):
+                            fallback_reason = record_claude_editorial_fallback("protected_market_signal")
+                            _set_claude_editorial_diagnostics(
+                                context,
+                                reviewed=True,
+                                outcome="fallback_protected_market_signal",
+                                review_rank=context.decision.signals.get("claude_editorial_review_rank"),
+                                confidence=claude_result.confidence,
+                                reason=fallback_reason,
+                                not_reviewed_reason=None,
+                            )
+                            LOGGER.warning(
+                                'Claude editorial protected fallback: reason=%s confidence=%s title="%s" source="%s"',
+                                fallback_reason,
+                                claude_result.confidence,
+                                context.item.title,
+                                context.source.name,
+                            )
+                            continue
                         increment_stage_counter("claude_editorial_rejected")
                         _set_claude_editorial_diagnostics(
                             context,
