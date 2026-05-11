@@ -1,0 +1,81 @@
+version: 1
+rules:
+  - id: digest_human_editor_voice
+    scope:
+      - digest_writing
+    status: active
+    summary: Write like a smart human editor, not like an AI assistant or a press release.
+
+  - id: digest_compact_single_paragraph
+    scope:
+      - digest_writing
+    status: active
+    summary: Each digest item should be one compact paragraph, usually around 55 to 90 words.
+
+  - id: digest_fact_first
+    scope:
+      - digest_writing
+    status: active
+    summary: Start with the strongest concrete fact, then add one concise implication.
+
+  - id: digest_interpretive_headline
+    scope:
+      - digest_writing
+    status: active
+    summary: Headlines should be interpretive and useful, not lightly rewritten source titles.
+
+  - id: digest_avoid_redundant_headline_body
+    scope:
+      - digest_writing
+    status: active
+    summary: Do not repeat the same core fact or thought in the headline and the first sentence with only light rewording.
+
+  - id: digest_vary_editorial_phrasing
+    scope:
+      - digest_writing
+    status: active
+    summary: Vary the editorial phrasing and sentence openings; avoid template-like repeated transitions.
+
+  - id: digest_no_first_person_company_voice
+    scope:
+      - digest_writing
+    status: active
+    summary: Avoid writing from a first-person company perspective such as we, our, or our goals.
+
+  - id: digest_currency_format
+    scope:
+      - digest_writing
+      - radar_summary_writing
+    status: active
+    summary: Format currencies as USD 25M, USD 120B, EUR 100M, GBP 105M, and never as $25M or EUR100M.
+
+  - id: digest_avoid_generic_recap
+    scope:
+      - digest_writing
+    status: active
+    summary: Avoid bland company recaps and consultant-style language with no real editorial angle.
+
+  - id: digest_avoid_ai_justification
+    scope:
+      - digest_writing
+      - radar_summary_writing
+    status: active
+    summary: Do not write like you are justifying relevance to the team; prefer observed implications grounded in facts.
+
+  - id: selection_prefer_high_signal_sector_relevance
+    scope:
+      - story_selection
+    status: active
+    summary: Prefer stories with clear relevance to construction, physical AI, robotics, timber, housing delivery, or market structure.
+
+  - id: selection_deprioritize_weak_logistics_story
+    scope:
+      - story_selection
+    status: active
+    summary: Deprioritize timber logistics or supply-chain stories unless the source clearly proves strategic relevance beyond transport or distribution.
+
+  - id: summary_no_broken_tails
+    scope:
+      - radar_summary_writing
+    status: active
+    summary: Reject broken or dangling sentence tails; summaries must read like complete natural English.
