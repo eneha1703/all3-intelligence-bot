@@ -44,6 +44,8 @@ jobs:
         run: |
           python -m all3_radar.app.admin_cli db init
           python -m all3_radar.app.editorial_memory_cli db init
+          python -m all3_radar.app.editorial_memory_cli evidence seed-digest-examples
+          python -m all3_radar.app.editorial_memory_cli evidence seed-manual-examples
       - name: Build weekly Claude review
         run: python -m all3_radar.app.editorial_memory_cli review build --week "${{ github.event.inputs.week_key || 'latest' }}"
       - name: Upload weekly review artifact

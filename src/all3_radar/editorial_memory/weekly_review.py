@@ -14,6 +14,7 @@ from all3_radar.editorial_memory.paths import (
     resolve_editorial_memory_schema_path,
 )
 from all3_radar.editorial_memory.repository import EditorialMemoryRepository
+from all3_radar.editorial_memory.service import load_digest_example_seed, load_manual_seed_examples
 from all3_radar.storage.db import initialize_database
 from all3_radar.storage.repositories import RadarRepository
 
@@ -112,10 +113,12 @@ class WeeklyClaudeReviewService:
         output_path = output_path or self.repo_root / "data" / f"weekly_claude_review_{window.week_key}.md"
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        story_rows = self.repository.load_weekly_review_story_rows(
+        story_rows = _dedupe_story_rows(
+            self.repository.load_weekly_review_story_rows(
             start_date=window.previous_thursday.isoformat(),
             end_date=window.current_thursday.isoformat(),
             limit=30,
+            )
         )
         shortlist_rows = self.repository.load_active_shortlist_candidates_for_week(
             start_date=window.previous_thursday.isoformat(),
@@ -133,7 +136,7 @@ class WeeklyClaudeReviewService:
                 limit=10,
                 require_canonical_events=self.settings.digest.require_canonical_events,
             )
-        memory_examples = self.editorial_memory_repository.list_examples(limit=12)
+        memory_examples = _load_review_memory_examples(self.editorial_memory_repository, self.repo_root)
 
         prompt = build_weekly_review_prompt(
             week_key=window.week_key,
@@ -196,3 +199,29 @@ def _deterministic_fallback_review(week_key: str, story_rows: list[dict], memory
         ]
     )
     return "\n".join(lines).strip() + "\n"
+
+
+def _dedupe_story_rows(story_rows: list[dict]) -> list[dict]:
+    deduped: list[dict] = []
+    seen: set[str] = set()
+    for row in story_rows:
+        canonical_event_id = str(row.get("canonical_event_id") or "").strip()
+        canonical_url = str(row.get("canonical_url") or "").strip()
+        title = str(row.get("title") or "").strip()
+        fingerprint = canonical_event_id or canonical_url or title
+        if not fingerprint or fingerprint in seen:
+            continue
+        seen.add(fingerprint)
+        deduped.append(row)
+    return deduped
+
+
+def _load_review_memory_examples(
+    repository: EditorialMemoryRepository,
+    repo_root: Path,
+) -> list[object]:
+    stored_examples = repository.list_examples(limit=12)
+    if stored_examples:
+        return stored_examples
+    fallback_examples = load_manual_seed_examples(repo_root) + load_digest_example_seed(repo_root)
+    return fallback_examples[:12]
