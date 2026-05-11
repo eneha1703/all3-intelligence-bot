@@ -10,7 +10,7 @@ on:
       claude_digest_enabled:
         description: Enable optional Claude synthesis for this build
         required: false
-        default: false
+        default: true
         type: boolean
       manual_curated_week18:
         description: Send curated Week 18 digest instead of generated digest

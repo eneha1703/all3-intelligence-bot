@@ -56,3 +56,45 @@ def test_build_digest_html_embeds_link_without_visible_raw_url() -> None:
     assert digest_html.startswith("Top 5 News Highlights | 23-30 April 2026 | Week 18")
     assert '<a href="https://example.com/destatis">Link</a>' in digest_html
     assert "https://example.com/destatis" not in digest_html.replace('<a href="https://example.com/destatis">Link</a>', "")
+
+
+def test_build_digest_html_trims_broken_summary_fragments() -> None:
+    candidate = DigestCandidate(
+        canonical_event_id="event-2",
+        normalized_item_id="item-2",
+        source_id="ai_insider_rss",
+        title="Indian Construction Robotics Startup Flo Mobility Raises $2.5M in Funding",
+        canonical_url="https://example.com/flo",
+        published_ts=datetime(2026, 5, 11, 9, 0, tzinfo=timezone.utc),
+        score=86,
+        summary_text=(
+            "Indian construction robotics startup Flo Mobility announced raising $2.5M in new funding "
+            "as the company expands deployment of autonomous material-handling systems across construction "
+            "sites in India and international."
+        ),
+        event_flags={"funding_event": True, "construction_innovation_signal": True},
+    )
+
+    digest_html = build_digest_html("Top 5 News Highlights | 7-14 May 2026 | Week 20", [candidate])
+
+    assert "and international." not in digest_html
+    assert "construction sites in India." in digest_html
+
+
+def test_build_digest_html_uses_class_fallback_for_missing_summary() -> None:
+    candidate = DigestCandidate(
+        canonical_event_id="event-3",
+        normalized_item_id="item-3",
+        source_id="destatis_press_listing",
+        title="11,7 % der Bevölkerung in Deutschland lebten 2025 in überbelegten Wohnungen",
+        canonical_url="https://example.com/destatis-overcrowding",
+        published_ts=datetime(2026, 5, 11, 9, 0, tzinfo=timezone.utc),
+        score=51,
+        summary_text=None,
+        event_flags={"construction_statistics_signal": True},
+    )
+
+    digest_html = build_digest_html("Top 5 News Highlights | 7-14 May 2026 | Week 20", [candidate])
+
+    assert "This story remained one of the week's strongest operational signals across the All3 scope." not in digest_html
+    assert "Official housing and construction data added another hard market-pressure signal this week." in digest_html

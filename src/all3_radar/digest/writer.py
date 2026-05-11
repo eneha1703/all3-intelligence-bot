@@ -8,17 +8,47 @@ from collections import Counter
 from datetime import datetime, timezone
 
 from all3_radar.digest.corpus import DigestCandidate
+from all3_radar.summarization.fallback_summary import generate_fallback_summary
 
 URL_RE = re.compile(r"https?://\S+")
 
 
-def _sanitize_summary_text(summary_text: str | None) -> str:
-    if not summary_text:
-        return "This story remained one of the week's strongest operational signals across the All3 scope."
-    normalized = URL_RE.sub("", summary_text).strip()
+def _default_candidate_paragraph(candidate: DigestCandidate) -> str:
+    flags = candidate.event_flags
+    if flags.get("construction_statistics_signal"):
+        return (
+            "Official housing and construction data added another hard market-pressure signal this week. "
+            "Even without a company angle, the figures matter because they show where delivery strain remains visible."
+        )
+    if flags.get("timber_strategic_signal"):
+        return (
+            "The stronger angle here is not a single showcase asset but where timber is finding a practical route "
+            "into real standards, assets, or delivery models."
+        )
+    if flags.get("industrial_robotics_signal") or flags.get("construction_innovation_signal"):
+        return (
+            "The more useful angle here is operational: it shows where robotics is moving from concept into a more "
+            "concrete deployment or commercial path."
+        )
+    if flags.get("funding_event"):
+        return (
+            "The funding matters only if it supports a real operating wedge, and this story suggests investors still "
+            "see one in the category."
+        )
+    return "This story remained one of the week's stronger operating signals across the All3 scope."
+
+
+def _sanitize_summary_text(candidate: DigestCandidate) -> str:
+    generated = generate_fallback_summary(candidate.title, candidate.summary_text)
+    if generated:
+        normalized = URL_RE.sub("", generated).strip()
+    elif candidate.summary_text:
+        normalized = URL_RE.sub("", candidate.summary_text).strip()
+    else:
+        normalized = _default_candidate_paragraph(candidate)
     normalized = re.sub(r"\s+", " ", normalized).strip(" .")
     if not normalized:
-        return "This story remained one of the week's strongest operational signals across the All3 scope."
+        return _default_candidate_paragraph(candidate)
     if normalized[-1] not in ".!?":
         normalized = f"{normalized}."
     return normalized
@@ -42,7 +72,7 @@ def build_digest_html(title: str, candidates: list[DigestCandidate]) -> str:
         return "\n".join(lines)
 
     for index, candidate in enumerate(candidates, start=1):
-        paragraph = _sanitize_summary_text(candidate.summary_text)
+        paragraph = _sanitize_summary_text(candidate)
         lines.extend(
             [
                 "",

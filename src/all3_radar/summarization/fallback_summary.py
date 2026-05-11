@@ -130,6 +130,9 @@ TRAILING_FRAGMENT_PATTERNS = [
     re.compile(r",?\s*after\.?$", re.IGNORECASE),
     re.compile(r",?\s*at\s+(?:a|an|the)\.?\s*$", re.IGNORECASE),
     re.compile(r",?\s*and\s+automated\.?$", re.IGNORECASE),
+    re.compile(r",?\s*and\s+international\.?$", re.IGNORECASE),
+    re.compile(r",?\s*as\s+(?:a|an)\s+[$€£]\d[\d,]*(?:\.\d+)?\s*(?:million|billion|m|bn)\.?$", re.IGNORECASE),
+    re.compile(r",?\s*\d+\s*hours\s+a\s+day,\s*(?:one|two|three|four|five|six|seven|eight|nine|ten)\.?$", re.IGNORECASE),
 ]
 CAPTION_MARKERS = (
     "getty images",
@@ -366,6 +369,7 @@ def _has_dangling_tail(sentence: str) -> bool:
             " at an.",
             " at the.",
             " and automated.",
+            " and international.",
         )
     )
 
