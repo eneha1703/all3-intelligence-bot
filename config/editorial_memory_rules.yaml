@@ -55,6 +55,18 @@ rules:
     status: active
     summary: Avoid bland company recaps and consultant-style language with no real editorial angle.
 
+  - id: digest_avoid_speculative_thesis_voice
+    scope:
+      - digest_writing
+    status: active
+    summary: Avoid thesis-y, synthetic framing like worth noting, what stands out is, may make them, or whether this reflects a pivot unless the source directly supports it.
+
+  - id: digest_stay_close_to_observed_fact
+    scope:
+      - digest_writing
+    status: active
+    summary: Prefer one sharp observed takeaway tied closely to the facts over layered interpretation, soft speculation, or essay-like commentary.
+
   - id: digest_avoid_ai_justification
     scope:
       - digest_writing

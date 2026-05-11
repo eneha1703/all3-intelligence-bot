@@ -60,3 +60,5 @@ def test_build_claude_writer_prompt_includes_house_style_and_examples() -> None:
     assert "Data centers may become the next robotics construction site" in prompt
     assert "Germany's housing delivery is slowing as the system loses speed" in prompt
     assert "Mercer Mass Timber Offers Free CLT Design Tool" in prompt
+    assert "Figure's humanoids are now making beds, not building cars" in prompt
+    assert "worth noting" in prompt

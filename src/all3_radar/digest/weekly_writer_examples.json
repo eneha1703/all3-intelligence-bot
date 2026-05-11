@@ -139,5 +139,35 @@
     ],
     "headline": "UK infrastructure project starts collapsed 73% in March even as contract awards rose",
     "body_html": "UK infrastructure recorded a 73% year-on-year drop in project starts in March 2026, while main contract awards rose 11% over the same period. The divergence between awards and starts points to a pipeline that is contracting at the front end while still processing earlier commitments downstream. If the starts figure does not recover, the award growth will not translate into sustained activity, and the sector's output gap will widen through the second half of the year. <a href=\"SOURCE_URL\">Link</a>"
+  },
+  {
+    "label": "bad",
+    "notes": [
+      "Too essay-like",
+      "Speculative pivot language",
+      "More rhetorical than observed"
+    ],
+    "headline": "Figure's humanoids are now making beds, not building cars",
+    "body_html": "After its BMW factory pilot ended, Figure has released footage of its humanoids performing domestic tasks — organising a room, hanging clothes, making a bed — without human assistance. The shift from industrial to household settings is worth noting: it suggests the company is broadening its deployment narrative rather than doubling down on the factory floor. Whether that reflects a strategic pivot or simply a parallel track is not yet clear from the available facts. <a href=\"SOURCE_URL\">Link</a>"
+  },
+  {
+    "label": "bad",
+    "notes": [
+      "Sounds like a polished memo",
+      "Speculates beyond evidence",
+      "Too theoretical for digest rhythm"
+    ],
+    "headline": "A new artificial muscle could change how robots handle physical feedback",
+    "body_html": "Researchers have developed a smart artificial muscle designed to give humanoid robots human-like tactile feedback during movement and manipulation. Most current humanoid hardware relies on rigid actuators with limited sensory return, which constrains fine motor tasks. If this kind of soft actuation can be made reliable at scale, it removes one of the more persistent hardware constraints separating general-purpose robots from tasks that require genuine physical sensitivity. <a href=\"SOURCE_URL\">Link</a>"
+  },
+  {
+    "label": "bad",
+    "notes": [
+      "Artificial contrast device",
+      "Overwritten closing sentence",
+      "Feels composed rather than naturally written"
+    ],
+    "headline": "Sydney's Cutaway finally opens — a decade late and built around 13 timber columns",
+    "body_html": "The Cutaway at Barangaroo Reserve opened last week after sitting as an unfinished concrete shell for roughly ten years, completing a AUD 100M venue that centres structurally and visually on 13 large timber tree forms. NSW Premier Chris Minns confirmed it will operate around the clock. What stands out is less the delay and more the design choice: in a high-profile public infrastructure project, exposed timber became the architectural centrepiece rather than a secondary finish, which is a different kind of endorsement than a sustainability certification. <a href=\"SOURCE_URL\">Link</a>"
   }
 ]

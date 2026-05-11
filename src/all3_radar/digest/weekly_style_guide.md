@@ -13,22 +13,28 @@ Weekly Digest House Style
 - The takeaway does not always need to be framed around All3 specifically; it can be about the sector or market structure more broadly.
 - Do not force every item into the same conclusion formula.
 - Vary the editorial phrasing across items.
-- Good phrases can include:
-  "This suggests..."
-  "That matters because..."
-  "What stands out is..."
-  "The bigger point is..."
-  "This starts to look less like ... and more like ..."
+- Use linking phrases sparingly.
+- Prefer plain factual transitions over rhetorical framing.
 - Do not overuse phrases like:
   "the signal is"
   "the bottleneck is"
   "this highlights"
   "this underscores"
+- Avoid synthetic thesis phrases like:
+  "worth noting"
+  "what stands out is"
+  "the bigger point is"
+  "the direction is notable"
+  "whether this reflects"
+  "if this can be made reliable at scale"
+  unless the source gives unusually strong support for that leap.
 - The headline should be interpretive, not a lightly rewritten source title.
 - Do not restate the source headline in the first sentence.
 - Do not repeat the same core fact or thought in the headline and the first sentence with only light rewording.
 - If the headline already carries the funding or deployment fact, the first sentence should add useful detail or change the angle.
 - Prefer calm, clear, readable language over jargon or hype.
+- Prefer short observed implications over clever framing.
+- If the implication starts sounding like an essay, cut it back to the one thing the facts clearly support.
 - Do not write from a first-person company perspective:
   avoid "we", "our", "our need", "our goals", or "our strategy".
 - Do not sound like you are justifying relevance to the team.
