@@ -1,0 +1,29 @@
+[
+  {
+    "kind": "summary_bad",
+    "title": "Double whammy hits April construction output",
+    "feedback_text": "The summary simply repeated the source preview and ended in a broken tail: 'according'. It read like a half-trimmed snippet rather than a finished Telegram card.",
+    "source": "manual_review",
+    "url": "https://www.constructionnews.co.uk/sections/data/double-whammy-hits-april-construction-output-07-05-2026/",
+    "week_key": "2026-W19",
+    "pipeline_stage": "bot1_card_writing",
+    "decision_tags": [
+      "summary_quality",
+      "broken_tail",
+      "headline_body_repetition"
+    ],
+    "linked_rule_ids": [
+      "summary_no_broken_tails",
+      "digest_avoid_redundant_headline_body"
+    ],
+    "resolution_status": "accepted",
+    "source_fingerprint": "manual_seed:summary_bad:double_whammy_april_construction_output",
+    "metadata": {
+      "notes": [
+        "broken tail",
+        "preview repetition",
+        "telegram card quality"
+      ]
+    }
+  }
+]

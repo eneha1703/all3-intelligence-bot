@@ -13,7 +13,7 @@ from all3_radar.editorial_memory.paths import (
     resolve_editorial_memory_schema_path,
 )
 from all3_radar.editorial_memory.repository import EditorialMemoryRepository
-from all3_radar.editorial_memory.service import load_digest_example_seed, load_rules
+from all3_radar.editorial_memory.service import load_digest_example_seed, load_manual_seed_examples, load_presets, load_rules
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -43,6 +43,20 @@ def build_parser() -> argparse.ArgumentParser:
     add_parser.add_argument("--linked-rule-id", action="append", default=[], help="Repeatable linked rule id")
     add_parser.add_argument("--resolution-status", default="accepted", help="Resolution status")
 
+    quick_add_parser = evidence_subparsers.add_parser(
+        "quick-add",
+        help="Add one curated example using a preset such as summary_bad or summary_good",
+    )
+    quick_add_parser.add_argument("--preset", required=True, help="Preset key from editorial_memory_presets.yaml")
+    quick_add_parser.add_argument("--title", required=True, help="Short label/title for the example")
+    quick_add_parser.add_argument("--feedback-text", required=True, help="Why the example matters")
+    quick_add_parser.add_argument("--source", default=None, help="Optional source label override")
+    quick_add_parser.add_argument("--url", default=None, help="Optional canonical URL")
+    quick_add_parser.add_argument("--week-key", default=None, help="Optional ISO week key")
+    quick_add_parser.add_argument("--decision-tag", action="append", default=[], help="Repeatable extra decision tag")
+    quick_add_parser.add_argument("--linked-rule-id", action="append", default=[], help="Repeatable extra linked rule id")
+    quick_add_parser.add_argument("--resolution-status", default=None, help="Optional resolution status override")
+
     list_parser = evidence_subparsers.add_parser("list", help="List stored editorial memory examples")
     list_parser.add_argument("--kind", default=None, help="Filter by kind")
     list_parser.add_argument("--resolution-status", default=None, help="Filter by resolution status")
@@ -50,6 +64,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     evidence_subparsers.add_parser("summarize", help="Print aggregate counts for stored examples")
     evidence_subparsers.add_parser("seed-digest-examples", help="Import existing digest good/bad examples")
+    evidence_subparsers.add_parser("seed-manual-examples", help="Import curated manual seed examples from config")
     return parser
 
 
@@ -91,6 +106,36 @@ def main() -> int:
         print(f"Stored editorial memory example {example_id}.")
         return 0
 
+    if args.group == "evidence" and args.command == "quick-add":
+        repository.initialize()
+        presets = load_presets(repo_root / "config" / "editorial_memory_presets.yaml")
+        preset = presets["presets"].get(args.preset)
+        if not isinstance(preset, dict):
+            parser.error(f"Unknown editorial memory preset: {args.preset}")
+        example = EditorialMemoryExample(
+            kind=str(preset["kind"]).strip(),
+            title=args.title.strip(),
+            feedback_text=args.feedback_text.strip(),
+            source=_strip_or_none(args.source) or _strip_or_none(preset.get("source")),
+            url=_strip_or_none(args.url),
+            week_key=_strip_or_none(args.week_key),
+            pipeline_stage=_strip_or_none(preset.get("pipeline_stage")),
+            decision_tags=tuple(
+                [tag.strip() for tag in preset.get("decision_tags", []) if str(tag).strip()]
+                + [tag.strip() for tag in args.decision_tag if tag.strip()]
+            ),
+            linked_rule_ids=tuple(
+                [rule_id.strip() for rule_id in preset.get("linked_rule_ids", []) if str(rule_id).strip()]
+                + [rule_id.strip() for rule_id in args.linked_rule_id if rule_id.strip()]
+            ),
+            resolution_status=_strip_or_none(args.resolution_status)
+            or _strip_or_none(preset.get("resolution_status"))
+            or "accepted",
+        )
+        example_id = repository.add_example(example)
+        print(f"Stored editorial memory example {example_id} with preset {args.preset}.")
+        return 0
+
     if args.group == "evidence" and args.command == "list":
         repository.initialize()
         rows = repository.list_examples(
@@ -129,6 +174,15 @@ def main() -> int:
             repository.add_example(example)
             imported += 1
         print(f"Seeded {imported} digest examples into editorial memory.")
+        return 0
+
+    if args.group == "evidence" and args.command == "seed-manual-examples":
+        repository.initialize()
+        imported = 0
+        for example in load_manual_seed_examples(repo_root):
+            repository.add_example(example)
+            imported += 1
+        print(f"Seeded {imported} manual examples into editorial memory.")
         return 0
 
     parser.error("Unknown command")

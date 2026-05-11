@@ -1,0 +1,45 @@
+version: 1
+presets:
+  summary_bad:
+    kind: summary_bad
+    pipeline_stage: bot1_card_writing
+    source: manual_review
+    resolution_status: accepted
+    decision_tags:
+      - summary_quality
+    linked_rule_ids:
+      - summary_no_broken_tails
+      - digest_avoid_ai_justification
+
+  summary_good:
+    kind: summary_good
+    pipeline_stage: bot1_card_writing
+    source: manual_review
+    resolution_status: accepted
+    decision_tags:
+      - summary_quality
+    linked_rule_ids:
+      - digest_fact_first
+      - digest_human_editor_voice
+
+  digest_bad:
+    kind: digest_bad
+    pipeline_stage: digest_writer
+    source: manual_review
+    resolution_status: accepted
+    decision_tags:
+      - digest_quality
+    linked_rule_ids:
+      - digest_avoid_generic_recap
+      - digest_avoid_ai_justification
+
+  digest_good:
+    kind: digest_good
+    pipeline_stage: digest_writer
+    source: manual_review
+    resolution_status: accepted
+    decision_tags:
+      - digest_quality
+    linked_rule_ids:
+      - digest_fact_first
+      - digest_human_editor_voice

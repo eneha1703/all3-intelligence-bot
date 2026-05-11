@@ -10,7 +10,7 @@ from all3_radar.editorial_memory.paths import (
     resolve_editorial_memory_schema_path,
 )
 from all3_radar.editorial_memory.repository import EditorialMemoryRepository
-from all3_radar.editorial_memory.service import load_digest_example_seed, load_rules
+from all3_radar.editorial_memory.service import load_digest_example_seed, load_manual_seed_examples, load_presets, load_rules
 
 
 def test_editorial_memory_repository_stores_and_lists_examples(tmp_path: Path) -> None:
@@ -76,3 +76,18 @@ def test_editorial_memory_paths_default_to_repo_data(tmp_path: Path, monkeypatch
     monkeypatch.delenv("EDITORIAL_MEMORY_DATABASE_PATH", raising=False)
     resolved = resolve_editorial_memory_database_path(tmp_path)
     assert resolved == tmp_path / "data" / "editorial_memory.db"
+
+
+def test_editorial_memory_presets_file_loads() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    payload = load_presets(repo_root / "config" / "editorial_memory_presets.yaml")
+    preset_keys = set(payload["presets"].keys())
+    assert "summary_bad" in preset_keys
+    assert "summary_good" in preset_keys
+
+
+def test_editorial_memory_manual_seed_examples_load() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    examples = load_manual_seed_examples(repo_root)
+    assert any(example.title == "Double whammy hits April construction output" for example in examples)
+    assert any(example.kind == "summary_bad" for example in examples)
