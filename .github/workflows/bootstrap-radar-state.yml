@@ -3,14 +3,32 @@ name: Bootstrap Radar State
 on:
   workflow_dispatch:
     inputs:
+      bootstrap_mode:
+        description: "Where to load the seed DB from"
+        required: true
+        default: "repository_zip"
+        type: choice
+        options:
+          - repository_zip
+          - source_artifact
+      repository_zip_path:
+        description: "Path to a committed zip file in the selected branch when bootstrap_mode=repository_zip"
+        required: false
+        default: ".github/bootstrap/radar-db-seed.zip"
+        type: string
+      target_ref_name:
+        description: "Branch name whose radar cache should be seeded"
+        required: true
+        default: "main"
+        type: string
       source_repository:
         description: "Source repository in owner/name format"
-        required: true
+        required: false
         default: "togetherwithyouapi-commits/new_all3_radar_bot"
         type: string
       source_run_id:
         description: "GitHub Actions run id whose radar-db artifact should seed the new repo"
-        required: true
+        required: false
         type: string
       artifact_name:
         description: "Optional artifact name; defaults to radar-db-${source_run_id}"
@@ -27,6 +45,9 @@ jobs:
     runs-on: ubuntu-latest
     env:
       DATABASE_PATH: data/all3_radar.db
+      BOOTSTRAP_MODE: ${{ github.event.inputs.bootstrap_mode }}
+      REPOSITORY_ZIP_PATH: ${{ github.event.inputs.repository_zip_path }}
+      TARGET_REF_NAME: ${{ github.event.inputs.target_ref_name }}
       SOURCE_REPOSITORY: ${{ github.event.inputs.source_repository }}
       SOURCE_RUN_ID: ${{ github.event.inputs.source_run_id }}
       ARTIFACT_NAME_INPUT: ${{ github.event.inputs.artifact_name }}
@@ -37,6 +58,7 @@ jobs:
         run: mkdir -p data source-artifact
 
       - name: Resolve artifact name
+        if: env.BOOTSTRAP_MODE == 'source_artifact'
         id: artifact-name
         shell: bash
         run: |
@@ -47,6 +69,7 @@ jobs:
           fi
 
       - name: Download source DB artifact
+        if: env.BOOTSTRAP_MODE == 'source_artifact'
         uses: actions/download-artifact@v4
         with:
           github-token: ${{ secrets.SOURCE_REPO_ACTIONS_READ_TOKEN }}
@@ -55,7 +78,21 @@ jobs:
           name: ${{ steps.artifact-name.outputs.name }}
           path: source-artifact
 
-      - name: Prepare seeded DB
+      - name: Prepare seeded DB from repository zip
+        if: env.BOOTSTRAP_MODE == 'repository_zip'
+        shell: bash
+        run: |
+          if [ ! -f "${REPOSITORY_ZIP_PATH}" ]; then
+            echo "Expected committed zip file at ${REPOSITORY_ZIP_PATH}"
+            find . -maxdepth 4 -type f | sort
+            exit 1
+          fi
+
+          unzip -j "${REPOSITORY_ZIP_PATH}" "all3_radar.db" -d data
+          ls -lh data/all3_radar.db
+
+      - name: Prepare seeded DB from source artifact
+        if: env.BOOTSTRAP_MODE == 'source_artifact'
         shell: bash
         run: |
           DB_PATH="$(find source-artifact -type f -name 'all3_radar.db' | head -n 1 || true)"
@@ -82,7 +119,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: data/all3_radar.db
-          key: radar-db-${{ github.ref_name }}-${{ github.run_id }}
+          key: radar-db-${{ env.TARGET_REF_NAME }}-${{ github.run_id }}
 
       - name: Upload seeded DB snapshot
         uses: actions/upload-artifact@v4
