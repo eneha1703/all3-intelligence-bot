@@ -173,14 +173,30 @@ def parse_construction_news_listing(
     fetch_text_fn: FetchText,
 ) -> list[CollectedRawItem]:
     listing_urls = [source.url, *tuple(str(url) for url in source.extra_config.get("listing_urls", ()))]
-    article_urls: list[str] = []
+    listing_article_groups: list[list[str]] = []
     for listing_url in listing_urls:
         current_html = listing_html if listing_url == source.url else fetch_text_fn(listing_url)
-        for article_url in _extract_article_urls_from_listing_html(current_html, listing_url):
-            if article_url not in article_urls:
-                article_urls.append(article_url)
+        listing_article_groups.append(_extract_article_urls_from_listing_html(current_html, listing_url))
 
     article_limit = int(source.extra_config.get("article_limit", 20))
+    article_urls: list[str] = []
+    seen_urls: set[str] = set()
+    while len(article_urls) < article_limit:
+        added_in_round = False
+        for group in listing_article_groups:
+            if not group:
+                continue
+            article_url = group.pop(0)
+            if article_url in seen_urls:
+                continue
+            seen_urls.add(article_url)
+            article_urls.append(article_url)
+            added_in_round = True
+            if len(article_urls) >= article_limit:
+                break
+        if not added_in_round:
+            break
+
     items: list[CollectedRawItem] = []
     skipped_missing_dates = 0
 

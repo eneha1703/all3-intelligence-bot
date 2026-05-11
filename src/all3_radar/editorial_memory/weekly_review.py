@@ -156,6 +156,9 @@ class WeeklyClaudeReviewService:
             except ClaudeDigestUnavailableError as exc:
                 fallback_reason = str(exc)
 
+        if not claude_used and fallback_reason:
+            review_markdown = _inject_fallback_reason(review_markdown, fallback_reason)
+
         output_path.write_text(review_markdown, encoding="utf-8")
         return WeeklyClaudeReviewResult(
             week_key=window.week_key,
@@ -225,3 +228,11 @@ def _load_review_memory_examples(
         return stored_examples
     fallback_examples = load_manual_seed_examples(repo_root) + load_digest_example_seed(repo_root)
     return fallback_examples[:12]
+
+
+def _inject_fallback_reason(review_markdown: str, fallback_reason: str) -> str:
+    note = f"_Fallback reason: {fallback_reason}_"
+    lines = review_markdown.splitlines()
+    if len(lines) >= 2 and lines[0].startswith("# Weekly Claude Radar Review |"):
+        return "\n".join([lines[0], "", note, *lines[1:]]).strip() + "\n"
+    return f"{review_markdown.rstrip()}\n\n{note}\n"

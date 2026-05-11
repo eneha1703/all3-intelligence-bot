@@ -5,6 +5,7 @@ from all3_radar.digest.claude_client import ClaudeDigestClient, ClaudeDigestUnav
 from all3_radar.editorial_memory.models import EditorialMemoryExample
 from all3_radar.editorial_memory.weekly_review import (
     _dedupe_story_rows,
+    _inject_fallback_reason,
     _load_review_memory_examples,
     build_weekly_review_prompt,
 )
@@ -124,3 +125,12 @@ def test_load_review_memory_examples_falls_back_to_seed_examples(tmp_path: Path)
 
     assert examples
     assert any(example.kind == "summary_bad" for example in examples)
+
+
+def test_inject_fallback_reason_adds_note_under_title() -> None:
+    markdown = "# Weekly Claude Radar Review | 2026-W20\n\n## Top Misses\n- Example\n"
+
+    result = _inject_fallback_reason(markdown, "Claude request failed: timeout")
+
+    assert "_Fallback reason: Claude request failed: timeout_" in result
+    assert result.startswith("# Weekly Claude Radar Review | 2026-W20")

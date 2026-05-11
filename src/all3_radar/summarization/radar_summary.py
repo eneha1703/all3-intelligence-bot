@@ -91,15 +91,18 @@ def maybe_translate_delivery_card(
     summary_text: str | None,
     gemini_client: GeminiClient,
 ) -> tuple[str, str | None, bool, str | None]:
-    if not should_translate_delivery(item) or not summary_text:
+    if not should_translate_delivery(item):
         return headline, summary_text, False, None
+    source_summary = summary_text or sanitize_summary_text(headline, item.text_preview) or item.text_preview or item.title
+    if not source_summary:
+        return headline, summary_text, False, "translation_source_missing"
     rewrite_fn = getattr(gemini_client, "rewrite_delivery_card", None)
     if not callable(rewrite_fn) or not getattr(gemini_client, "is_available", False):
         return headline, summary_text, False, "translation_unavailable"
     try:
         translated_headline, translated_summary = rewrite_fn(
             title=headline,
-            summary=summary_text,
+            summary=source_summary,
             source_language=str(item.metadata.get("origin_language") or "de"),
             target_language="English",
         )

@@ -98,3 +98,29 @@ def test_maybe_translate_delivery_card_rewrites_german_sendable_story_to_english
     assert reason is None
     assert headline == "German building permits fall again as housing supply slows"
     assert "Official statistics show building permits declined again" in summary
+
+
+def test_maybe_translate_delivery_card_uses_preview_when_summary_missing() -> None:
+    item = _make_item(
+        "11,7 % der Bevölkerung in Deutschland lebten 2025 in überbelegten Wohnungen",
+        "Neue Destatis-Zahlen zeigen, dass 11,7 % der Bevölkerung in Deutschland in überbelegten Wohnungen lebten.",
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "source_id": "destatis_press_listing",
+            "metadata": {"origin_language": "de", "delivery_language": "en"},
+        }
+    )
+
+    headline, summary, translated, reason = maybe_translate_delivery_card(
+        item=item,
+        headline=item.title,
+        summary_text=None,
+        gemini_client=_TranslatingGemini(),
+    )
+
+    assert translated is True
+    assert reason is None
+    assert headline == "German building permits fall again as housing supply slows"
+    assert summary is not None
