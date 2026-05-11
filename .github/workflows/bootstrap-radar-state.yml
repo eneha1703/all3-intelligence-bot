@@ -1,0 +1,93 @@
+name: Bootstrap Radar State
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_repository:
+        description: "Source repository in owner/name format"
+        required: true
+        default: "togetherwithyouapi-commits/new_all3_radar_bot"
+        type: string
+      source_run_id:
+        description: "GitHub Actions run id whose radar-db artifact should seed the new repo"
+        required: true
+        type: string
+      artifact_name:
+        description: "Optional artifact name; defaults to radar-db-${source_run_id}"
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  bootstrap-state:
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_PATH: data/all3_radar.db
+      SOURCE_REPOSITORY: ${{ github.event.inputs.source_repository }}
+      SOURCE_RUN_ID: ${{ github.event.inputs.source_run_id }}
+      ARTIFACT_NAME_INPUT: ${{ github.event.inputs.artifact_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Ensure data directory exists
+        run: mkdir -p data source-artifact
+
+      - name: Resolve artifact name
+        id: artifact-name
+        shell: bash
+        run: |
+          if [ -n "${ARTIFACT_NAME_INPUT}" ]; then
+            echo "name=${ARTIFACT_NAME_INPUT}" >> "$GITHUB_OUTPUT"
+          else
+            echo "name=radar-db-${SOURCE_RUN_ID}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download source DB artifact
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ secrets.SOURCE_REPO_ACTIONS_READ_TOKEN }}
+          repository: ${{ env.SOURCE_REPOSITORY }}
+          run-id: ${{ env.SOURCE_RUN_ID }}
+          name: ${{ steps.artifact-name.outputs.name }}
+          path: source-artifact
+
+      - name: Prepare seeded DB
+        shell: bash
+        run: |
+          DB_PATH="$(find source-artifact -type f -name 'all3_radar.db' | head -n 1 || true)"
+          if [ -z "${DB_PATH}" ]; then
+            echo "Expected all3_radar.db inside artifact ${ARTIFACT_NAME_INPUT:-radar-db-${SOURCE_RUN_ID}}"
+            find source-artifact -maxdepth 3 -type f | sort || true
+            exit 1
+          fi
+
+          cp "${DB_PATH}" data/all3_radar.db
+          ls -lh data/all3_radar.db
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -e .[dev]
+
+      - name: Initialize database schema safely
+        run: python -m all3_radar.app.admin_cli db init
+
+      - name: Save seeded Bot 1 state
+        uses: actions/cache/save@v4
+        with:
+          path: data/all3_radar.db
+          key: radar-db-${{ github.ref_name }}-${{ github.run_id }}
+
+      - name: Upload seeded DB snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: bootstrapped-radar-db-${{ github.run_id }}
+          path: data/all3_radar.db
+          if-no-files-found: error
+          retention-days: 1
