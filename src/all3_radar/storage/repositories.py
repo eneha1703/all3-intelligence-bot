@@ -1340,3 +1340,46 @@ class RadarRepository:
                 (run_id,),
             ).fetchall()
         return [dict(row) for row in rows]
+
+    def load_weekly_review_story_rows(
+        self,
+        *,
+        start_date: str,
+        end_date: str,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        with connect(self.database_path) as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                  COALESCE(rd.canonical_event_id, ni.id) AS canonical_event_id,
+                  ni.id AS normalized_item_id,
+                  ni.source_id,
+                  ni.title,
+                  ni.canonical_url,
+                  ni.published_ts,
+                  rd.score,
+                  rd.send_status,
+                  rd.skip_reason,
+                  rd.summary_text,
+                  rd.signals_json
+                FROM normalized_items ni
+                JOIN radar_decisions rd ON rd.normalized_item_id = ni.id
+                WHERE rd.relevance_status = 'keep'
+                  AND ni.published_ts IS NOT NULL
+                  AND date(ni.published_ts) >= date(?)
+                  AND date(ni.published_ts) <= date(?)
+                ORDER BY
+                  CASE
+                    WHEN rd.send_status = 'sent' THEN 0
+                    WHEN rd.send_status = 'stored_only' THEN 1
+                    ELSE 2
+                  END,
+                  rd.score DESC,
+                  ni.published_ts DESC,
+                  ni.id ASC
+                LIMIT ?
+                """,
+                (start_date, end_date, limit),
+            ).fetchall()
+        return [dict(row) for row in rows]

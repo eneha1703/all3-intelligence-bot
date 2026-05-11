@@ -125,3 +125,9 @@ class ClaudeDigestClient:
         if RAW_URL_RE.search(text):
             raise ClaudeDigestUnavailableError("Claude digest response exposed raw URLs in visible text.")
         return text
+
+    def generate_weekly_review(self, prompt: str, *, expected_title: str) -> str:
+        text = self._request_text(prompt).strip()
+        if not text.startswith(expected_title):
+            raise ClaudeDigestUnavailableError("Claude weekly review response was missing the required title line.")
+        return text

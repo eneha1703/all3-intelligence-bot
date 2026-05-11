@@ -14,6 +14,7 @@ from all3_radar.editorial_memory.paths import (
 )
 from all3_radar.editorial_memory.repository import EditorialMemoryRepository
 from all3_radar.editorial_memory.service import load_digest_example_seed, load_manual_seed_examples, load_presets, load_rules
+from all3_radar.editorial_memory.weekly_review import WeeklyClaudeReviewService
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -65,6 +66,12 @@ def build_parser() -> argparse.ArgumentParser:
     evidence_subparsers.add_parser("summarize", help="Print aggregate counts for stored examples")
     evidence_subparsers.add_parser("seed-digest-examples", help="Import existing digest good/bad examples")
     evidence_subparsers.add_parser("seed-manual-examples", help="Import curated manual seed examples from config")
+
+    review_parser = subparsers.add_parser("review", help="Weekly Claude review utilities")
+    review_subparsers = review_parser.add_subparsers(dest="command", required=True)
+    review_build_parser = review_subparsers.add_parser("build", help="Build a weekly Claude radar review markdown report")
+    review_build_parser.add_argument("--week", default="latest", help="ISO week key such as 2026-W20 or latest")
+    review_build_parser.add_argument("--output", default=None, help="Optional markdown output path")
     return parser
 
 
@@ -183,6 +190,19 @@ def main() -> int:
             repository.add_example(example)
             imported += 1
         print(f"Seeded {imported} manual examples into editorial memory.")
+        return 0
+
+    if args.group == "review" and args.command == "build":
+        service = WeeklyClaudeReviewService(repo_root)
+        result = service.build(
+            week_key=args.week,
+            output_path=Path(args.output) if args.output else None,
+        )
+        print(
+            "Weekly Claude review: "
+            f"week={result.week_key} claude_used={result.claude_used} "
+            f"fallback_reason={result.fallback_reason or 'none'} output={result.output_path}"
+        )
         return 0
 
     parser.error("Unknown command")
