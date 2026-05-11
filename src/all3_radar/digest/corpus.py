@@ -10,8 +10,11 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+from all3_radar.editorial_memory.prompt_context import build_digest_memory_context
+
 WEEK_KEY_RE = re.compile(r"^(?P<year>\d{4})-W(?P<week>\d{2})$")
 MODULE_DIR = Path(__file__).resolve().parent
+REPO_ROOT = MODULE_DIR.parents[2]
 WEEKLY_STYLE_GUIDE_PATH = MODULE_DIR / "weekly_style_guide.md"
 WEEKLY_WRITER_EXAMPLES_PATH = MODULE_DIR / "weekly_writer_examples.json"
 
@@ -238,6 +241,7 @@ def build_claude_writer_prompt(window: DigestWindow, candidates: list[DigestCand
     ]
     style_guide = _load_weekly_style_guide()
     examples = _load_weekly_writer_examples()
+    memory_context = build_digest_memory_context(REPO_ROOT)
     return "\n".join(
         [
             "Write the final Weekly Digest Bot 2 message in Telegram HTML.",
@@ -279,6 +283,8 @@ def build_claude_writer_prompt(window: DigestWindow, candidates: list[DigestCand
             "",
             "House style guide:",
             style_guide,
+            "",
+            memory_context,
             "",
             "Reference examples:",
             json.dumps(examples, ensure_ascii=False, sort_keys=True),
