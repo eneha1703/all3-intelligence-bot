@@ -539,6 +539,11 @@ GERMANY_HOUSING_MARKET_TERMS = {
     "wohnungsbau",
     "wohnungsmangel",
     "wohnungsnot",
+    "wohnungen",
+    "überbelegten wohnungen",
+    "uberbelegten wohnungen",
+    "overcrowded dwellings",
+    "overcrowded housing",
     "mieten",
     "mietpreis",
     "mietpreise",
@@ -628,6 +633,18 @@ UK_CONSTRUCTION_PRIORITY_TERMS = {
     "modular",
     "prefab",
     "prefabrication",
+    "framework",
+    "procurement",
+    "demolition",
+}
+UK_CONSTRUCTION_PROGRAMME_TERMS = {
+    "framework",
+    "framework launched",
+    "housing framework",
+    "public-sector procurement",
+    "public sector procurement",
+    "procurement",
+    "demolition",
 }
 UK_CONSTRUCTION_OFF_SCOPE_SECTOR_TERMS = {
     "hotel",
@@ -831,8 +848,10 @@ def is_construction_news_intelligence_signal(item: StoredNormalizedItem) -> bool
     haystack = _normalize_text(f"{item.title} {item.text_preview or ''}")
     return (
         has_any_term(haystack, UK_CONSTRUCTION_MARKET_TERMS)
-        and has_any_term(haystack, MARKET_SIGNAL_TERMS)
-        and has_any_term(haystack, UK_CONSTRUCTION_PRIORITY_TERMS)
+        and (
+            (has_any_term(haystack, MARKET_SIGNAL_TERMS) and has_any_term(haystack, UK_CONSTRUCTION_PRIORITY_TERMS))
+            or has_any_term(haystack, UK_CONSTRUCTION_PROGRAMME_TERMS)
+        )
         and not has_any_term(haystack, UK_CONSTRUCTION_OFF_SCOPE_SECTOR_TERMS)
     )
 

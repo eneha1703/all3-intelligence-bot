@@ -68,6 +68,26 @@ def test_claude_digest_client_requires_review_title(monkeypatch) -> None:
         raise AssertionError("Expected ClaudeDigestUnavailableError for missing weekly review title")
 
 
+def test_claude_digest_client_accepts_wrapped_review_title(monkeypatch) -> None:
+    client = ClaudeDigestClient(
+        enabled=True,
+        api_key="secret",
+        model="claude-test",
+        timeout_seconds=10,
+        max_tokens=500,
+    )
+
+    monkeypatch.setattr(
+        ClaudeDigestClient,
+        "_request_text",
+        lambda self, prompt: "Here is the review you asked for.\n\n# Weekly Claude Radar Review | 2026-W20\n\n## Top Misses\n- Example",
+    )
+
+    result = client.generate_weekly_review("prompt", expected_title="# Weekly Claude Radar Review | 2026-W20")
+
+    assert result.startswith("# Weekly Claude Radar Review | 2026-W20")
+
+
 def test_editorial_memory_cli_accepts_review_build_arguments() -> None:
     parser = build_parser()
     args = parser.parse_args(["review", "build", "--week", "2026-W20", "--output", "data/review.md"])

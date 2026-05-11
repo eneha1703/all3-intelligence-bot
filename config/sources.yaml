@@ -175,6 +175,7 @@ sources:
     listing_urls:
       - https://www.constructionnews.co.uk/cn-intelligence/sector/
       - https://www.constructionnews.co.uk/sections/data/
+      - https://www.constructionnews.co.uk/contracts/
     article_limit: 10
     market_scope: uk_construction_market
     tags: [construction, uk, market]

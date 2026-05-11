@@ -14,9 +14,9 @@ from all3_radar.domain.models import CollectedRawItem, SourceDefinition
 from all3_radar.sources.base import FetchText
 from all3_radar.sources.rss import _clean_text, parse_published_timestamp
 
-ARTICLE_PATH_RE = re.compile(r"^/(?:cn-intelligence|sections/data)/[^?#]+/?$")
+ARTICLE_PATH_RE = re.compile(r"^/(?:cn-intelligence|sections/data|contracts)/[^?#]+/?$")
 EXCLUDED_PATH_RE = re.compile(
-    r"^/(?:cn-intelligence/?|cn-intelligence/sector/?|sections/?|sections/data/?|subscribe/?|about-us/?|ai-search/?)$"
+    r"^/(?:cn-intelligence/?|cn-intelligence/sector/?|sections/?|sections/data/?|contracts/?|subscribe/?|about-us/?|ai-search/?)$"
 )
 META_TAG_RE = re.compile(
     r'<meta\s+[^>]*(?:property|name)=["\']([^"\']+)["\'][^>]*content=["\']([^"\']+)["\']',

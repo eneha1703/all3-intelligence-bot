@@ -129,5 +129,9 @@ class ClaudeDigestClient:
     def generate_weekly_review(self, prompt: str, *, expected_title: str) -> str:
         text = self._request_text(prompt).strip()
         if not text.startswith(expected_title):
+            index = text.find(expected_title)
+            if index >= 0:
+                text = text[index:].strip()
+        if not text.startswith(expected_title):
             raise ClaudeDigestUnavailableError("Claude weekly review response was missing the required title line.")
         return text

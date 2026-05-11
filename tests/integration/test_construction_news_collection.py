@@ -34,6 +34,11 @@ def test_construction_news_listing_collects_into_normal_pipeline(monkeypatch, tm
       <a href="/sections/data/double-whammy-hits-april-construction-output-07-05-2026/">Story three</a>
     </body></html>
     """
+    contracts_html = """
+    <html><body>
+      <a href="/contracts/1-25bn-housing-and-demolition-framework-launched-11-05-2026/">Story four</a>
+    </body></html>
+    """
     article_one = """
     <html>
       <head>
@@ -67,13 +72,26 @@ def test_construction_news_listing_collects_into_normal_pipeline(monkeypatch, tm
       <body></body>
     </html>
     """.format(article_three_published=article_three_published)
+    article_four_published = now.replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    article_four = """
+    <html>
+      <head>
+        <meta property="og:title" content="£1.25bn housing and demolition framework launched" />
+        <meta name="description" content="A new UK framework covers housing, demolition and public-sector procurement." />
+        <meta property="article:published_time" content="{article_four_published}" />
+      </head>
+      <body></body>
+    </html>
+    """.format(article_four_published=article_four_published)
     page_map = {
         "https://www.constructionnews.co.uk/cn-intelligence/": listing_html,
         "https://www.constructionnews.co.uk/cn-intelligence/sector/": sector_html,
         "https://www.constructionnews.co.uk/sections/data/": data_html,
+        "https://www.constructionnews.co.uk/contracts/": contracts_html,
         "https://www.constructionnews.co.uk/cn-intelligence/uk-construction-activity-march-2026-infrastructure-05-05-2026/": article_one,
         "https://www.constructionnews.co.uk/cn-intelligence/materials-prices-rise-as-labour-costs-bite-06-05-2026/": article_two,
         "https://www.constructionnews.co.uk/sections/data/double-whammy-hits-april-construction-output-07-05-2026/": article_three,
+        "https://www.constructionnews.co.uk/contracts/1-25bn-housing-and-demolition-framework-launched-11-05-2026/": article_four,
     }
 
     registry = SourceRegistry(
@@ -95,6 +113,7 @@ def test_construction_news_listing_collects_into_normal_pipeline(monkeypatch, tm
                     "listing_urls": (
                         "https://www.constructionnews.co.uk/cn-intelligence/sector/",
                         "https://www.constructionnews.co.uk/sections/data/",
+                        "https://www.constructionnews.co.uk/contracts/",
                     ),
                     "market_scope": "uk_construction_market",
                 },
@@ -110,8 +129,8 @@ def test_construction_news_listing_collects_into_normal_pipeline(monkeypatch, tm
     result = service.run(dry_run=True)
 
     assert result.selected_sources == 1
-    assert result.collected_items == 3
-    assert result.normalized_items == 3
+    assert result.collected_items == 4
+    assert result.normalized_items == 4
     assert result.missing_published_ts == 0
     assert result.failed_sources == 0
 
@@ -127,10 +146,11 @@ def test_construction_news_listing_collects_into_normal_pipeline(monkeypatch, tm
 
     assert all(row[0] == "construction_news_intelligence_listing" for row in rows)
     assert any("Double whammy hits April construction output" in row[1] for row in rows)
+    assert any("£1.25bn housing and demolition framework launched" in row[1] for row in rows)
     assert any("UK construction activity falls" in row[1] for row in rows)
     fresh_row = next(row for row in rows if row[2] == "keep")
     editorial_flags = json.loads(fresh_row[5])["editorial_flags"]
     assert editorial_flags["uk_construction_market_alert_signal"] is True
     assert editorial_flags["telegram_worthy"] is True
-    assert "Collected items from source: id=construction_news_intelligence_listing count=3" in caplog.text
-    assert "Source processing summary: id=construction_news_intelligence_listing collected=3 normalized=3" in caplog.text
+    assert "Collected items from source: id=construction_news_intelligence_listing count=4" in caplog.text
+    assert "Source processing summary: id=construction_news_intelligence_listing collected=4 normalized=4" in caplog.text
