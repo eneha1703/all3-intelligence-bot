@@ -7,7 +7,7 @@
       "Strong fact first",
       "Natural industry implication"
     ],
-    "headline": "Germany’s housing delivery is slowing as the system loses speed",
+    "headline": "Germany's housing delivery is slowing as the system loses speed",
     "body_html": "Colliers residential market report shows completions fell to the lowest level in nine years, reaching 251,900 units in 2024 (-14% y-o-y), while the time from permit to completion has stretched to 26 months. Colliers also expects completions to decline by up to 35% by 2027, against a backdrop of an estimated 955,000-unit social housing shortfall by 2030. Germany is not running out of projects. It is running into a delivery system that is taking longer and producing less. <a href=\"SOURCE_URL\">Link</a>"
   },
   {
@@ -38,7 +38,37 @@
       "No hype"
     ],
     "headline": "Low-carbon timber is still invisible where decisions are made",
-    "body_html": "Early-stage design tools and LCA databases still do not fully capture newer low-carbon materials. A new Imperial College London study shows engineered wood products such as glulam and CLT can reach just 3-5% of steel’s embodied carbon, while timber’s low density makes structural sections 60-95% lighter than comparable concrete and steel by mass. However, if a material is missing from the tools used at the start of design, it can lose before the real decision is made. <a href=\"SOURCE_URL\">Link</a>"
+    "body_html": "Early-stage design tools and LCA databases still do not fully capture newer low-carbon materials. A new Imperial College London study shows engineered wood products such as glulam and CLT can reach just 3-5% of steel's embodied carbon, while timber's low density makes structural sections 60-95% lighter than comparable concrete and steel by mass. However, if a material is missing from the tools used at the start of design, it can lose before the real decision is made. <a href=\"SOURCE_URL\">Link</a>"
+  },
+  {
+    "label": "good",
+    "notes": [
+      "Strong market signal",
+      "Fact-first",
+      "Clear sector implication without hype"
+    ],
+    "headline": "The UK is building less and approving even less",
+    "body_html": "UK construction data for Q1 2026 shows weakness on both sides of the pipeline: project starts fell 20% y-o-y, while detailed planning approvals dropped 51% y-o-y. Housing is moving in the same direction, with residential units approved in Q3 2025 down 34% y-o-y to the lowest quarterly level since 2012. The UK is not only building less today, but creating fewer projects for tomorrow, making speed, certainty and lower delivery friction increasingly important. <a href=\"SOURCE_URL\">Link</a>"
+  },
+  {
+    "label": "good",
+    "notes": [
+      "Sharp contrast",
+      "Operational framing",
+      "Avoids hype around humanoids"
+    ],
+    "headline": "A factory pilot is not the same as factory productivity",
+    "body_html": "Figure's F.02 humanoids spent 11 months at BMW performing one narrow task before being retired from the pilot, reaching more than 1,250 runtime hours out of roughly 2,400 available line hours, or about 50% utilisation. Mature factory automation is typically expected to run closer to 85% and stay in place for years, not months. Even a leading humanoid company has now shown robots can enter real production, but not yet stay productive enough to beat purpose-built systems. <a href=\"SOURCE_URL\">Link</a>"
+  },
+  {
+    "label": "good",
+    "notes": [
+      "Outcome-focused angle",
+      "Commercial model insight",
+      "Human phrasing"
+    ],
+    "headline": "Robotics is shifting from selling machines to selling outcomes",
+    "body_html": "Tutor Intelligence has built a 100-robot Data Factory where Sonny robots repeat warehouse tasks and learn from real-time correction by remote operators, while its Cassie system is already offered for case-picking and palletising at USD 14-18 per hour. The commercial model matters as much as the hardware: automation is being packaged as task delivery, not equipment ownership. Customers do not want a robot; they want a reliable process that completes the work without adding operational complexity. <a href=\"SOURCE_URL\">Link</a>"
   },
   {
     "label": "bad",
@@ -79,5 +109,35 @@
     ],
     "headline": "Mercer Mass Timber Offers Free CLT Design Tool",
     "body_html": "Mercer Mass Timber has released BuildSpec, a free browser-based tool for prototyping CLT and CFS building designs with real-time cost, embodied carbon, and quantity takeoffs. This tool aims to accelerate feasibility for mid-rise timber projects, potentially streamlining the design phase and encouraging wider adoption of mass timber construction, which aligns with our material efficiency goals. <a href=\"SOURCE_URL\">Link</a>"
+  },
+  {
+    "label": "bad",
+    "notes": [
+      "Over-explained",
+      "Too long for digest rhythm",
+      "Insight is diluted instead of sharpened"
+    ],
+    "headline": "Figure AI's BMW exit reveals the gap between deployment and productive use",
+    "body_html": "After 11 months of weekday operation, Figure AI's humanoids were retired from BMW's plant, with 50% uptime reported alongside claims tied to over 30,000 cars and 90,000 handled sheet-metal parts. The operating math is the real story: time on site and headline output figures can coexist with modest per-robot contribution if utilization stays low. For physical AI broadly, this is a useful reminder that deployment announcements and sustained industrial performance are still two different things. <a href=\"SOURCE_URL\">Link</a>"
+  },
+  {
+    "label": "bad",
+    "notes": [
+      "Too theoretical",
+      "Sounds like a polished analyst memo",
+      "Less natural than needed for the digest"
+    ],
+    "headline": "Robotic hand specialist Linkerbot reaches USD 3B valuation backed by Ant Group and HongShan",
+    "body_html": "Linkerbot, focused on robotic hands capable of delicate manipulation, has closed a round valuing the company at USD 3B, with Ant Group and HongShan among the backers. Dexterous manipulation has long been the hardware bottleneck that separates warehouse-grade robotics from tasks requiring fine motor control. Investors are now pricing in the assumption that this gap is closeable at scale, which explains why a component-level specialist can command a valuation at this level. <a href=\"SOURCE_URL\">Link</a>"
+  },
+  {
+    "label": "bad",
+    "notes": [
+      "Correct but too abstract",
+      "Generic macro wording",
+      "Reads more like sector commentary than a sharp digest item"
+    ],
+    "headline": "UK infrastructure project starts collapsed 73% in March even as contract awards rose",
+    "body_html": "UK infrastructure recorded a 73% year-on-year drop in project starts in March 2026, while main contract awards rose 11% over the same period. The divergence between awards and starts points to a pipeline that is contracting at the front end while still processing earlier commitments downstream. If the starts figure does not recover, the award growth will not translate into sustained activity, and the sector's output gap will widen through the second half of the year. <a href=\"SOURCE_URL\">Link</a>"
   }
 ]

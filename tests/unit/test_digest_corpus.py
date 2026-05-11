@@ -58,5 +58,5 @@ def test_build_claude_writer_prompt_includes_house_style_and_examples() -> None:
     assert "Editorial memory good examples:" in prompt
     assert "Editorial memory bad examples:" in prompt
     assert "Data centers may become the next robotics construction site" in prompt
-    assert "Germany’s housing delivery is slowing as the system loses speed" in prompt
+    assert "Germany's housing delivery is slowing as the system loses speed" in prompt
     assert "Mercer Mass Timber Offers Free CLT Design Tool" in prompt
