@@ -15,6 +15,7 @@ class ClaudeDigestUnavailableError(RuntimeError):
 
 RAW_URL_RE = re.compile(r'(?<!href=")https?://[^\s<]+', re.IGNORECASE)
 FENCED_JSON_RE = re.compile(r"^```(?:json)?\s*(.*?)\s*```$", re.DOTALL)
+JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
 
 
 @dataclass(frozen=True)
@@ -84,6 +85,10 @@ class ClaudeDigestClient:
         fence_match = FENCED_JSON_RE.match(text)
         if fence_match:
             text = fence_match.group(1).strip()
+        if not text.startswith("{"):
+            object_match = JSON_OBJECT_RE.search(text)
+            if object_match:
+                text = object_match.group(0).strip()
         try:
             payload = json.loads(text)
         except json.JSONDecodeError as exc:

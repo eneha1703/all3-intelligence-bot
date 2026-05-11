@@ -133,6 +133,40 @@ def test_claude_digest_client_rejects_invalid_selection_payload(monkeypatch) -> 
         client.select_top_story_ids("prompt", allowed_ids={"event-1", "event-2", "event-3", "event-4", "event-5"})
 
 
+def test_claude_digest_client_extracts_json_selection_from_wrapped_text(monkeypatch) -> None:
+    client = ClaudeDigestClient(
+        enabled=True,
+        api_key="secret",
+        model="claude-test",
+        timeout_seconds=10,
+        max_tokens=500,
+    )
+
+    def fake_urlopen(request, timeout):  # noqa: ANN001
+        return _FakeResponse(
+            {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            "Here is the final selection.\n"
+                            '{"selected_ids":["event-1","event-2","event-3","event-4","event-5"]}'
+                        ),
+                    }
+                ]
+            }
+        )
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    selected_ids = client.select_top_story_ids(
+        "prompt",
+        allowed_ids={"event-1", "event-2", "event-3", "event-4", "event-5", "event-6"},
+    )
+
+    assert selected_ids == ["event-1", "event-2", "event-3", "event-4", "event-5"]
+
+
 def test_claude_digest_client_validates_telegram_digest_output(monkeypatch) -> None:
     client = ClaudeDigestClient(
         enabled=True,

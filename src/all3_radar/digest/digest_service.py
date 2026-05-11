@@ -644,6 +644,7 @@ class DigestService:
         pipeline_run_id = self.repository.create_pipeline_run(PipelineName.DIGEST, _settings_snapshot(self.settings))
         digest_run_id = self.repository.create_weekly_digest_run(pipeline_run_id, normalized_week_key)
         fallback_reason: str | None = None
+        selection_fallback_reason: str | None = None
         final_markdown = ""
         claude_used = False
 
@@ -699,11 +700,19 @@ class DigestService:
                         limit=5,
                     )
                 except ClaudeDigestUnavailableError as exc:
-                    fallback_reason = str(exc)
-                    LOGGER.warning("Claude digest selection unavailable for week=%s reason=%s", normalized_week_key, exc)
+                    selection_fallback_reason = str(exc)
+                    LOGGER.warning(
+                        "Claude digest selection unavailable for week=%s reason=%s",
+                        normalized_week_key,
+                        exc,
+                    )
             elif self.settings.digest.claude_digest_enabled:
-                fallback_reason = "Claude digest synthesis is enabled but not fully configured."
-                LOGGER.warning("Claude digest selection skipped for week=%s reason=%s", normalized_week_key, fallback_reason)
+                selection_fallback_reason = "Claude digest synthesis is enabled but not fully configured."
+                LOGGER.warning(
+                    "Claude digest selection skipped for week=%s reason=%s",
+                    normalized_week_key,
+                    selection_fallback_reason,
+                )
 
             selected_candidates = _select_distinct_candidates(
                 candidates,
@@ -712,7 +721,7 @@ class DigestService:
             )
 
             final_markdown = build_digest_html(window.title, selected_candidates)
-            if selected_candidates and self.claude_client.is_available and fallback_reason is None:
+            if selected_candidates and self.claude_client.is_available:
                 writer_prompt = build_claude_writer_prompt(window, selected_candidates)
                 try:
                     final_markdown = self.claude_client.generate_telegram_digest(
@@ -724,6 +733,8 @@ class DigestService:
                     fallback_reason = str(exc)
                     final_markdown = build_digest_html(window.title, selected_candidates)
                     LOGGER.warning("Claude digest writing unavailable for week=%s reason=%s", normalized_week_key, exc)
+            if fallback_reason is None and not claude_used and selection_fallback_reason:
+                fallback_reason = selection_fallback_reason
 
             output_path.write_text(final_markdown, encoding="utf-8")
             report_output_path.write_text(
