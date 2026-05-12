@@ -18,6 +18,7 @@ def _make_context(
     source_id: str,
     metadata: dict,
     event_flags: dict,
+    editorial_flags: dict | None = None,
     score: int = 52,
 ) -> CurrentRunContext:
     now = datetime.now(timezone.utc)
@@ -41,7 +42,11 @@ def _make_context(
         send_status="stored_only",
         skip_reason=None,
         score=score,
-        signals={"competitor_count": 0, "event_flags": event_flags},
+        signals={
+            "competitor_count": 0,
+            "event_flags": event_flags,
+            "editorial_flags": editorial_flags or {},
+        },
         is_shortlisted=True,
         is_borderline=False,
     )
@@ -111,3 +116,31 @@ def test_uk_market_story_is_not_forced_to_skip_claude_final_card() -> None:
     )
 
     assert _should_skip_claude_final_card(context) is False
+
+
+def test_industrial_automation_partnership_is_not_forced_to_skip_claude_final_card() -> None:
+    context = _make_context(
+        title="Comau partners with Omron to accelerate advanced industrial automation",
+        preview="Comau and Omron Robotics signed a strategic collaboration agreement focused on industrial automation deployments.",
+        source_id="robotics_automation_news_rss",
+        metadata={"market_scope": "industrial_automation"},
+        event_flags={"partnership_event": True, "industrial_robotics_signal": True},
+        editorial_flags={"industrial_automation_partnership_signal": True},
+        score=69,
+    )
+
+    assert _should_skip_claude_final_card(context) is False
+
+
+def test_robot_data_infrastructure_still_skips_claude_final_card() -> None:
+    context = _make_context(
+        title="Tutor Intelligence builds Data Factory to train robot AI in the real world",
+        preview="Tutor Intelligence is running 100 robots to create real-world training data for robot AI systems.",
+        source_id="robot_data_feed",
+        metadata={"market_scope": "robotics"},
+        event_flags={"factory_opening_or_expansion": True, "industrial_robotics_signal": True},
+        editorial_flags={"robot_ai_training_infrastructure_signal": True},
+        score=78,
+    )
+
+    assert _should_skip_claude_final_card(context) is True
