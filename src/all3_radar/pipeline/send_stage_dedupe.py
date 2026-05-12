@@ -48,6 +48,9 @@ APPOSITIVE_FUNDING_RE = re.compile(
 STARTUP_ENTITY_RE = re.compile(
     rf"\b(?:startup|company|firm)\s+(?P<entity>{ENTITY_RE})\b"
 )
+POSSESSIVE_ENTITY_RE = re.compile(
+    rf"\b(?P<entity>{ENTITY_RE})'s\b"
+)
 PAIR_PARTNERSHIP_RE = re.compile(
     rf"(?P<left>{PARTNERSHIP_ENTITY_RE})\s+and\s+(?P<right>{PARTNERSHIP_ENTITY_RE})\s+"
     r"(?:(?i:is|are)\s+)?"
@@ -90,6 +93,13 @@ INDUSTRIAL_RELEVANCE_TERMS = (
     "worksite",
     "automation",
 )
+DATA_FACTORY_TERMS = (
+    "data factory",
+    "robot data factory",
+    "real-world data",
+    "real world data",
+)
+HEADQUARTERS_TERMS = ("headquarters", "hq", "watertown")
 
 
 @dataclass(frozen=True)
@@ -188,6 +198,40 @@ def suppress_same_event_funding_duplicates(
                     reason=reason,
                 )
             )
+    return sorted(suppressed, key=lambda item: item.suppressed_item_id)
+
+
+def suppress_recent_same_company_angle_repeats(
+    candidates: Sequence[SendStageCandidate],
+    recent_sent_candidates: Sequence[SendStageCandidate],
+) -> list[SuppressedDuplicate]:
+    if not candidates or not recent_sent_candidates:
+        return []
+
+    recent_by_key: dict[tuple[str, str], SendStageCandidate] = {}
+    for recent in recent_sent_candidates:
+        key = _extract_recent_repeat_key(recent)
+        if key is None:
+            continue
+        existing = recent_by_key.get(key)
+        if existing is None or _compare_candidates(recent, existing, score_tie_window=5) > 0:
+            recent_by_key[key] = recent
+
+    suppressed: list[SuppressedDuplicate] = []
+    for candidate in candidates:
+        key = _extract_recent_repeat_key(candidate)
+        if key is None:
+            continue
+        representative = recent_by_key.get(key)
+        if representative is None:
+            continue
+        suppressed.append(
+            SuppressedDuplicate(
+                suppressed_item_id=candidate.normalized_item_id,
+                representative_item_id=representative.normalized_item_id,
+                reason="already_sent_same_company_angle",
+            )
+        )
     return sorted(suppressed, key=lambda item: item.suppressed_item_id)
 
 
@@ -345,7 +389,7 @@ def _is_same_product_launch_event(left: SendStageCandidate, right: SendStageCand
 
 
 def _extract_primary_entity(text: str) -> str | None:
-    for pattern in (DIRECT_FUNDING_HEADLINE_RE, APPOSITIVE_FUNDING_RE, STARTUP_ENTITY_RE):
+    for pattern in (DIRECT_FUNDING_HEADLINE_RE, APPOSITIVE_FUNDING_RE, STARTUP_ENTITY_RE, POSSESSIVE_ENTITY_RE):
         match = pattern.search(text)
         if match:
             normalized = _normalize_entity(match.group("entity"))
@@ -489,6 +533,23 @@ def _extract_investors(text: str) -> set[str]:
 def _has_industrial_relevance(text: str) -> bool:
     lowered = text.lower()
     return any(term in lowered for term in INDUSTRIAL_RELEVANCE_TERMS)
+
+
+def _extract_recent_repeat_key(candidate: SendStageCandidate) -> tuple[str, str] | None:
+    text = _candidate_text(candidate)
+    company = _extract_product_company(candidate.title) or _extract_primary_entity(text)
+    if company is None:
+        return None
+
+    lowered = text.lower()
+    if any(term in lowered for term in DATA_FACTORY_TERMS) and (
+        candidate.event_flags.get("industrial_robotics_signal")
+        or candidate.event_flags.get("factory_opening_or_expansion")
+        or candidate.event_flags.get("product_launch_event")
+        or any(term in lowered for term in HEADQUARTERS_TERMS)
+    ):
+        return (company, "robot_data_factory")
+    return None
 
 
 def _direct_event_framing_score(title: str) -> int:

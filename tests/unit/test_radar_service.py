@@ -6,6 +6,7 @@ from all3_radar.pipeline.radar_service import (
     CurrentRunContext,
     _is_allowed_medium_claude_editorial_promotion,
     _should_protect_from_high_confidence_claude_editorial_rejection,
+    _should_skip_claude_final_card,
 )
 from all3_radar.summarization.claude_editorial_review_client import ClaudeEditorialReviewResult
 
@@ -97,3 +98,16 @@ def test_high_confidence_claude_editorial_rejection_is_protected_for_large_uk_ho
     )
 
     assert _should_protect_from_high_confidence_claude_editorial_rejection(context) is True
+
+
+def test_uk_market_story_is_not_forced_to_skip_claude_final_card() -> None:
+    context = _make_context(
+        title="Fusion21 opens bidding for £350m repairs framework",
+        preview="Fusion21 has invited bids for a £350m responsive repairs and void property framework covering social housing work across the UK.",
+        source_id="construction_news_intelligence_listing",
+        metadata={"market_scope": "uk_construction_market"},
+        event_flags={"construction_news_intelligence_signal": True, "quantified_scale_signal": True},
+        score=52,
+    )
+
+    assert _should_skip_claude_final_card(context) is False

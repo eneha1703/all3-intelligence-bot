@@ -2181,7 +2181,7 @@ def test_uk_construction_market_story_skips_claude_final_card_rejection_path(
     result = service.run(dry_run=False)
 
     assert result.sent_items == 1
-    assert fake_claude.call_count == 0
+    assert fake_claude.call_count == 1
     assert len(fake_sender.sent_cards) == 1
     assert "Double whammy hits April construction output" in fake_sender.sent_cards[0].text
     send_status, skip_reason, signals, used_gemini = _load_radar_decision_for_title(
@@ -2190,9 +2190,9 @@ def test_uk_construction_market_story_skips_claude_final_card_rejection_path(
     assert send_status == "sent"
     assert skip_reason is None
     assert used_gemini == 1
-    assert signals["claude_final_card_reviewed"] is False
-    assert signals["claude_final_card_outcome"] == "not_attempted"
-    assert signals["claude_final_card_reason"] == "specialized_robot_data_infrastructure_passthrough"
+    assert signals["claude_final_card_reviewed"] is True
+    assert signals["claude_final_card_outcome"] == "fallback_protected_market_signal"
+    assert signals["claude_final_card_reason"] == "generic_market_stat"
 
 
 def test_claude_final_card_failure_falls_back_to_deterministic_send_and_cap(

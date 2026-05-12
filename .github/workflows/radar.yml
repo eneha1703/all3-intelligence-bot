@@ -9,7 +9,7 @@ on:
         default: false
         type: boolean
   schedule:
-    - cron: "15 */2 * * *"
+    - cron: "15 * * * *"
 
 concurrency:
   group: news-radar-${{ github.ref_name }}

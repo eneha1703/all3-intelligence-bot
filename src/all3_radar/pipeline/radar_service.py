@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import json
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,7 +35,12 @@ from all3_radar.pipeline.funding_sent_history import funding_key_from_candidate
 from all3_radar.pipeline.normalize import normalize_collected_item
 from all3_radar.pipeline.ranking import load_ranking_rules, rank_item
 from all3_radar.pipeline.run_audit_report import write_run_audit_report
-from all3_radar.pipeline.send_stage_dedupe import candidate_from_item, suppress_same_event_funding_duplicates
+from all3_radar.pipeline.send_stage_dedupe import (
+    SendStageCandidate,
+    candidate_from_item,
+    suppress_recent_same_company_angle_repeats,
+    suppress_same_event_funding_duplicates,
+)
 from all3_radar.sources.base import FetchText
 from all3_radar.sources.registry import SourceRegistry, load_source_registry
 from all3_radar.storage.db import initialize_database
@@ -140,9 +146,6 @@ def _should_skip_claude_final_card(context: CurrentRunContext) -> bool:
     return bool(
         editorial_flags.get("robot_ai_training_infrastructure_signal", False)
         or editorial_flags.get("industrial_automation_partnership_signal", False)
-        or editorial_flags.get("uk_construction_market_alert_signal", False)
-        or editorial_flags.get("official_construction_market_signal", False)
-        or editorial_flags.get("housing_market_alert_signal", False)
     )
 
 
@@ -536,6 +539,7 @@ def _should_protect_from_high_confidence_claude_editorial_rejection(context: Cur
     return bool(
         editorial_flags.get("official_construction_market_signal", False)
         or editorial_flags.get("housing_market_alert_signal", False)
+        or editorial_flags.get("uk_construction_market_alert_signal", False)
         or _is_protected_uk_housing_framework_story(context)
     )
 
@@ -551,6 +555,43 @@ def _settings_snapshot(settings: object) -> dict:
         "***" if snapshot["integrations"]["telegram_alert_bot_token"] else None
     )
     return snapshot
+
+
+def _historical_sent_candidate_from_row(row: dict[str, object]) -> SendStageCandidate | None:
+    normalized_item_id = str(row.get("normalized_item_id") or "").strip()
+    canonical_url = str(row.get("canonical_url") or "").strip()
+    title = str(row.get("title") or "").strip()
+    if not normalized_item_id or not canonical_url or not title:
+        return None
+
+    published_ts_raw = row.get("published_ts")
+    published_ts = None
+    if isinstance(published_ts_raw, str) and published_ts_raw.strip():
+        try:
+            published_ts = datetime.fromisoformat(published_ts_raw)
+        except ValueError:
+            published_ts = None
+
+    signals_json = row.get("signals_json")
+    event_flags: dict[str, bool] = {}
+    if isinstance(signals_json, str) and signals_json.strip():
+        try:
+            signals = json.loads(signals_json)
+            parsed_flags = signals.get("event_flags", {})
+            if isinstance(parsed_flags, dict):
+                event_flags = {str(key): bool(value) for key, value in parsed_flags.items()}
+        except json.JSONDecodeError:
+            event_flags = {}
+
+    return SendStageCandidate(
+        normalized_item_id=normalized_item_id,
+        canonical_url=canonical_url,
+        title=title,
+        text_preview=str(row.get("text_preview") or "").strip() or None,
+        published_ts=published_ts,
+        score=int(row.get("score") or 0),
+        event_flags=event_flags,
+    )
 
 
 def _stored_from_normalized(raw_item_id: str, normalized_item_id: str, item: NormalizedItem) -> StoredNormalizedItem:
@@ -1330,6 +1371,48 @@ class RadarService:
                         suppression.reason,
                     )
                 sendable_contexts = filtered_sendable_contexts
+            recent_sent_rows = self.repository.load_recent_sent_alert_candidates(lookback_days=7, limit=200)
+            recent_sent_candidates = [
+                candidate
+                for row in recent_sent_rows
+                if (candidate := _historical_sent_candidate_from_row(row)) is not None
+            ]
+            suppressed_recent_repeats = suppress_recent_same_company_angle_repeats(
+                [
+                    candidate_from_item(context.item, context.decision)
+                    for context in sendable_contexts
+                    if context.decision is not None
+                ],
+                recent_sent_candidates,
+            )
+            if suppressed_recent_repeats:
+                suppressed_by_id = {item.suppressed_item_id: item for item in suppressed_recent_repeats}
+                filtered_sendable_contexts = []
+                for context in sendable_contexts:
+                    suppression = suppressed_by_id.get(context.item.normalized_item_id)
+                    if suppression is None:
+                        filtered_sendable_contexts.append(context)
+                        continue
+                    skipped_send_count += 1
+                    context.decision = RankedDecision(
+                        relevance_status=context.decision.relevance_status,
+                        send_status="skip",
+                        skip_reason=suppression.reason,
+                        score=context.decision.score,
+                        signals={
+                            **context.decision.signals,
+                            "recent_same_company_angle_representative": suppression.representative_item_id,
+                        },
+                        is_shortlisted=context.decision.is_shortlisted,
+                        is_borderline=context.decision.is_borderline,
+                    )
+                    LOGGER.info(
+                        "Recent same-company-angle suppression: item=%s representative=%s reason=%s",
+                        context.item.normalized_item_id,
+                        suppression.representative_item_id,
+                        suppression.reason,
+                    )
+                sendable_contexts = filtered_sendable_contexts
             sendable_contexts = sendable_contexts[: self.settings.radar.max_cards_per_run]
             record_stage_timing("editorial_and_late_dedupe", editorial_and_late_dedupe_started)
 
@@ -1398,6 +1481,21 @@ class RadarService:
                         continue
 
                     if not claude_result.send_ok:
+                        if _should_protect_from_high_confidence_claude_editorial_rejection(context):
+                            increment_stage_counter("claude_final_card_fallback")
+                            _with_context_signals(
+                                context,
+                                claude_final_card_reviewed=True,
+                                claude_final_card_outcome="fallback_protected_market_signal",
+                                claude_final_card_reason=claude_result.reject_reason or "protected_market_signal",
+                            )
+                            LOGGER.warning(
+                                "Claude final-card protected fallback: item=%s reason=%s",
+                                context.item.normalized_item_id,
+                                claude_result.reject_reason or "protected_market_signal",
+                            )
+                            filtered_sendable_contexts.append(context)
+                            continue
                         increment_stage_counter("claude_final_card_rejected")
                         context.decision = RankedDecision(
                             relevance_status=context.decision.relevance_status,

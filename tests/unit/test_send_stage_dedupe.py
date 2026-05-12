@@ -3,6 +3,7 @@ from datetime import datetime, timedelta, timezone
 from all3_radar.pipeline.send_stage_dedupe import (
     SendStageCandidate,
     SuppressedDuplicate,
+    suppress_recent_same_company_angle_repeats,
     suppress_same_event_funding_duplicates,
 )
 
@@ -439,3 +440,55 @@ def test_higher_score_wins_for_same_product_launch_event() -> None:
 
     assert suppressed[0].suppressed_item_id == "low"
     assert suppressed[0].representative_item_id == "high"
+
+
+def test_recent_same_company_data_factory_repeat_is_suppressed() -> None:
+    recent_sent = SendStageCandidate(
+        normalized_item_id="sent-1",
+        canonical_url="https://example.com/sent-1",
+        title="Tutor Intelligence builds Data Factory to train robot AI in the real world",
+        text_preview="Tutor Intelligence's Data Factory uses Sonny robots to generate real-world data for autonomous warehouse systems.",
+        published_ts=datetime.now(timezone.utc) - timedelta(days=1),
+        score=88,
+        event_flags={"industrial_robotics_signal": True, "factory_opening_or_expansion": True},
+    )
+    candidate = SendStageCandidate(
+        normalized_item_id="candidate-1",
+        canonical_url="https://example.com/candidate-1",
+        title="Massachusetts startup launches largest robot data factory in the US",
+        text_preview="Manufacturing Dive visited Tutor Intelligence's new headquarters, where the company is scaling autonomous robots with a large data factory.",
+        published_ts=datetime.now(timezone.utc),
+        score=51,
+        event_flags={"industrial_robotics_signal": True, "factory_opening_or_expansion": True, "product_launch_event": True},
+    )
+
+    assert suppress_recent_same_company_angle_repeats([candidate], [recent_sent]) == [
+        SuppressedDuplicate(
+            suppressed_item_id="candidate-1",
+            representative_item_id="sent-1",
+            reason="already_sent_same_company_angle",
+        )
+    ]
+
+
+def test_recent_same_company_different_angle_is_not_suppressed() -> None:
+    recent_sent = SendStageCandidate(
+        normalized_item_id="sent-1",
+        canonical_url="https://example.com/sent-1",
+        title="Tutor Intelligence builds Data Factory to train robot AI in the real world",
+        text_preview="Tutor Intelligence's Data Factory uses Sonny robots to generate real-world data.",
+        published_ts=datetime.now(timezone.utc) - timedelta(days=1),
+        score=88,
+        event_flags={"industrial_robotics_signal": True, "factory_opening_or_expansion": True},
+    )
+    candidate = SendStageCandidate(
+        normalized_item_id="candidate-1",
+        canonical_url="https://example.com/candidate-1",
+        title="Tutor Intelligence launches warehouse orchestration software",
+        text_preview="Tutor Intelligence introduced software for coordinating warehouse robots across multiple sites.",
+        published_ts=datetime.now(timezone.utc),
+        score=60,
+        event_flags={"industrial_robotics_signal": True, "product_launch_event": True},
+    )
+
+    assert suppress_recent_same_company_angle_repeats([candidate], [recent_sent]) == []

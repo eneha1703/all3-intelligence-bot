@@ -642,6 +642,31 @@ class RadarRepository:
             ).fetchone()
         return bool(row)
 
+    def load_recent_sent_alert_candidates(self, *, lookback_days: int = 7, limit: int = 200) -> list[dict[str, Any]]:
+        with connect(self.database_path) as connection:
+            rows = connection.execute(
+                """
+                SELECT
+                  td.normalized_item_id,
+                  ni.canonical_url,
+                  ni.title,
+                  ni.text_preview,
+                  ni.published_ts,
+                  rd.score,
+                  rd.signals_json
+                FROM telegram_deliveries td
+                JOIN normalized_items ni ON ni.id = td.normalized_item_id
+                LEFT JOIN radar_decisions rd ON rd.normalized_item_id = ni.id
+                WHERE td.bot_kind = 'alert'
+                  AND td.status = 'sent'
+                  AND td.created_at >= datetime('now', ?)
+                ORDER BY td.created_at DESC, ni.published_ts DESC, ni.id ASC
+                LIMIT ?
+                """,
+                (f"-{lookback_days} days", limit),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def find_sent_alert_for_same_funding_event(self, semantic_key: FundingSemanticKey) -> dict[str, Any] | None:
         start_date = semantic_key.published_date.isoformat()
         end_date = semantic_key.published_date.isoformat()
