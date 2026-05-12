@@ -8,12 +8,13 @@ on:
         required: false
         default: false
         type: boolean
-  repository_dispatch:
-    types:
-      - news-radar
-  schedule:
-    - cron: "17 * * * *"
-    - cron: "43 * * * *"
+  workflow_call:
+    inputs:
+      dry_run:
+        description: "Collect and score news without sending Telegram cards"
+        required: false
+        default: false
+        type: boolean
 
 concurrency:
   group: news-radar-${{ github.ref_name }}
@@ -41,7 +42,7 @@ jobs:
       ALLOW_COLLECTED_AT_FALLBACK: "false"
       GOOGLE_COMPETITOR_CHECK_ENABLED: "true"
       GOOGLE_COMPETITOR_SEND_ENABLED: "false"
-      RADAR_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' && 'true' || 'false' }}
+      RADAR_DRY_RUN: ${{ ((github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true') || inputs.dry_run) && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@v4
 
