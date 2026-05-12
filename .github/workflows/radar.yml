@@ -9,7 +9,8 @@ on:
         default: false
         type: boolean
   schedule:
-    - cron: "15 * * * *"
+    - cron: "17 * * * *"
+    - cron: "43 * * * *"
 
 concurrency:
   group: news-radar-${{ github.ref_name }}
@@ -40,6 +41,14 @@ jobs:
       RADAR_DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true' && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Log trigger context
+        run: |
+          echo "event_name=${{ github.event_name }}"
+          echo "ref_name=${{ github.ref_name }}"
+          echo "run_id=${{ github.run_id }}"
+          echo "run_attempt=${{ github.run_attempt }}"
+          date -u
 
       - name: Ensure data directory exists
         run: mkdir -p data
