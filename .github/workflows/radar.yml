@@ -8,6 +8,9 @@ on:
         required: false
         default: false
         type: boolean
+  repository_dispatch:
+    types:
+      - news-radar
   schedule:
     - cron: "17 * * * *"
     - cron: "43 * * * *"

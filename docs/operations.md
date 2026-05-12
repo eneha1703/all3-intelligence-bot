@@ -14,6 +14,16 @@ python -m all3_radar.app.admin_cli sources list
 python -m all3_radar.app.radar_cli run --dry-run
 ```
 
+## Remote radar trigger
+
+If GitHub scheduled runs become unreliable, trigger the same workflow externally with:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/dispatch_news_radar.ps1 -GithubToken YOUR_GITHUB_PAT
+```
+
+The token needs `repo` access for the target repository and triggers the `repository_dispatch` event type `news-radar`.
+
 ## Digest run
 
 ```bash
