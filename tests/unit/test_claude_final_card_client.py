@@ -558,7 +558,7 @@ def test_one_sentence_funding_blurb_is_rejected_when_source_has_richer_facts(mon
         )
 
 
-def test_summary_with_raw_url_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_summary_with_raw_url_is_sanitized(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "urllib.request.urlopen",
         lambda request, timeout: _FakeResponse(
@@ -578,14 +578,17 @@ def test_summary_with_raw_url_is_rejected(monkeypatch: pytest.MonkeyPatch) -> No
         ),
     )
 
-    with pytest.raises(ClaudeFinalCardUnavailableError, match="raw URLs"):
-        _generate_for_story(
-            _client(),
-            title="Launchpad Build AI offers MLM to speed industrial automation design",
-            source="The Robot Report",
-            url="https://example.com/launchpad",
-            text_preview="Launchpad launched a Manufacturing Language Model and says it can cut design time by 50%.",
-        )
+    result = _generate_for_story(
+        _client(),
+        title="Launchpad Build AI offers MLM to speed industrial automation design",
+        source="The Robot Report",
+        url="https://example.com/launchpad",
+        text_preview="Launchpad launched a Manufacturing Language Model and says it can cut design time by 50%.",
+    )
+
+    assert "https://" not in (result.summary or "")
+    assert "www." not in (result.summary or "")
+    assert "design time can fall by 50%" in (result.summary or "")
 
 
 def test_summary_that_mostly_repeats_headline_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:

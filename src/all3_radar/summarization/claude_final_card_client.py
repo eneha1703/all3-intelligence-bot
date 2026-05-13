@@ -19,6 +19,7 @@ WHITESPACE_RE = re.compile(r"\s+")
 FENCED_JSON_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL | re.IGNORECASE)
 WORD_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9'./-]*")
 URL_RE = re.compile(r"https?://|www\.", re.IGNORECASE)
+RAW_URL_TEXT_RE = re.compile(r"(?:https?://\S+|www\.\S+)", re.IGNORECASE)
 BROKEN_DECIMAL_RE = re.compile(r"(?<=\d)\.\s+(?=\d)")
 SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9<])")
 MAX_TITLE_LENGTH = 110
@@ -109,6 +110,11 @@ def _sanitize_title(value: str | None) -> str | None:
 
 def _sanitize_summary(headline: str, value: str | None) -> str | None:
     normalized = _normalize_text(value)
+    if not normalized:
+        return None
+    normalized = RAW_URL_TEXT_RE.sub("", normalized)
+    normalized = re.sub(r"\s+([,.;:])", r"\1", normalized)
+    normalized = _normalize_text(normalized)
     if not normalized:
         return None
     normalized = BROKEN_DECIMAL_RE.sub(".", normalized)
