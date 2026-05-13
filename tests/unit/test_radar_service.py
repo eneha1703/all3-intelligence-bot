@@ -5,6 +5,7 @@ from all3_radar.domain.models import RankedDecision, SourceDefinition, StoredNor
 from all3_radar.pipeline.radar_service import (
     CurrentRunContext,
     _is_allowed_medium_claude_editorial_promotion,
+    _should_fallback_after_claude_final_card_rejection,
     _should_drop_after_claude_final_card_error,
     _should_protect_from_high_confidence_claude_editorial_rejection,
     _should_skip_claude_final_card,
@@ -168,3 +169,48 @@ def test_claude_final_card_invalid_output_reason_is_dropped() -> None:
 
 def test_claude_final_card_transport_error_reason_falls_back() -> None:
     assert _should_drop_after_claude_final_card_error("Claude request failed: timed out") is False
+
+
+def test_strong_industrial_funding_story_can_fallback_after_thin_final_card_reject() -> None:
+    context = _make_context(
+        title="Mind Robotics announces $400M in new funding to expand industrial robotics deployment",
+        preview="Industrial robotics startup Mind Robotics has raised $400 million in new funding led by Kleiner Perkins.",
+        source_id="ai_insider_rss",
+        metadata={"tags": ["tech", "funding", "robotics"], "broad_feed": True},
+        event_flags={
+            "funding_event": True,
+            "deployment_event": True,
+            "industrial_robotics_signal": True,
+            "physical_industry_ai_megafunding_signal": True,
+            "quantified_scale_signal": True,
+        },
+        editorial_flags={"telegram_worthy": True, "industrial_relevance": True},
+        score=86,
+    )
+
+    assert _should_fallback_after_claude_final_card_rejection(
+        context,
+        "Article is a thin funding recap with no deployment specifics and insufficient factual density to add value beyond a bare funding blurb.",
+    ) is True
+
+
+def test_non_robotics_funding_story_does_not_fallback_after_thin_final_card_reject() -> None:
+    context = _make_context(
+        title="Enterprise AI startup raises $400M for office productivity tools",
+        preview="The company raised $400 million to expand assistants for customer support and internal workflows.",
+        source_id="tech_feed",
+        metadata={"tags": ["tech", "funding"], "broad_feed": True},
+        event_flags={
+            "funding_event": True,
+            "quantified_scale_signal": True,
+            "industrial_robotics_signal": False,
+            "physical_industry_ai_megafunding_signal": False,
+        },
+        editorial_flags={"telegram_worthy": True},
+        score=58,
+    )
+
+    assert _should_fallback_after_claude_final_card_rejection(
+        context,
+        "Article is a thin funding recap with insufficient factual density.",
+    ) is False

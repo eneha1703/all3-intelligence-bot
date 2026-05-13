@@ -576,6 +576,36 @@ def _should_drop_after_claude_final_card_error(reason: str) -> bool:
     )
 
 
+def _should_fallback_after_claude_final_card_rejection(
+    context: CurrentRunContext,
+    reject_reason: str | None,
+) -> bool:
+    if context.decision is None:
+        return False
+    event_flags = context.decision.signals.get("event_flags", {})
+    editorial_flags = context.decision.signals.get("editorial_flags", {})
+    if not isinstance(event_flags, dict) or not isinstance(editorial_flags, dict):
+        return False
+    strong_industrial_funding = bool(event_flags.get("funding_event")) and (
+        bool(event_flags.get("industrial_robotics_signal"))
+        or bool(event_flags.get("physical_industry_ai_megafunding_signal"))
+    )
+    if not strong_industrial_funding:
+        return False
+    if not bool(editorial_flags.get("telegram_worthy")):
+        return False
+    normalized_reason = (reject_reason or "").strip().lower()
+    return any(
+        fragment in normalized_reason
+        for fragment in (
+            "thin funding recap",
+            "insufficient factual density",
+            "bare funding blurb",
+            "adds value beyond a bare funding blurb",
+        )
+    )
+
+
 def _settings_snapshot(settings: object) -> dict:
     snapshot = asdict(settings)
     snapshot["app"]["database_path"] = str(snapshot["app"]["database_path"])
@@ -1550,6 +1580,21 @@ class RadarService:
                                 "Claude final-card protected fallback: item=%s reason=%s",
                                 context.item.normalized_item_id,
                                 claude_result.reject_reason or "protected_market_signal",
+                            )
+                            filtered_sendable_contexts.append(context)
+                            continue
+                        if _should_fallback_after_claude_final_card_rejection(context, claude_result.reject_reason):
+                            increment_stage_counter("claude_final_card_fallback")
+                            _with_context_signals(
+                                context,
+                                claude_final_card_reviewed=True,
+                                claude_final_card_outcome="fallback_strong_funding_story",
+                                claude_final_card_reason=claude_result.reject_reason or "strong_funding_story",
+                            )
+                            LOGGER.warning(
+                                "Claude final-card strong funding fallback: item=%s reason=%s",
+                                context.item.normalized_item_id,
+                                claude_result.reject_reason or "strong_funding_story",
                             )
                             filtered_sendable_contexts.append(context)
                             continue
