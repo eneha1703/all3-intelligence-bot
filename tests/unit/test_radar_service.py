@@ -161,6 +161,26 @@ def test_robot_data_infrastructure_still_skips_claude_final_card() -> None:
     assert _should_skip_claude_final_card(context) is True
 
 
+def test_strong_robotics_funding_story_skips_claude_final_card() -> None:
+    context = _make_context(
+        title="Mind Robotics announces $400M in new funding to expand industrial robotics deployment",
+        preview="Industrial robotics startup Mind Robotics has raised $400 million in new funding led by Kleiner Perkins.",
+        source_id="ai_insider_rss",
+        metadata={"tags": ["tech", "funding", "robotics"], "broad_feed": True},
+        event_flags={
+            "funding_event": True,
+            "deployment_event": True,
+            "industrial_robotics_signal": True,
+            "physical_industry_ai_megafunding_signal": True,
+            "quantified_scale_signal": True,
+        },
+        editorial_flags={"telegram_worthy": True, "industrial_relevance": True},
+        score=86,
+    )
+
+    assert _should_skip_claude_final_card(context) is True
+
+
 def test_claude_final_card_invalid_output_reason_is_dropped() -> None:
     assert _should_drop_after_claude_final_card_error(
         "Claude final-card response summary must not contain raw URLs."

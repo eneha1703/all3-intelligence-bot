@@ -140,10 +140,16 @@ def _mark_claude_editorial_not_reviewed(context: CurrentRunContext, reason: str)
 def _should_skip_claude_final_card(context: CurrentRunContext) -> bool:
     if context.decision is None:
         return False
+    event_flags = context.decision.signals.get("event_flags", {})
     editorial_flags = context.decision.signals.get("editorial_flags", {})
-    if not isinstance(editorial_flags, dict):
+    if not isinstance(event_flags, dict) or not isinstance(editorial_flags, dict):
         return False
-    return bool(editorial_flags.get("robot_ai_training_infrastructure_signal", False))
+    if bool(editorial_flags.get("robot_ai_training_infrastructure_signal", False)):
+        return True
+    return bool(editorial_flags.get("telegram_worthy")) and bool(event_flags.get("funding_event")) and (
+        bool(event_flags.get("industrial_robotics_signal"))
+        or bool(event_flags.get("physical_industry_ai_megafunding_signal"))
+    )
 
 
 def _record_claude_editorial_result_signals(
