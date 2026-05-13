@@ -2195,6 +2195,191 @@ def test_uk_construction_market_story_skips_claude_final_card_rejection_path(
     assert signals["claude_final_card_reason"] == "generic_market_stat"
 
 
+def test_transport_framework_story_is_not_protected_from_claude_final_card_rejection(
+    monkeypatch, tmp_path
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "radar_transport_framework_reject.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("CLAUDE_FINAL_CARD_ENABLED", "true")
+
+    now = datetime.now(timezone.utc)
+    feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Three firms get places on £700m London transport framework</title>
+    <link>https://example.com/tfl-framework</link>
+    <description>Amey, Costain and Dragados have won places on Transport for London's infrastructure improvement framework, worth up to £700m.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=1))}</pubDate>
+    <guid>a1</guid>
+  </item>
+</channel></rss>"""
+
+    registry = SourceRegistry(
+        (
+            SourceDefinition(
+                id="construction_news_intelligence_listing",
+                name="Construction News Intelligence",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://example.com/tfl-framework.xml",
+                priority=100,
+                tags=("construction", "uk", "market"),
+                extra_config={"market_scope": "uk_construction_market"},
+            ),
+        )
+    )
+
+    class FakeGeminiClient:
+        is_available = True
+
+        def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
+            return (
+                "Amey, Costain and Dragados have won places on a TfL transport framework worth up to £700m.",
+                None,
+            )
+
+    class FakeTelegramSender:
+        def __init__(self) -> None:
+            self.sent_cards = []
+
+        def send_card(self, card):
+            self.sent_cards.append(card)
+            return []
+
+    class FakeClaudeClient:
+        is_available = True
+
+        def generate_final_card(self, **kwargs):
+            return ClaudeFinalCardResult(
+                send_ok=False,
+                reject_reason="generic_transport_framework",
+                title=None,
+                summary=None,
+                why_it_matters=None,
+                duplicate_risk="low",
+                confidence="high",
+                used_claude=True,
+            )
+
+    def fake_fetch_text(url: str) -> str:
+        assert url == "https://example.com/tfl-framework.xml"
+        return feed
+
+    fake_sender = FakeTelegramSender()
+    service = RadarService(
+        repo_root=repo_root,
+        registry=registry,
+        fetch_text_fn=fake_fetch_text,
+        gemini_client=FakeGeminiClient(),
+        claude_final_card_client=FakeClaudeClient(),
+        telegram_sender=fake_sender,
+    )
+
+    result = service.run(dry_run=False)
+
+    assert result.sent_items == 0
+    assert len(fake_sender.sent_cards) == 0
+    send_status, skip_reason, signals, used_gemini = _load_radar_decision_for_title(
+        db_path, "Three firms get places on £700m London transport framework"
+    )
+    assert send_status == "stored_only"
+    assert skip_reason == "claude_final_card_rejected"
+    assert signals["claude_final_card_outcome"] == "rejected"
+    assert signals["claude_final_card_reason"] == "generic_transport_framework"
+
+
+def test_claude_final_card_invalid_output_is_not_sent(
+    monkeypatch, tmp_path
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "radar_claude_invalid_output.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("CLAUDE_FINAL_CARD_ENABLED", "true")
+
+    now = datetime.now(timezone.utc)
+    feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Kewazo raises funding for construction robot rollout</title>
+    <link>https://example.com/kewazo</link>
+    <description>The company said the round will support factory and jobsite deployment expansion.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=1))}</pubDate>
+    <guid>a1</guid>
+  </item>
+</channel></rss>"""
+
+    registry = SourceRegistry(
+        (
+            SourceDefinition(
+                id="claude_invalid_output_feed",
+                name="Claude Invalid Output Feed",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://example.com/kewazo.xml",
+                priority=100,
+                tags=("robotics", "construction"),
+            ),
+        )
+    )
+
+    class FakeGeminiClient:
+        is_available = True
+
+        def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
+            return (
+                "Kewazo says the round supports deployment expansion across construction robotics workflows.",
+                None,
+            )
+
+    class FakeTelegramSender:
+        def __init__(self) -> None:
+            self.sent_cards = []
+
+        def send_card(self, card):
+            self.sent_cards.append(card)
+            return []
+
+    class FakeClaudeClient:
+        is_available = True
+
+        def generate_final_card(self, **kwargs):
+            raise ClaudeFinalCardUnavailableError("Claude final-card response summary must not contain raw URLs.")
+
+    def fake_fetch_text(url: str) -> str:
+        assert url == "https://example.com/kewazo.xml"
+        return feed
+
+    fake_sender = FakeTelegramSender()
+    service = RadarService(
+        repo_root=repo_root,
+        registry=registry,
+        fetch_text_fn=fake_fetch_text,
+        gemini_client=FakeGeminiClient(),
+        claude_final_card_client=FakeClaudeClient(),
+        telegram_sender=fake_sender,
+    )
+
+    result = service.run(dry_run=False)
+
+    assert result.sent_items == 0
+    assert len(fake_sender.sent_cards) == 0
+    send_status, skip_reason, signals, used_gemini = _load_radar_decision_for_title(
+        db_path, "Kewazo raises funding for construction robot rollout"
+    )
+    assert send_status == "stored_only"
+    assert skip_reason == "claude_final_card_invalid_output"
+    assert signals["claude_final_card_outcome"] == "rejected_invalid_output"
+
+
 def test_claude_final_card_failure_falls_back_to_deterministic_send_and_cap(
     monkeypatch, tmp_path
 ) -> None:

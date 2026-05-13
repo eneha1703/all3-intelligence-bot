@@ -513,19 +513,38 @@ def _is_protected_uk_housing_framework_story(context: CurrentRunContext) -> bool
         return False
 
     haystack = f"{context.item.title} {context.item.text_preview or ''}".lower()
-    return any(
-        term in haystack
-        for term in (
-            "framework",
-            "housing framework",
-            "demolition framework",
-            "public sector",
-            "procurement",
-            "housing upgrade programme",
-            "regeneration",
-            "council",
-        )
+    residential_or_stats_terms = (
+        "construction output",
+        "construction activity",
+        "project starts",
+        "main contract awards",
+        "materials prices",
+        "labour costs",
+        "workloads",
+        "housebuilding",
+        "housing",
+        "residential",
+        "social housing",
+        "build-to-rent",
+        "btr",
     )
+    excluded_framework_terms = (
+        "transport for london",
+        "tfl",
+        "transport framework",
+        "infrastructure improvement framework",
+        "rail",
+        "road",
+        "roads",
+        "highway",
+        "station",
+        "airport",
+        "bridge",
+        "tunnel",
+    )
+    if any(term in haystack for term in excluded_framework_terms):
+        return False
+    return any(term in haystack for term in residential_or_stats_terms)
 
 
 def _should_protect_from_high_confidence_claude_editorial_rejection(context: CurrentRunContext) -> bool:
@@ -536,8 +555,24 @@ def _should_protect_from_high_confidence_claude_editorial_rejection(context: Cur
     return bool(
         editorial_flags.get("official_construction_market_signal", False)
         or editorial_flags.get("housing_market_alert_signal", False)
-        or editorial_flags.get("uk_construction_market_alert_signal", False)
         or _is_protected_uk_housing_framework_story(context)
+    )
+
+
+def _should_drop_after_claude_final_card_error(reason: str) -> bool:
+    normalized = reason.strip().lower()
+    return any(
+        fragment in normalized
+        for fragment in (
+            "summary must not contain raw urls",
+            "summary used hype language",
+            "summary ended in an incomplete fragment",
+            "summary mostly repeated the headline",
+            "reduced a richer story to a funding blurb",
+            "summary was too thin for the source detail",
+            "response was missing a usable summary",
+            "response was missing a usable title",
+        )
     )
 
 
@@ -1447,12 +1482,37 @@ class RadarService:
                             existing_summary=context.summary.summary_text if context.summary else None,
                         )
                     except ClaudeFinalCardUnavailableError as exc:
+                        reason = str(exc)
+                        if _should_drop_after_claude_final_card_error(reason):
+                            increment_stage_counter("claude_final_card_rejected")
+                            context.decision = RankedDecision(
+                                relevance_status=context.decision.relevance_status,
+                                send_status="stored_only",
+                                skip_reason="claude_final_card_invalid_output",
+                                score=context.decision.score,
+                                signals={**context.decision.signals},
+                                is_shortlisted=context.decision.is_shortlisted,
+                                is_borderline=context.decision.is_borderline,
+                            )
+                            _with_context_signals(
+                                context,
+                                claude_final_card_reviewed=True,
+                                claude_final_card_outcome="rejected_invalid_output",
+                                claude_final_card_reason=reason,
+                            )
+                            LOGGER.warning(
+                                "Claude final-card invalid output: item=%s reason=%s",
+                                context.item.normalized_item_id,
+                                reason,
+                            )
+                            continue
+
                         increment_stage_counter("claude_final_card_fallback")
                         _with_context_signals(
                             context,
                             claude_final_card_reviewed=True,
                             claude_final_card_outcome="fallback_unavailable",
-                            claude_final_card_reason=str(exc),
+                            claude_final_card_reason=reason,
                         )
                         LOGGER.warning(
                             "Claude final-card fallback: item=%s reason=%s",

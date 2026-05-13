@@ -5,6 +5,7 @@ from all3_radar.domain.models import RankedDecision, SourceDefinition, StoredNor
 from all3_radar.pipeline.radar_service import (
     CurrentRunContext,
     _is_allowed_medium_claude_editorial_promotion,
+    _should_drop_after_claude_final_card_error,
     _should_protect_from_high_confidence_claude_editorial_rejection,
     _should_skip_claude_final_card,
 )
@@ -92,7 +93,7 @@ def test_medium_claude_editorial_promotion_is_allowed_for_destatis_housing_marke
     assert _is_allowed_medium_claude_editorial_promotion(context, result) is True
 
 
-def test_high_confidence_claude_editorial_rejection_is_protected_for_large_uk_housing_framework_story() -> None:
+def test_high_confidence_claude_editorial_rejection_is_protected_for_uk_construction_statistics_story() -> None:
     context = _make_context(
         title="£1.25bn housing and demolition framework launched",
         preview="LHC Procurement Group has launched a £1.25bn housing, regeneration and demolition framework for public sector clients across the UK.",
@@ -103,6 +104,19 @@ def test_high_confidence_claude_editorial_rejection_is_protected_for_large_uk_ho
     )
 
     assert _should_protect_from_high_confidence_claude_editorial_rejection(context) is True
+
+
+def test_high_confidence_claude_editorial_rejection_is_not_protected_for_transport_framework_story() -> None:
+    context = _make_context(
+        title="Three firms get places on £700m London transport framework",
+        preview="Amey, Costain and Dragados have won places on Transport for London's infrastructure improvement framework, worth up to £700m.",
+        source_id="construction_news_intelligence_listing",
+        metadata={"market_scope": "uk_construction_market"},
+        event_flags={"construction_news_intelligence_signal": True, "quantified_scale_signal": True},
+        score=58,
+    )
+
+    assert _should_protect_from_high_confidence_claude_editorial_rejection(context) is False
 
 
 def test_uk_market_story_is_not_forced_to_skip_claude_final_card() -> None:
@@ -144,3 +158,13 @@ def test_robot_data_infrastructure_still_skips_claude_final_card() -> None:
     )
 
     assert _should_skip_claude_final_card(context) is True
+
+
+def test_claude_final_card_invalid_output_reason_is_dropped() -> None:
+    assert _should_drop_after_claude_final_card_error(
+        "Claude final-card response summary must not contain raw URLs."
+    ) is True
+
+
+def test_claude_final_card_transport_error_reason_falls_back() -> None:
+    assert _should_drop_after_claude_final_card_error("Claude request failed: timed out") is False
