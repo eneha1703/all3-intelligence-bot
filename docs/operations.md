@@ -14,6 +14,18 @@ python -m all3_radar.app.admin_cli sources list
 python -m all3_radar.app.radar_cli run --dry-run
 ```
 
+## Windows-triggered GitHub run
+
+If GitHub scheduled runs stay unreliable, trigger the scheduler workflow from Windows Task Scheduler:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/trigger_news_radar_scheduler.ps1 -GithubToken YOUR_FINE_GRAINED_PAT
+```
+
+Recommended token:
+- fine-grained PAT scoped to `egalimova-eng/all3_intelligence_radar`
+- repository permission: `Actions: write`
+
 ## Digest run
 
 ```bash
