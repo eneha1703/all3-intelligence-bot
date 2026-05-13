@@ -581,23 +581,7 @@ def _should_drop_after_claude_final_card_error(reason: str) -> bool:
 def _should_fallback_after_claude_final_card_rejection(
     context: CurrentRunContext,
 ) -> bool:
-    if context.decision is None:
-        return False
-    event_flags = context.decision.signals.get("event_flags", {})
-    editorial_flags = context.decision.signals.get("editorial_flags", {})
-    if not isinstance(event_flags, dict) or not isinstance(editorial_flags, dict):
-        return False
-    metadata = context.item.metadata if isinstance(context.item.metadata, dict) else {}
-    if not bool(metadata.get("broad_feed")):
-        return False
-    strong_industrial_funding = bool(event_flags.get("funding_event")) and bool(
-        event_flags.get("physical_industry_ai_megafunding_signal")
-    )
-    if not strong_industrial_funding:
-        return False
-    if not bool(editorial_flags.get("telegram_worthy")):
-        return False
-    return True
+    return False
 
 
 def _settings_snapshot(settings: object) -> dict:

@@ -191,7 +191,7 @@ def test_claude_final_card_transport_error_reason_falls_back() -> None:
     assert _should_drop_after_claude_final_card_error("Claude request failed: timed out") is False
 
 
-def test_strong_industrial_funding_story_can_fallback_after_thin_final_card_reject() -> None:
+def test_strong_industrial_funding_story_does_not_fallback_after_claude_reject() -> None:
     context = _make_context(
         title="Mind Robotics announces $400M in new funding to expand industrial robotics deployment",
         preview="Industrial robotics startup Mind Robotics has raised $400 million in new funding led by Kleiner Perkins.",
@@ -208,7 +208,7 @@ def test_strong_industrial_funding_story_can_fallback_after_thin_final_card_reje
         score=86,
     )
 
-    assert _should_fallback_after_claude_final_card_rejection(context) is True
+    assert _should_fallback_after_claude_final_card_rejection(context) is False
 
 
 def test_non_robotics_funding_story_does_not_fallback_after_thin_final_card_reject() -> None:
