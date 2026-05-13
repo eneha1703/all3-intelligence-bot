@@ -1,6 +1,5 @@
 param(
-  [Parameter(Mandatory = $true)]
-  [string]$GithubToken,
+  [string]$GithubToken = "",
 
   [string]$Owner = "egalimova-eng",
 
@@ -12,6 +11,14 @@ param(
 
   [bool]$DryRun = $false
 )
+
+if ([string]::IsNullOrWhiteSpace($GithubToken)) {
+  $GithubToken = [System.Environment]::GetEnvironmentVariable("GITHUB_RADAR_TRIGGER_TOKEN", "User")
+}
+
+if ([string]::IsNullOrWhiteSpace($GithubToken)) {
+  throw "GITHUB_RADAR_TRIGGER_TOKEN is not set and -GithubToken was not provided."
+}
 
 $headers = @{
   Accept                 = "application/vnd.github+json"
