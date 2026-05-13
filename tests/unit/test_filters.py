@@ -567,6 +567,31 @@ def test_valid_industrial_robotics_funding_story_still_keeps_scope() -> None:
     assert reason is None
 
 
+def test_broad_feed_robotics_funding_story_with_robotics_tag_keeps_scope() -> None:
+    item = _make_item(
+        "Rivian spinoff Mind Robotics raises another $400M",
+        "Mind Robotics, which was first revealed in late 2025, has now raised more than $1 billion to date.",
+        broad_feed=True,
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "source_id": "techcrunch_rss",
+            "metadata": {"tags": ["tech", "funding", "robotics"], "broad_feed": True},
+        }
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "keep"
+    assert reason is None
+
+
 def test_valid_construction_automation_story_still_keeps_scope() -> None:
     item = _make_item(
         "Construction automation startup launches robotic system for jobsite material handling",

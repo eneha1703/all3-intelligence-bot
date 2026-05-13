@@ -997,6 +997,13 @@ def has_clear_all3_scope(item: StoredNormalizedItem, competitor_count: int, even
         return True
     if has_any_term(haystack, ROBOTICS_TERMS) and has_any_term(haystack, INDUSTRIAL_ROBOTICS_CONTEXT_TERMS):
         return True
+    if (
+        event_flags.get("funding_event")
+        and event_flags.get("quantified_scale_signal")
+        and has_any_term(haystack, ROBOTICS_TERMS)
+        and bool(source_tags & {"robotics", "robot", "humanoid", "industrial"})
+    ):
+        return True
     if event_flags.get("factory_opening_or_expansion") and (
         has_any_term(haystack, ROBOTICS_TERMS)
         or bool(source_tags & {"robotics", "robot", "humanoid", "industrial"})
@@ -1059,6 +1066,7 @@ def compute_relevance_status(
         return "drop", "no_clear_all3_scope"
     if is_broad_feed_source(item):
         haystack = f"{item.title} {item.text_preview or ''}"
+        source_tags = _source_tags(item)
         high_intent_scope = has_any_term(haystack, HIGH_INTENT_BROAD_FEED_TERMS)
         strong_broad_signal = (
             competitor_count > 0
@@ -1089,6 +1097,12 @@ def compute_relevance_status(
                         and has_any_term(haystack, {"industrial", "manufacturing", "factory"})
                     )
                 )
+            )
+            or (
+                event_flags.get("funding_event")
+                and event_flags.get("quantified_scale_signal")
+                and has_any_term(haystack, ROBOTICS_TERMS)
+                and bool(source_tags & {"robotics", "robot", "humanoid", "industrial"})
             )
             or (
                 event_flags.get("partnership_event")
