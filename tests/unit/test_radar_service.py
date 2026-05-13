@@ -188,10 +188,7 @@ def test_strong_industrial_funding_story_can_fallback_after_thin_final_card_reje
         score=86,
     )
 
-    assert _should_fallback_after_claude_final_card_rejection(
-        context,
-        "Article is a thin funding recap with no deployment specifics and insufficient factual density to add value beyond a bare funding blurb.",
-    ) is True
+    assert _should_fallback_after_claude_final_card_rejection(context) is True
 
 
 def test_non_robotics_funding_story_does_not_fallback_after_thin_final_card_reject() -> None:
@@ -210,7 +207,4 @@ def test_non_robotics_funding_story_does_not_fallback_after_thin_final_card_reje
         score=58,
     )
 
-    assert _should_fallback_after_claude_final_card_rejection(
-        context,
-        "Article is a thin funding recap with insufficient factual density.",
-    ) is False
+    assert _should_fallback_after_claude_final_card_rejection(context) is False

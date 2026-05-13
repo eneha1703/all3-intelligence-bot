@@ -578,7 +578,6 @@ def _should_drop_after_claude_final_card_error(reason: str) -> bool:
 
 def _should_fallback_after_claude_final_card_rejection(
     context: CurrentRunContext,
-    reject_reason: str | None,
 ) -> bool:
     if context.decision is None:
         return False
@@ -594,16 +593,7 @@ def _should_fallback_after_claude_final_card_rejection(
         return False
     if not bool(editorial_flags.get("telegram_worthy")):
         return False
-    normalized_reason = (reject_reason or "").strip().lower()
-    return any(
-        fragment in normalized_reason
-        for fragment in (
-            "thin funding recap",
-            "insufficient factual density",
-            "bare funding blurb",
-            "adds value beyond a bare funding blurb",
-        )
-    )
+    return True
 
 
 def _settings_snapshot(settings: object) -> dict:
@@ -1583,7 +1573,7 @@ class RadarService:
                             )
                             filtered_sendable_contexts.append(context)
                             continue
-                        if _should_fallback_after_claude_final_card_rejection(context, claude_result.reject_reason):
+                        if _should_fallback_after_claude_final_card_rejection(context):
                             increment_stage_counter("claude_final_card_fallback")
                             _with_context_signals(
                                 context,
