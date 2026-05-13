@@ -10,8 +10,7 @@ on:
         type: boolean
   schedule:
     - cron: "17 * * * *"
-    - cron: "43 * * * *"
-
+  
 jobs:
   trigger-radar:
     uses: ./.github/workflows/radar.yml
