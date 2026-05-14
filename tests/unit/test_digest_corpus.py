@@ -44,9 +44,9 @@ def test_build_claude_writer_prompt_includes_house_style_and_examples() -> None:
     prompt = build_claude_writer_prompt(window, [candidate])
 
     assert "House style guide:" in prompt
-    assert "Write like a smart human editor producing a short weekly strategic note." in prompt
-    assert "Aim for roughly 55 to 90 words per item." in prompt
-    assert "Prefer 2 to 4 sentences per item." in prompt
+    assert "Write like a smart human editor producing a short weekly note." in prompt
+    assert "Aim for roughly 45 to 75 words per item." in prompt
+    assert "Prefer 2 or 3 short sentences per item." in prompt
     assert "Use currency formatting like USD 120B, USD 25M, and EUR 100M." in prompt
     assert 'avoid "we", "our", "our need", "our goals", or "our strategy".' in prompt
     assert "Do not simply restate the source headline in either the bold headline or the first sentence." in prompt
@@ -54,6 +54,9 @@ def test_build_claude_writer_prompt_includes_house_style_and_examples() -> None:
     assert "Headline = thesis. First sentence = core evidence. Final sentence = narrow implication." in prompt
     assert "Do not repeat a number, percentage, funding amount, valuation, unit count, or timeline" in prompt
     assert "Write like an industry editor, not a columnist, feature writer, or culture critic." in prompt
+    assert "Use plain English. If a sentence can be simpler, make it simpler." in prompt
+    assert "Avoid words like 'thesis', 'lineage', 'durable', 'utilisation'" in prompt
+    assert "Do not sound like a market memo, strategy deck, or founder essay." in prompt
     assert "Do not default to starting every paragraph with the company name." in prompt
     assert "Mix the editorial voice across items so the digest reads like it was written by a person, not a template." in prompt
     assert "Editorial memory rules:" in prompt

@@ -2,9 +2,9 @@ Weekly Digest House Style
 
 - Write in English.
 - Write like a smart human editor, not like an AI assistant or a press release.
-- Weekly digest items should read like a short strategic note, not a database recap.
+- Weekly digest items should read like a short editorial note, not a database recap or strategy memo.
 - Use exactly one paragraph per item.
-- Keep each item compact: target roughly 55 to 90 words.
+- Keep each item compact: target roughly 45 to 75 words.
 - Do not let items become bulky, padded, or over-explained.
 - Treat each item as a compact editorial note with fixed sentence roles:
   headline = thesis
@@ -19,6 +19,35 @@ Weekly Digest House Style
 - Vary the editorial phrasing across items.
 - Use linking phrases sparingly.
 - Prefer plain factual transitions over rhetorical framing.
+- Use plain English.
+- If a sentence can be simpler, make it simpler.
+- Prefer short, common words over memo words and finance words.
+- Avoid words like:
+  "thesis"
+  "lineage"
+  "durable"
+  "utilisation"
+  "trajectory"
+  "structural"
+  "meaningful"
+  "vehicle"
+  "logic"
+  when a simpler word works.
+- Avoid phrases like:
+  "the real thesis"
+  "what matters more"
+  "stress test"
+  "production-grade"
+  "at meaningful scale"
+  "finding traction"
+  "different logic"
+  if a plainer line will do.
+- Avoid stacked clauses and overbuilt sentences.
+- Prefer direct wording:
+  "factory use" over "production-grade utilisation"
+  "background" over "lineage"
+  "model" over "wrapper"
+  "early funding" over "pre-revenue pace"
 - Do not overuse phrases like:
   "the signal is"
   "the bottleneck is"
@@ -41,6 +70,7 @@ Weekly Digest House Style
 - Prefer calm, clear, readable language over jargon or hype.
 - Prefer short observed implications over clever framing.
 - Write like an industry editor, not a columnist, feature writer, or culture critic.
+- Do not write like a market memo, strategy deck, or founder essay.
 - If a story is modest, write a modest item. Do not manufacture weight through rhetoric.
 - If the implication starts sounding like an essay, cut it back to the one thing the facts clearly support.
 - Do not write from a first-person company perspective:
