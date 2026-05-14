@@ -6,6 +6,10 @@ Weekly Digest House Style
 - Use exactly one paragraph per item.
 - Keep each item compact: target roughly 55 to 90 words.
 - Do not let items become bulky, padded, or over-explained.
+- Treat each item as a compact editorial note with fixed sentence roles:
+  headline = thesis
+  first sentence = core evidence
+  final sentence = narrow implication
 - Start with the strongest concrete fact:
   funding amount, deployment scale, production metric, building scale, policy change, timeline, or capacity.
 - Then add one concise interpretation of why the development matters.
@@ -29,11 +33,15 @@ Weekly Digest House Style
   "if this can be made reliable at scale"
   unless the source gives unusually strong support for that leap.
 - The headline should be interpretive, not a lightly rewritten source title.
+- Prefer the most natural thesis already visible in the facts over a more theatrical or stylized angle.
 - Do not restate the source headline in the first sentence.
 - Do not repeat the same core fact or thought in the headline and the first sentence with only light rewording.
 - If the headline already carries the funding or deployment fact, the first sentence should add useful detail or change the angle.
+- Do not repeat a number, percentage, funding amount, valuation, unit count, or timeline in both the headline and the first sentence unless the second mention serves a different analytical function.
 - Prefer calm, clear, readable language over jargon or hype.
 - Prefer short observed implications over clever framing.
+- Write like an industry editor, not a columnist, feature writer, or culture critic.
+- If a story is modest, write a modest item. Do not manufacture weight through rhetoric.
 - If the implication starts sounding like an essay, cut it back to the one thing the facts clearly support.
 - Do not write from a first-person company perspective:
   avoid "we", "our", "our need", "our goals", or "our strategy".
@@ -51,6 +59,7 @@ Weekly Digest House Style
   "this reflects growing interest"
   unless the sentence immediately says what exactly changed and why.
 - Avoid consultant-style wording that sounds polished but empty.
+- Avoid media-column phrasing, performance writing, and theatrical contrast devices.
 - If the source is not very strong, write a tighter, plainer paragraph instead of trying to sound insightful.
 - For studies and performance stories, explain what was measured and why that changes a real decision.
 - For funding stories, explain what investors are actually betting on, not just that capital is flowing.
@@ -78,9 +87,12 @@ Preferred weekly shape:
 Avoid:
 - bland headline recap
 - generic company summary
+- duplicated number in headline and first sentence
 - repetitive AI-sounding transitions
 - overlong paragraphs
+- over-clever headlines that sound written to impress rather than to clarify
 - empty statements like "important development" without a concrete implication
 - generic endings that could fit any story
 - thesis language that feels templated rather than observed from the facts
+- columnist or feature-writing tone that drifts away from factual editorial rhythm
 - timber logistics or supply-chain stories framed as if they were equal to direct deployment, building delivery, or performance proof unless the source clearly justifies that leap
