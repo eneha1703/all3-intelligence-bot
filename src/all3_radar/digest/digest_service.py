@@ -310,6 +310,12 @@ def _weekly_bucket(row: dict[str, object]) -> str:
             "production proof",
             "scaled manufacturing operations",
             "production lines",
+            "8 hour shifts",
+            "full factory style",
+            "factory style",
+            "without intervention",
+            "full shift",
+            "entire shift",
         ),
     ):
         return "physical_ai_proof"

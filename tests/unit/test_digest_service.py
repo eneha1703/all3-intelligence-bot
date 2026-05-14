@@ -99,3 +99,70 @@ def test_prepare_digest_rows_excludes_consumer_robotics_marketing_noise() -> Non
     prepared = _prepare_digest_rows(rows, limit=5)
 
     assert [row["canonical_event_id"] for row in prepared] == ["good-3"]
+
+
+def test_prepare_digest_rows_prioritizes_sustained_factory_operation_as_fifth_item() -> None:
+    rows = [
+        _row(
+            event_id="funding-1",
+            title="Mind Robotics raises funding for industrial robotics deployment",
+            score=82,
+            send_status="sent",
+            event_flags={"funding_event": True, "industrial_robotics_signal": True},
+        ) | {
+            "summary_text": "Physical industries platform opportunity with advanced manufacturing deployment."
+        },
+        _row(
+            event_id="timber-1",
+            title="22-storey mass timber pod hotel targets Vancouver's Howe Street",
+            score=78,
+            send_status="sent",
+            event_flags={"timber_strategic_signal": True},
+        ) | {
+            "summary_text": "A mass timber project with rezoning, urban site constraints and 408 units."
+        },
+        _row(
+            event_id="infra-1",
+            title="Xpanner lands $18M to automate construction sites",
+            score=77,
+            send_status="sent",
+            event_flags={"funding_event": True, "construction_innovation_signal": True},
+        ) | {
+            "summary_text": "A physical delivery problem for construction automation infrastructure."
+        },
+        _row(
+            event_id="robotics-1",
+            title="Comau and Omron partner on advanced industrial automation",
+            score=74,
+            send_status="sent",
+            event_flags={"industrial_robotics_signal": True, "partnership_event": True},
+        ) | {
+            "summary_text": "A construction robotics adjacent industrial automation platform signal."
+        },
+        _row(
+            event_id="proof-1",
+            title="Helix-02 robots now sustain full factory-style 8-hour shifts without intervention",
+            score=63,
+            send_status="stored_only",
+            event_flags={"industrial_robotics_signal": True},
+        ),
+        _row(
+            event_id="generic-1",
+            title="Industrial startup expands its automation offering",
+            score=91,
+            send_status="sent",
+            event_flags={"industrial_robotics_signal": True},
+        ) | {
+            "summary_text": "The company expanded its offering for industrial customers."
+        },
+    ]
+
+    prepared = _prepare_digest_rows(rows, limit=5)
+
+    assert [row["canonical_event_id"] for row in prepared] == [
+        "proof-1",
+        "timber-1",
+        "funding-1",
+        "infra-1",
+        "robotics-1",
+    ]
