@@ -19,4 +19,8 @@ def test_source_registry_loads_typed_sources() -> None:
     assert haufe_source.kind == SourceKind.LISTING
     assert haufe_source.parser == "haufe_immobilien"
     assert haufe_source.supports_first_slice is True
+    crunchbase_source = registry.get("crunchbase_news_listing")
+    assert crunchbase_source.enabled is True
+    assert crunchbase_source.kind == SourceKind.LISTING
+    assert crunchbase_source.parser == "crunchbase_news"
     assert registry.get("interesting_engineering_rss").enabled is True

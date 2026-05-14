@@ -9,6 +9,7 @@ from datetime import datetime
 from all3_radar.domain.models import CollectedRawItem, SourceDefinition
 from all3_radar.sources.base import FetchText, UnsupportedSourceError
 from all3_radar.sources.parsers.construction_news_intelligence import parse_construction_news_listing
+from all3_radar.sources.parsers.crunchbase_news import parse_crunchbase_news_listing
 from all3_radar.sources.parsers.destatis_press import parse_destatis_press_listing
 from all3_radar.sources.parsers.haufe_immobilien import parse_haufe_immobilien_listing
 from all3_radar.sources.parsers.humanoid_robotics_technology import parse_humanoid_robotics_listing
@@ -70,6 +71,13 @@ class ListingSourceAdapter:
             )
         if source.parser == "haufe_immobilien":
             return parse_haufe_immobilien_listing(
+                listing_html=listing_text,
+                source=effective_source,
+                collected_at=collected_at,
+                fetch_text_fn=self._fetch_text,
+            )
+        if source.parser == "crunchbase_news":
+            return parse_crunchbase_news_listing(
                 listing_html=listing_text,
                 source=effective_source,
                 collected_at=collected_at,

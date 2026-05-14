@@ -276,6 +276,23 @@ sources:
     api_path: /wp-json/wp/v2/posts?per_page=20
     tags: [timber, direct]
 
+  - id: crunchbase_news_listing
+    name: Crunchbase News
+    kind: listing
+    layer: direct
+    is_direct_source: true
+    is_wrapper: false
+    enabled: true
+    parser: crunchbase_news
+    url: https://news.crunchbase.com/sections/real-estate-property-tech/
+    priority: 68
+    article_limit: 12
+    listing_urls:
+      - https://news.crunchbase.com/robotics/
+    broad_feed: true
+    strict_scope: construction_timber_innovation
+    tags: [construction, robotics, funding]
+
   - id: humanoid_robotics_technology_listing
     name: Humanoid Robotics Technology
     kind: listing
