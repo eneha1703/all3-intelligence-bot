@@ -466,6 +466,21 @@ WOOD_CENTRAL_COMMERCIAL_BARRIER_TERMS = (
     "viable",
     "viability",
 )
+WOOD_CENTRAL_PROJECT_DELIVERY_TERMS = (
+    "project",
+    "development",
+    "tower",
+    "hotel",
+    "housing",
+    "apartment",
+    "apartments",
+    "storey",
+    "storeys",
+    "rezoning",
+    "planning application",
+    "rezoning application",
+    "units",
+)
 WHITESPACE_RE = re.compile(r"\s+")
 
 
@@ -581,6 +596,16 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         and _contains_any(haystack, WOOD_CENTRAL_MATERIAL_COMPARISON_TERMS)
         and _contains_any(haystack, WOOD_CENTRAL_QUANTIFIED_PERFORMANCE_TERMS)
     )
+    timber_project_delivery_signal = (
+        item.source_id == "wood_central_api"
+        and event_flags.get("timber_policy_signal", False)
+        and _contains_any(haystack, WOOD_CENTRAL_PROJECT_DELIVERY_TERMS)
+        and (
+            re.search(r"\b\d+\s*-\s*storey\b", haystack) is not None
+            or re.search(r"\b\d+\s*storey\b", haystack) is not None
+            or re.search(r"\b\d+\s*units?\b", haystack) is not None
+        )
+    )
     strategic_industrial_ai_alert_signal = (
         bool(item.metadata.get("broad_feed"))
         and event_flags.get("strategic_ai_major_deal_signal", False)
@@ -667,6 +692,7 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         or timber_adoption_barrier_signal
         or timber_economics_alert_signal
         or timber_performance_alert_signal
+        or timber_project_delivery_signal
         or strategic_industrial_ai_alert_signal
         or strategic_capability_acquisition_alert_signal
         or robot_ai_training_infrastructure_signal
@@ -696,6 +722,7 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         "timber_adoption_barrier_signal": timber_adoption_barrier_signal,
         "timber_economics_alert_signal": timber_economics_alert_signal,
         "timber_performance_alert_signal": timber_performance_alert_signal,
+        "timber_project_delivery_signal": timber_project_delivery_signal,
         "strategic_industrial_ai_alert_signal": strategic_industrial_ai_alert_signal,
         "strategic_capability_acquisition_alert_signal": strategic_capability_acquisition_alert_signal,
         "robot_ai_training_infrastructure_signal": robot_ai_training_infrastructure_signal,
