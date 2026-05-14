@@ -837,6 +837,23 @@ class RadarRepository:
             ).fetchone()
         return bool(row)
 
+    def has_manual_group_post_for_url(self, url: str) -> bool:
+        with connect(self.database_path) as connection:
+            row = connection.execute(
+                """
+                SELECT 1
+                FROM telegram_group_messages gm
+                LEFT JOIN telegram_group_message_links gml
+                  ON gml.chat_id = gm.chat_id
+                 AND gml.telegram_message_id = gm.telegram_message_id
+                WHERE gm.sent_by_bot = 0
+                  AND (gm.message_url = ? OR gml.url = ?)
+                LIMIT 1
+                """,
+                (url, url),
+            ).fetchone()
+        return bool(row)
+
     def load_recent_sent_alert_candidates(self, *, lookback_days: int = 7, limit: int = 200) -> list[dict[str, Any]]:
         with connect(self.database_path) as connection:
             rows = connection.execute(
@@ -967,6 +984,212 @@ class RadarRepository:
                     "title": str(row["title"]),
                     "published_ts": str(row["published_ts"]),
                     "sent_at": str(row["sent_at"]),
+                }
+        return None
+
+    def find_manual_group_post_for_same_funding_event(self, semantic_key: FundingSemanticKey) -> dict[str, Any] | None:
+        start_date = semantic_key.published_date.isoformat()
+        end_date = semantic_key.published_date.isoformat()
+        with connect(self.database_path) as connection:
+            rows = connection.execute(
+                """
+                WITH manual_group_urls AS (
+                  SELECT gm.chat_id,
+                         gm.telegram_message_id,
+                         gm.message_ts,
+                         gm.message_url AS url
+                  FROM telegram_group_messages gm
+                  WHERE gm.sent_by_bot = 0
+                    AND gm.message_url IS NOT NULL
+                  UNION
+                  SELECT gm.chat_id,
+                         gm.telegram_message_id,
+                         gm.message_ts,
+                         gml.url AS url
+                  FROM telegram_group_messages gm
+                  JOIN telegram_group_message_links gml
+                    ON gml.chat_id = gm.chat_id
+                   AND gml.telegram_message_id = gm.telegram_message_id
+                  WHERE gm.sent_by_bot = 0
+                ),
+                matched_items AS (
+                  SELECT DISTINCT
+                         mgu.chat_id,
+                         mgu.telegram_message_id,
+                         mgu.message_ts,
+                         ni.id AS normalized_item_id,
+                         rd.canonical_event_id,
+                         ni.canonical_url,
+                         ni.title,
+                         ni.text_preview,
+                         ni.published_ts,
+                         ri.url AS raw_url,
+                         rd.signals_json
+                  FROM manual_group_urls mgu
+                  JOIN raw_items ri
+                    ON ri.url = mgu.url
+                  JOIN normalized_items ni
+                    ON ni.raw_item_id = ri.id
+                  LEFT JOIN radar_decisions rd
+                    ON rd.normalized_item_id = ni.id
+                  UNION
+                  SELECT DISTINCT
+                         mgu.chat_id,
+                         mgu.telegram_message_id,
+                         mgu.message_ts,
+                         ni.id AS normalized_item_id,
+                         rd.canonical_event_id,
+                         ni.canonical_url,
+                         ni.title,
+                         ni.text_preview,
+                         ni.published_ts,
+                         ri.url AS raw_url,
+                         rd.signals_json
+                  FROM manual_group_urls mgu
+                  JOIN normalized_items ni
+                    ON ni.canonical_url = mgu.url
+                  LEFT JOIN raw_items ri
+                    ON ri.id = ni.raw_item_id
+                  LEFT JOIN radar_decisions rd
+                    ON rd.normalized_item_id = ni.id
+                )
+                SELECT *
+                FROM matched_items
+                WHERE published_ts IS NOT NULL
+                  AND date(published_ts) >= date(?, '-3 days')
+                  AND date(published_ts) <= date(?, '+3 days')
+                ORDER BY message_ts DESC, published_ts DESC, normalized_item_id ASC
+                """,
+                (start_date, end_date),
+            ).fetchall()
+
+        for row in rows:
+            signals = json.loads(row["signals_json"] or "{}")
+            event_flags = signals.get("event_flags", {})
+            if not isinstance(event_flags, dict):
+                event_flags = {}
+            previous_key = funding_key_from_text(
+                title=str(row["title"]),
+                preview=str(row["text_preview"]) if row["text_preview"] else None,
+                published_ts=datetime.fromisoformat(str(row["published_ts"])) if row["published_ts"] else None,
+                event_flags=event_flags,
+            )
+            if previous_key is None:
+                continue
+            if same_funding_event(semantic_key, previous_key):
+                return {
+                    "normalized_item_id": str(row["normalized_item_id"]),
+                    "canonical_event_id": str(row["canonical_event_id"]) if row["canonical_event_id"] else None,
+                    "canonical_url": str(row["canonical_url"]),
+                    "raw_url": str(row["raw_url"]) if row["raw_url"] else None,
+                    "title": str(row["title"]),
+                    "published_ts": str(row["published_ts"]),
+                    "message_ts": str(row["message_ts"]),
+                    "chat_id": str(row["chat_id"]),
+                    "telegram_message_id": str(row["telegram_message_id"]),
+                }
+        return None
+
+    def find_manual_group_post_for_same_deployment_event(self, semantic_key: DeploymentSemanticKey) -> dict[str, Any] | None:
+        start_date = semantic_key.published_date.isoformat()
+        end_date = semantic_key.published_date.isoformat()
+        with connect(self.database_path) as connection:
+            rows = connection.execute(
+                """
+                WITH manual_group_urls AS (
+                  SELECT gm.chat_id,
+                         gm.telegram_message_id,
+                         gm.message_ts,
+                         gm.message_url AS url
+                  FROM telegram_group_messages gm
+                  WHERE gm.sent_by_bot = 0
+                    AND gm.message_url IS NOT NULL
+                  UNION
+                  SELECT gm.chat_id,
+                         gm.telegram_message_id,
+                         gm.message_ts,
+                         gml.url AS url
+                  FROM telegram_group_messages gm
+                  JOIN telegram_group_message_links gml
+                    ON gml.chat_id = gm.chat_id
+                   AND gml.telegram_message_id = gm.telegram_message_id
+                  WHERE gm.sent_by_bot = 0
+                ),
+                matched_items AS (
+                  SELECT DISTINCT
+                         mgu.chat_id,
+                         mgu.telegram_message_id,
+                         mgu.message_ts,
+                         ni.id AS normalized_item_id,
+                         rd.canonical_event_id,
+                         ni.canonical_url,
+                         ni.title,
+                         ni.text_preview,
+                         ni.published_ts,
+                         ri.url AS raw_url,
+                         rd.signals_json
+                  FROM manual_group_urls mgu
+                  JOIN raw_items ri
+                    ON ri.url = mgu.url
+                  JOIN normalized_items ni
+                    ON ni.raw_item_id = ri.id
+                  LEFT JOIN radar_decisions rd
+                    ON rd.normalized_item_id = ni.id
+                  UNION
+                  SELECT DISTINCT
+                         mgu.chat_id,
+                         mgu.telegram_message_id,
+                         mgu.message_ts,
+                         ni.id AS normalized_item_id,
+                         rd.canonical_event_id,
+                         ni.canonical_url,
+                         ni.title,
+                         ni.text_preview,
+                         ni.published_ts,
+                         ri.url AS raw_url,
+                         rd.signals_json
+                  FROM manual_group_urls mgu
+                  JOIN normalized_items ni
+                    ON ni.canonical_url = mgu.url
+                  LEFT JOIN raw_items ri
+                    ON ri.id = ni.raw_item_id
+                  LEFT JOIN radar_decisions rd
+                    ON rd.normalized_item_id = ni.id
+                )
+                SELECT *
+                FROM matched_items
+                WHERE published_ts IS NOT NULL
+                  AND date(published_ts) >= date(?, '-7 days')
+                  AND date(published_ts) <= date(?, '+7 days')
+                ORDER BY message_ts DESC, published_ts DESC, normalized_item_id ASC
+                """,
+                (start_date, end_date),
+            ).fetchall()
+
+        for row in rows:
+            signals = json.loads(row["signals_json"] or "{}")
+            event_flags = signals.get("event_flags", {})
+            if not isinstance(event_flags, dict):
+                event_flags = {}
+            previous_key = deployment_key_from_text(
+                title=str(row["title"]),
+                preview=str(row["text_preview"]) if row["text_preview"] else None,
+                published_ts=datetime.fromisoformat(str(row["published_ts"])) if row["published_ts"] else None,
+                event_flags=event_flags,
+            )
+            if previous_key is None:
+                continue
+            if same_deployment_event(semantic_key, previous_key):
+                return {
+                    "normalized_item_id": str(row["normalized_item_id"]),
+                    "canonical_event_id": str(row["canonical_event_id"]) if row["canonical_event_id"] else None,
+                    "canonical_url": str(row["canonical_url"]),
+                    "raw_url": str(row["raw_url"]) if row["raw_url"] else None,
+                    "title": str(row["title"]),
+                    "published_ts": str(row["published_ts"]),
+                    "message_ts": str(row["message_ts"]),
+                    "chat_id": str(row["chat_id"]),
+                    "telegram_message_id": str(row["telegram_message_id"]),
                 }
         return None
 

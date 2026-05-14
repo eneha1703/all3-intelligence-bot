@@ -947,6 +947,9 @@ class RadarService:
                         and self.repository.has_sent_alert_for_event(context.cluster_assignment.canonical_event_id)
                     )
                     already_sent_url = self.repository.has_sent_alert_for_url(context.item.canonical_url)
+                    already_shared_manual_group_url = self.repository.has_manual_group_post_for_url(
+                        context.item.canonical_url
+                    )
                     context.decision = rank_item(
                         item=context.item,
                         competitor_count=competitor_count,
@@ -955,7 +958,9 @@ class RadarService:
                     )
                     funding_match = None
                     deployment_match = None
-                    if not already_sent_event and not already_sent_url:
+                    manual_group_funding_match = None
+                    manual_group_deployment_match = None
+                    if not already_sent_event and not already_sent_url and not already_shared_manual_group_url:
                         semantic_funding_key = funding_key_from_candidate(context.item, context.decision)
                         if semantic_funding_key is not None:
                             funding_match = self.repository.find_sent_alert_for_same_funding_event(semantic_funding_key)
@@ -967,6 +972,18 @@ class RadarService:
                                     funding_match["canonical_event_id"] or "<none>",
                                     funding_match["canonical_url"],
                                 )
+                            else:
+                                manual_group_funding_match = (
+                                    self.repository.find_manual_group_post_for_same_funding_event(semantic_funding_key)
+                                )
+                                if manual_group_funding_match is not None:
+                                    LOGGER.info(
+                                        "Manual group funding-memory suppression: item=%s previous_item=%s previous_event=%s previous_url=%s",
+                                        context.item.normalized_item_id,
+                                        manual_group_funding_match["normalized_item_id"],
+                                        manual_group_funding_match["canonical_event_id"] or "<none>",
+                                        manual_group_funding_match["canonical_url"],
+                                    )
                         if funding_match is None:
                             event_flags = context.decision.signals.get("event_flags", {})
                             if not isinstance(event_flags, dict):
@@ -989,11 +1006,28 @@ class RadarService:
                                         deployment_match["canonical_event_id"] or "<none>",
                                         deployment_match["canonical_url"],
                                     )
+                            elif semantic_deployment_key is not None and manual_group_funding_match is None:
+                                manual_group_deployment_match = (
+                                    self.repository.find_manual_group_post_for_same_deployment_event(
+                                        semantic_deployment_key
+                                    )
+                                )
+                                if manual_group_deployment_match is not None:
+                                    LOGGER.info(
+                                        "Manual group deployment-memory suppression: item=%s previous_item=%s previous_event=%s previous_url=%s",
+                                        context.item.normalized_item_id,
+                                        manual_group_deployment_match["normalized_item_id"],
+                                        manual_group_deployment_match["canonical_event_id"] or "<none>",
+                                        manual_group_deployment_match["canonical_url"],
+                                    )
                     context.already_sent = (
                         already_sent_event
                         or already_sent_url
+                        or already_shared_manual_group_url
                         or funding_match is not None
                         or deployment_match is not None
+                        or manual_group_funding_match is not None
+                        or manual_group_deployment_match is not None
                     )
                     if context.already_sent:
                         skip_reason = "already_sent_same_funding_event"
@@ -1001,8 +1035,14 @@ class RadarService:
                             skip_reason = "already_sent_canonical_event"
                         elif already_sent_url:
                             skip_reason = "already_sent_story_url"
+                        elif already_shared_manual_group_url:
+                            skip_reason = "already_shared_in_group_story_url"
                         elif deployment_match is not None:
                             skip_reason = "already_sent_same_deployment_event"
+                        elif manual_group_deployment_match is not None:
+                            skip_reason = "already_shared_in_group_same_deployment_event"
+                        elif manual_group_funding_match is not None:
+                            skip_reason = "already_shared_in_group_same_funding_event"
                         context.decision = RankedDecision(
                             relevance_status=context.decision.relevance_status,
                             send_status="skip",
@@ -1015,15 +1055,44 @@ class RadarService:
                                 "already_sent_story_url": already_sent_url,
                                 "already_sent_same_funding_event": funding_match is not None,
                                 "already_sent_same_deployment_event": deployment_match is not None,
+                                "already_shared_in_group_story_url": already_shared_manual_group_url,
+                                "already_shared_in_group_same_funding_event": manual_group_funding_match is not None,
+                                "already_shared_in_group_same_deployment_event": (
+                                    manual_group_deployment_match is not None
+                                ),
                                 "already_sent_previous_item_id": (
                                     funding_match["normalized_item_id"]
                                     if funding_match is not None
-                                    else (deployment_match["normalized_item_id"] if deployment_match is not None else None)
+                                    else (
+                                        deployment_match["normalized_item_id"]
+                                        if deployment_match is not None
+                                        else (
+                                            manual_group_funding_match["normalized_item_id"]
+                                            if manual_group_funding_match is not None
+                                            else (
+                                                manual_group_deployment_match["normalized_item_id"]
+                                                if manual_group_deployment_match is not None
+                                                else None
+                                            )
+                                        )
+                                    )
                                 ),
                                 "already_sent_previous_event_id": (
                                     funding_match["canonical_event_id"]
                                     if funding_match is not None
-                                    else (deployment_match["canonical_event_id"] if deployment_match is not None else None)
+                                    else (
+                                        deployment_match["canonical_event_id"]
+                                        if deployment_match is not None
+                                        else (
+                                            manual_group_funding_match["canonical_event_id"]
+                                            if manual_group_funding_match is not None
+                                            else (
+                                                manual_group_deployment_match["canonical_event_id"]
+                                                if manual_group_deployment_match is not None
+                                                else None
+                                            )
+                                        )
+                                    )
                                 ),
                             },
                             is_shortlisted=False,
