@@ -450,6 +450,9 @@ WOOD_CENTRAL_TIMBER_POLICY_TERMS = {
     "approval",
     "approvals",
     "approval pathway",
+    "rezoning",
+    "rezoning application",
+    "planning application",
     "permitting",
     "insurance",
     "insurers",
@@ -535,11 +538,14 @@ TIMBER_CONSTRUCTION_KEEP_TERMS = {
     "factory-built housing",
 }
 GERMANY_HOUSING_MARKET_TERMS = {
+    "immobilienpreisindex",
+    "preisindex",
     "wohnungsmarkt",
     "wohnungsbau",
     "wohnungsmangel",
     "wohnungsnot",
     "wohnungen",
+    "wohneigentum",
     "überbelegten wohnungen",
     "uberbelegten wohnungen",
     "overcrowded dwellings",
@@ -570,6 +576,20 @@ GERMANY_HOUSING_MARKET_TERMS = {
     "house prices",
     "apartment market",
     "affordable housing",
+}
+GERMANY_HOUSING_POLICY_TERMS = {
+    "koalition",
+    "senat",
+    "gesetz",
+    "einfaches bauen",
+    "wohnungsnot",
+    "wohnungsbau",
+    "wohnraum",
+    "wohnraummangel",
+    "housing shortage",
+    "housing supply",
+    "building law",
+    "planning reform",
 }
 UK_HOUSING_MARKET_TERMS = {
     "housing market",
@@ -654,6 +674,7 @@ UK_CONSTRUCTION_OFF_SCOPE_SECTOR_TERMS = {
 MARKET_SIGNAL_TERMS = {
     "%",
     "index",
+    "preisindex",
     "finanzierungsindex",
     "immobilienfinanzierungsindex",
     "difi",
@@ -671,6 +692,9 @@ MARKET_SIGNAL_TERMS = {
     "increased",
     "higher",
     "lower",
+    "verteuert",
+    "verteuerung",
+    "teurer",
     "shortfall",
     "shortage",
     "demand",
@@ -838,8 +862,11 @@ def is_housing_market_signal(item: StoredNormalizedItem) -> bool:
     if market_scope not in {"germany_housing_market", "uk_housing_market"}:
         return False
     haystack = _normalize_text(f"{item.title} {item.text_preview or ''}")
-    terms = GERMANY_HOUSING_MARKET_TERMS if market_scope == "germany_housing_market" else UK_HOUSING_MARKET_TERMS
-    return has_any_term(haystack, terms) and has_any_term(haystack, MARKET_SIGNAL_TERMS)
+    if market_scope == "germany_housing_market":
+        return has_any_term(haystack, GERMANY_HOUSING_MARKET_TERMS) and (
+            has_any_term(haystack, MARKET_SIGNAL_TERMS) or has_any_term(haystack, GERMANY_HOUSING_POLICY_TERMS)
+        )
+    return has_any_term(haystack, UK_HOUSING_MARKET_TERMS) and has_any_term(haystack, MARKET_SIGNAL_TERMS)
 
 
 def is_construction_news_intelligence_signal(item: StoredNormalizedItem) -> bool:

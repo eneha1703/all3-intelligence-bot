@@ -6,23 +6,26 @@ import json
 import urllib.error
 import urllib.parse
 import urllib.request
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 class GeminiUnavailableError(RuntimeError):
     """Raised when Gemini is not configured or fails."""
 
 
-@dataclass(frozen=True)
+@dataclass
 class GeminiClient:
     api_key: str | None
     model: str
+    _disabled_reason: str | None = field(default=None, init=False, repr=False)
 
     @property
     def is_available(self) -> bool:
-        return bool(self.api_key)
+        return bool(self.api_key) and self._disabled_reason is None
 
     def _generate_text(self, prompt: str) -> str:
+        if self._disabled_reason is not None:
+            raise GeminiUnavailableError(self._disabled_reason)
         if not self.api_key:
             raise GeminiUnavailableError("GEMINI_API_KEY is not configured.")
 
@@ -40,6 +43,10 @@ class GeminiClient:
         try:
             with urllib.request.urlopen(request, timeout=30) as response:
                 body = json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            if exc.code == 429:
+                self._disabled_reason = "Gemini disabled for run after HTTP 429 rate limit."
+            raise GeminiUnavailableError(f"Gemini request failed: {exc}") from exc
         except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError) as exc:
             raise GeminiUnavailableError(f"Gemini request failed: {exc}") from exc
 

@@ -222,6 +222,48 @@ def test_haufe_germany_housing_finance_index_signal_is_detected() -> None:
     assert is_housing_market_signal(item) is True
 
 
+def test_haufe_germany_housing_price_index_signal_is_detected() -> None:
+    item = _make_item(
+        "vdp-Immobilienpreisindex: Wohneigentum verteuert sich weiter",
+        "Der Preisindex zeigt weiter steigende Kaufpreise am deutschen Wohnungsmarkt.",
+        broad_feed=True,
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "source_id": "haufe_immobilien_listing",
+            "metadata": {"tags": ["construction", "germany"], "broad_feed": True, "market_scope": "germany_housing_market"},
+        }
+    )
+
+    assert is_housing_market_signal(item) is True
+
+
+def test_haufe_germany_housing_policy_story_keeps_scope() -> None:
+    item = _make_item(
+        "Neue Koalition will Wohnungsnot angehen",
+        "Die Koalition will mit einem Gesetz fuer einfaches Bauen den Wohnungsbau beschleunigen.",
+        broad_feed=True,
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "source_id": "haufe_immobilien_listing",
+            "metadata": {"tags": ["construction", "germany"], "broad_feed": True, "market_scope": "germany_housing_market"},
+        }
+    )
+
+    status, reason = compute_relevance_status(
+        item=item,
+        competitor_count=0,
+        freshness_is_fresh=True,
+        event_flags=derive_event_flags(item),
+    )
+
+    assert status == "keep"
+    assert reason is None
+
+
 def test_uk_housing_market_story_from_broad_feed_keeps_scope() -> None:
     item = _make_item(
         "UK housing shortage deepens as completions fall and rents rise",
@@ -295,6 +337,17 @@ def test_wood_central_timber_policy_signal_is_detected() -> None:
     item = _make_item(
         "Architects, insurers open new front on English timber cap",
         "Architects and insurers have raised fresh concerns over England's timber height cap and standards.",
+        broad_feed=False,
+    )
+    item = StoredNormalizedItem(**{**item.__dict__, "source_id": "wood_central_api"})
+
+    assert is_wood_central_timber_policy_signal(item) is True
+
+
+def test_wood_central_mass_timber_rezoning_signal_is_detected() -> None:
+    item = _make_item(
+        "22-Storey Mass Timber Pod Hotel Targets Vancouver's Howe Street",
+        "The 408-unit project has now entered Vancouver's rezoning process with a formal application.",
         broad_feed=False,
     )
     item = StoredNormalizedItem(**{**item.__dict__, "source_id": "wood_central_api"})

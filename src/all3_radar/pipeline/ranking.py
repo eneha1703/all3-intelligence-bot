@@ -569,6 +569,7 @@ def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
         "physical_industry_ai_megafunding_signal": physical_industry_ai_megafunding_signal,
         "showcase_only_architecture_penalty": timber_present
         and _contains_any(haystack, SHOWCASE_TIMBER_TERMS)
+        and not timber_policy_signal
         and not timber_strategic
         and not adaptive_reuse_housing_delivery_signal,
         "consumer_robotics_penalty": False,

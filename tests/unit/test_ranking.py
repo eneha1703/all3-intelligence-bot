@@ -145,6 +145,28 @@ def test_telegraph_housing_market_story_gets_market_signal_and_score_lift() -> N
     assert decision.score == 37
 
 
+def test_haufe_housing_policy_story_gets_market_signal_and_score_lift() -> None:
+    item = _make_item(
+        "Neue Koalition will Wohnungsnot angehen",
+        "Die Koalition will mit einem Gesetz fuer einfaches Bauen den Wohnungsbau beschleunigen.",
+        broad_feed=True,
+        source_id="haufe_immobilien_listing",
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "metadata": {"tags": ["construction", "germany"], "broad_feed": True, "market_scope": "germany_housing_market"},
+        }
+    )
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["housing_market_signal"] is True
+    assert decision.relevance_status == "keep"
+    assert decision.score == 37
+
+
 def test_interesting_engineering_robotics_story_gets_scope_signal() -> None:
     item = _make_item(
         "Humanoid robot platform expands industrial automation deployments",
@@ -627,6 +649,23 @@ def test_wood_central_fast_olympic_village_conversion_is_not_showcase_noise() ->
     assert flags["showcase_only_architecture_penalty"] is False
     assert decision.relevance_status == "keep"
     assert decision.score >= 28
+
+
+def test_wood_central_mass_timber_rezoning_project_avoids_showcase_penalty() -> None:
+    item = _make_item(
+        "22-Storey Mass Timber Pod Hotel Targets Vancouver's Howe Street",
+        "The 408-unit project has entered Vancouver's rezoning process through a formal application.",
+        broad_feed=False,
+        source_id="wood_central_api",
+    )
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["timber_policy_signal"] is True
+    assert flags["showcase_only_architecture_penalty"] is False
+    assert decision.relevance_status == "keep"
+    assert decision.score >= 51
 
 
 def test_broad_feed_national_robotics_strategy_is_strong_scope() -> None:
