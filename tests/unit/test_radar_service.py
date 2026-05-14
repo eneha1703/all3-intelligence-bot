@@ -6,6 +6,7 @@ from all3_radar.pipeline.radar_service import (
     CurrentRunContext,
     _is_allowed_medium_claude_editorial_promotion,
     _should_fallback_after_claude_final_card_rejection,
+    _should_fallback_to_editorial_promotion_after_final_card_invalid_output,
     _should_drop_after_claude_final_card_error,
     _should_protect_from_high_confidence_claude_editorial_rejection,
     _should_skip_claude_final_card,
@@ -241,3 +242,35 @@ def test_non_robotics_funding_story_does_not_fallback_after_thin_final_card_reje
     )
 
     assert _should_fallback_after_claude_final_card_rejection(context) is False
+
+
+def test_editorial_promotion_can_fallback_after_final_card_invalid_output() -> None:
+    context = _make_context(
+        title="Exclusive: Xpanner Lands $18M To Offer Automation As A Service To Construction Sites",
+        preview="Xpanner, a startup automating construction work through robotics and physical AI technology, has raised $18 million in a Series B round.",
+        source_id="crunchbase_news_listing",
+        metadata={"broad_feed": True, "tags": ["construction", "robotics", "funding"]},
+        event_flags={
+            "funding_event": True,
+            "industrial_robotics_signal": True,
+            "physical_industry_ai_megafunding_signal": True,
+            "quantified_scale_signal": True,
+        },
+        editorial_flags={"telegram_worthy": True, "strategic_industrial_ai_alert_signal": True},
+        score=66,
+    )
+    context.decision = RankedDecision(
+        relevance_status=context.decision.relevance_status,
+        send_status=context.decision.send_status,
+        skip_reason=context.decision.skip_reason,
+        score=context.decision.score,
+        signals={**context.decision.signals, "claude_editorial_promoted": True},
+        is_shortlisted=context.decision.is_shortlisted,
+        is_borderline=context.decision.is_borderline,
+    )
+    context.final_headline = "Xpanner raises $18M for construction-site automation"
+    context.final_summary_text = (
+        "Xpanner has raised $18 million in a Series B round to expand robotics and physical AI systems for construction-site automation."
+    )
+
+    assert _should_fallback_to_editorial_promotion_after_final_card_invalid_output(context) is True

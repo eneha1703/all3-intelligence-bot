@@ -585,6 +585,21 @@ def _should_fallback_after_claude_final_card_rejection(
     return False
 
 
+def _should_fallback_to_editorial_promotion_after_final_card_invalid_output(
+    context: CurrentRunContext,
+) -> bool:
+    if context.decision is None:
+        return False
+    if not context.decision.signals.get("claude_editorial_promoted", False):
+        return False
+    if not context.final_headline or not context.final_summary_text:
+        return False
+    editorial_flags = context.decision.signals.get("editorial_flags", {})
+    if not isinstance(editorial_flags, dict):
+        return False
+    return bool(editorial_flags.get("telegram_worthy", False))
+
+
 def _settings_snapshot(settings: object) -> dict:
     snapshot = asdict(settings)
     snapshot["app"]["database_path"] = str(snapshot["app"]["database_path"])
@@ -1493,6 +1508,23 @@ class RadarService:
                     except ClaudeFinalCardUnavailableError as exc:
                         reason = str(exc)
                         if _should_drop_after_claude_final_card_error(reason):
+                            if _should_fallback_to_editorial_promotion_after_final_card_invalid_output(context):
+                                increment_stage_counter("claude_final_card_fallback")
+                                _with_context_signals(
+                                    context,
+                                    claude_final_card_reviewed=True,
+                                    claude_final_card_outcome="fallback_editorial_promotion",
+                                    claude_final_card_reason=reason,
+                                    final_card_title_source="claude_editorial_promotion",
+                                    final_card_summary_source="claude_editorial_promotion",
+                                )
+                                LOGGER.warning(
+                                    "Claude final-card invalid output fallback to editorial promotion: item=%s reason=%s",
+                                    context.item.normalized_item_id,
+                                    reason,
+                                )
+                                filtered_sendable_contexts.append(context)
+                                continue
                             increment_stage_counter("claude_final_card_rejected")
                             context.decision = RankedDecision(
                                 relevance_status=context.decision.relevance_status,
