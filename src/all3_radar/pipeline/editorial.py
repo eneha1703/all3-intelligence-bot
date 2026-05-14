@@ -106,6 +106,18 @@ OPERATIONAL_DETAIL_TERMS = (
     "automation systems",
     "factory automation systems",
 )
+SUSTAINED_FACTORY_OPERATION_TERMS = (
+    "8-hour shift",
+    "8-hour shifts",
+    "8 hour shift",
+    "8 hour shifts",
+    "full shift",
+    "full shifts",
+    "without intervention",
+    "factory-style",
+    "factory style",
+    "continuous operation",
+)
 CONSTRUCTION_EXECUTION_TERMS = (
     "modular",
     "prefab",
@@ -623,6 +635,16 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
             or _contains_any(haystack, ("manufacturing", "factory", "production", "industrial"))
         )
     )
+    sustained_factory_operation_signal = (
+        event_flags.get("industrial_robotics_signal", False)
+        and operational_detail
+        and _contains_any(haystack, SUSTAINED_FACTORY_OPERATION_TERMS)
+        and (
+            _contains_any(haystack, ("factory", "manufacturing", "production"))
+            or re.search(r"\b\d+\s*-\s*hour\b", haystack) is not None
+            or re.search(r"\b\d+\s*hour\b", haystack) is not None
+        )
+    )
     tangible_operational_signal = operational_detail or construction_execution or industrial_relevance
     product_or_platform_news = product_launch and tangible_operational_signal and (
         industrial_relevance or construction_execution or competitor_count > 0
@@ -647,6 +669,7 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         or national_robotics_strategy_signal
         or robot_safety_governance_signal
         or industrial_automation_partnership_signal
+        or sustained_factory_operation_signal
     )
 
     flags = {
@@ -675,6 +698,7 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         "national_robotics_strategy_signal": national_robotics_strategy_signal,
         "robot_safety_governance_signal": robot_safety_governance_signal,
         "industrial_automation_partnership_signal": industrial_automation_partnership_signal,
+        "sustained_factory_operation_signal": sustained_factory_operation_signal,
         "tangible_operational_signal": tangible_operational_signal,
         "telegram_worthy": telegram_worthy,
     }

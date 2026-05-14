@@ -228,6 +228,25 @@ def test_editorial_shaping_keeps_heavy_industrial_autonomy_story() -> None:
     assert editorial.flags["telegram_worthy"] is True
 
 
+def test_editorial_shaping_keeps_sustained_factory_operation_story() -> None:
+    item = _make_item(
+        "Helix-02 robots now sustain full factory-style 8-hour shifts without intervention",
+        "Figure says the humanoid robots can sustain full factory-style 8-hour shifts without intervention across manufacturing tasks.",
+        source_id="interesting_engineering_rss",
+    )
+    item = StoredNormalizedItem(
+        **{**item.__dict__, "metadata": {"broad_feed": True, "strict_scope": "industrial_robotics_physical_ai"}}
+    )
+    decision = _make_decision(industrial_robotics_signal=True, interesting_engineering_scope_signal=True)
+
+    editorial = evaluate_send_stage_editorial(item, decision)
+
+    assert editorial.allow_send is True
+    assert editorial.reason is None
+    assert editorial.flags["sustained_factory_operation_signal"] is True
+    assert editorial.flags["telegram_worthy"] is True
+
+
 def test_editorial_shaping_keeps_short_humanoid_affordability_preview() -> None:
     item = _make_item(
         "China's Unitree reshapes entry-level humanoid robot market with $4,290 droid",
