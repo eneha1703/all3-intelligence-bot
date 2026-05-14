@@ -23,4 +23,5 @@ def test_source_registry_loads_typed_sources() -> None:
     assert crunchbase_source.enabled is True
     assert crunchbase_source.kind == SourceKind.LISTING
     assert crunchbase_source.parser == "crunchbase_news"
+    assert crunchbase_source.supports_first_slice is True
     assert registry.get("interesting_engineering_rss").enabled is True

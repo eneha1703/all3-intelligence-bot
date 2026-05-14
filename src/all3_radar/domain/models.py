@@ -35,7 +35,13 @@ class SourceDefinition:
             or (
                 self.kind == SourceKind.LISTING
                 and self.parser
-                in {"destatis_press", "humanoid_robotics_technology", "construction_news_intelligence", "haufe_immobilien"}
+                in {
+                    "destatis_press",
+                    "humanoid_robotics_technology",
+                    "construction_news_intelligence",
+                    "haufe_immobilien",
+                    "crunchbase_news",
+                }
             )
             or (self.kind == SourceKind.API and self.parser == "wood_central_api")
         )
