@@ -5,13 +5,33 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from all3_radar.domain.enums import FreshnessStatus
-from all3_radar.domain.models import FreshnessEvaluation
+from all3_radar.domain.models import FreshnessEvaluation, NormalizedItem, StoredNormalizedItem
+
+HAUFE_HOUSING_FRESHNESS_TERMS = (
+    "immobilienpreisindex",
+    "wohneigentum",
+    "wohnungsnot",
+    "wohnungsbau",
+    "einfaches bauen",
+    "wohnungsmarkt",
+)
 
 
 def _to_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value.astimezone(timezone.utc)
+
+
+def resolve_lookback_hours(item: NormalizedItem | StoredNormalizedItem, default_hours: int) -> int:
+    market_scope = str(item.metadata.get("market_scope") or "").strip().lower()
+    if item.source_id != "haufe_immobilien_listing" or market_scope != "germany_housing_market":
+        return default_hours
+
+    haystack = f"{item.title} {item.text_preview or ''}".lower()
+    if any(term in haystack for term in HAUFE_HOUSING_FRESHNESS_TERMS):
+        return max(default_hours, 48)
+    return default_hours
 
 
 def evaluate_freshness(

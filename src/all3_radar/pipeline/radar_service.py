@@ -30,7 +30,7 @@ from all3_radar.pipeline.competitors import detect_competitor_matches, load_comp
 from all3_radar.pipeline.deployment_event_key import deployment_key_from_text
 from all3_radar.pipeline.dedupe import ClusterResult, ClusterableRecord, cluster_records
 from all3_radar.pipeline.editorial import evaluate_send_stage_editorial
-from all3_radar.pipeline.freshness import evaluate_freshness
+from all3_radar.pipeline.freshness import evaluate_freshness, resolve_lookback_hours
 from all3_radar.pipeline.funding_sent_history import funding_key_from_candidate
 from all3_radar.pipeline.normalize import normalize_collected_item
 from all3_radar.pipeline.ranking import load_ranking_rules, rank_item
@@ -800,7 +800,7 @@ class RadarService:
                         published_ts=normalized.published_ts,
                         collected_ts=normalized.collected_ts,
                         now=now,
-                        lookback_hours=self.settings.radar.lookback_hours,
+                        lookback_hours=resolve_lookback_hours(normalized, self.settings.radar.lookback_hours),
                         require_published_ts=self.settings.radar.require_published_ts,
                         allow_collected_at_fallback=self.settings.radar.allow_collected_at_fallback,
                     )
