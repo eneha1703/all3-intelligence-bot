@@ -464,7 +464,9 @@ def _prepare_digest_rows(rows: list[dict[str, object]], *, limit: int) -> list[d
     emergency_backfill_rows = [
         row
         for row in remaining_rows
-        if str(row["canonical_event_id"]) not in seen_ids and not _is_ineligible_weekly_candidate(row)
+        if str(row["canonical_event_id"]) not in seen_ids
+        and not _is_ineligible_weekly_candidate(row)
+        and not _is_obvious_weekly_noise(row)
     ]
     prepared.extend(_dedupe_semantic_digest_rows(_sort_digest_rows(emergency_backfill_rows)))
     return _dedupe_semantic_digest_rows(prepared)[:limit]
@@ -766,6 +768,10 @@ class DigestService:
                 if bool(row.get("manual_shortlist_signal")) or bool(row.get("manual_digest_force_include"))
             )
             candidates = hydrate_digest_candidates(rows)
+            if self._weekly_group_chat_ids() and len(candidates) < self.settings.digest.stories_per_digest:
+                raise ValueError(
+                    f"Only {len(candidates)} eligible group stories available for weekly digest in {normalized_week_key}."
+                )
             shortlist_payload = json.dumps(
                 [
                     {
