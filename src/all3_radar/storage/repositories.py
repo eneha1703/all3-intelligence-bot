@@ -322,6 +322,102 @@ class RadarRepository:
                 ).fetchall()
         return [dict(row) for row in rows]
 
+    def load_telegram_sent_digest_candidates_for_week(
+        self,
+        *,
+        start_date: str,
+        end_date: str,
+        chat_ids: tuple[str, ...],
+        limit: int,
+        require_canonical_events: bool,
+    ) -> list[dict[str, Any]]:
+        if not chat_ids:
+            return []
+        placeholders = ",".join("?" for _ in chat_ids)
+        with connect(self.database_path) as connection:
+            if require_canonical_events:
+                rows = connection.execute(
+                    f"""
+                    WITH delivered AS (
+                        SELECT COALESCE(td.canonical_event_id, rd.canonical_event_id) AS canonical_event_id,
+                               MAX(td.created_at) AS last_sent_at
+                        FROM telegram_deliveries td
+                        JOIN radar_decisions rd
+                          ON rd.normalized_item_id = td.normalized_item_id
+                        WHERE td.bot_kind = 'alert'
+                          AND td.status = 'sent'
+                          AND td.chat_id IN ({placeholders})
+                          AND date(td.created_at) >= date(?)
+                          AND date(td.created_at) <= date(?)
+                          AND COALESCE(td.canonical_event_id, rd.canonical_event_id) IS NOT NULL
+                        GROUP BY COALESCE(td.canonical_event_id, rd.canonical_event_id)
+                    )
+                    SELECT ce.id AS canonical_event_id,
+                           ni.id AS normalized_item_id,
+                           ni.source_id,
+                           ni.title,
+                           ni.canonical_url,
+                           ni.published_ts,
+                           rd.score,
+                           'sent' AS send_status,
+                           rd.skip_reason,
+                           rd.summary_text,
+                           rd.signals_json
+                    FROM delivered d
+                    JOIN canonical_events ce
+                      ON ce.id = d.canonical_event_id
+                    JOIN normalized_items ni
+                      ON ni.id = ce.representative_item_id
+                    JOIN radar_decisions rd
+                      ON rd.normalized_item_id = ni.id
+                    WHERE ce.representative_item_id IS NOT NULL
+                      AND rd.relevance_status = 'keep'
+                    ORDER BY d.last_sent_at DESC, rd.score DESC, ni.title ASC
+                    LIMIT ?
+                    """,
+                    (*chat_ids, start_date, end_date, limit),
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    f"""
+                    WITH delivered AS (
+                        SELECT COALESCE(td.canonical_event_id, rd.canonical_event_id, td.normalized_item_id) AS candidate_key,
+                               MAX(td.created_at) AS last_sent_at,
+                               MAX(td.normalized_item_id) AS normalized_item_id
+                        FROM telegram_deliveries td
+                        JOIN radar_decisions rd
+                          ON rd.normalized_item_id = td.normalized_item_id
+                        WHERE td.bot_kind = 'alert'
+                          AND td.status = 'sent'
+                          AND td.chat_id IN ({placeholders})
+                          AND date(td.created_at) >= date(?)
+                          AND date(td.created_at) <= date(?)
+                        GROUP BY COALESCE(td.canonical_event_id, rd.canonical_event_id, td.normalized_item_id)
+                    )
+                    SELECT COALESCE(rd.canonical_event_id, ni.id) AS canonical_event_id,
+                           ni.id AS normalized_item_id,
+                           ni.source_id,
+                           ni.title,
+                           ni.canonical_url,
+                           ni.published_ts,
+                           rd.score,
+                           'sent' AS send_status,
+                           rd.skip_reason,
+                           rd.summary_text,
+                           rd.signals_json
+                    FROM delivered d
+                    JOIN normalized_items ni
+                      ON ni.id = d.normalized_item_id
+                    JOIN radar_decisions rd
+                      ON rd.normalized_item_id = ni.id
+                    WHERE rd.relevance_status = 'keep'
+                    ORDER BY d.last_sent_at DESC, rd.score DESC, ni.title ASC
+                    LIMIT ?
+                    """,
+                    (*chat_ids, start_date, end_date, limit),
+                ).fetchall()
+        return [dict(row) for row in rows]
+
     def upsert_canonical_event(self, assignment: ClusterAssignment, members: list[str], published_values: list[datetime | None]) -> None:
         first_published = min((value for value in published_values if value is not None), default=None)
         last_published = max((value for value in published_values if value is not None), default=None)

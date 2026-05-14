@@ -684,6 +684,49 @@ def test_digest_shortlist_includes_telegram_reaction_candidates(monkeypatch, tmp
     assert shortlist_json is not None
 
 
+def test_digest_shortlist_prefers_group_sent_deliveries_before_general_pool(monkeypatch, tmp_path) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "digest.db"
+    schema_path = repo_root / "src" / "all3_radar" / "storage" / "schema.sql"
+    _seed_digest_db(db_path, schema_path)
+
+    repository = RadarRepository(db_path)
+    with sqlite3.connect(db_path) as connection:
+        now = "2026-04-30T10:00:00+00:00"
+        connection.execute("UPDATE radar_decisions SET send_status = 'sent' WHERE normalized_item_id = 'item-5'")
+        deliveries = [
+            ("td-1", "item-1", "event-1", "-100123", "m1"),
+            ("td-2", "item-2", "event-2", "-100123", "m2"),
+            ("td-3", "item-5", "event-5", "-100123", "m3"),
+            ("td-4", "item-12", "event-12", "-100123", "m4"),
+            ("td-5", "item-15", "event-15", "-100123", "m5"),
+            ("td-6", "item-13", "event-13", "251263078", "m6"),
+        ]
+        for delivery_id, item_id, event_id, chat_id, message_id in deliveries:
+            connection.execute(
+                """
+                INSERT INTO telegram_deliveries (
+                  id, bot_kind, run_id, normalized_item_id, canonical_event_id, chat_id,
+                  telegram_message_id, status, payload_text, error_text, created_at
+                )
+                VALUES (?, 'alert', 'radar-run-1', ?, ?, ?, ?, 'sent', '', NULL, ?)
+                """,
+                (delivery_id, item_id, event_id, chat_id, message_id, now),
+            )
+        connection.commit()
+
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("CLAUDE_DIGEST_ENABLED", "false")
+    monkeypatch.setenv("TELEGRAM_ALERT_CHAT_IDS", "251263078,-100123")
+
+    service = DigestService(repo_root=repo_root, repository=repository)
+    result = service.build_shortlist("2026-W18")
+
+    candidate_ids = {candidate.canonical_event_id for candidate in result.candidates}
+    assert {"event-1", "event-2", "event-5", "event-12", "event-15"}.issubset(candidate_ids)
+    assert "event-13" not in candidate_ids
+
+
 
 
 def test_digest_build_forces_manual_override_candidate_into_final_selection(monkeypatch, tmp_path) -> None:
