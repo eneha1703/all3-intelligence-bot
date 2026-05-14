@@ -62,3 +62,26 @@ def test_build_claude_writer_prompt_includes_house_style_and_examples() -> None:
     assert "Mercer Mass Timber Offers Free CLT Design Tool" in prompt
     assert "Figure's humanoids are now making beds, not building cars" in prompt
     assert "worth noting" in prompt
+
+
+def test_build_claude_writer_prompt_uses_actual_selected_item_count() -> None:
+    window = resolve_digest_window("2026-W20")
+    candidates = [
+        DigestCandidate(
+            canonical_event_id=f"event-{idx}",
+            normalized_item_id=f"item-{idx}",
+            source_id="source",
+            title=f"Example title {idx}",
+            canonical_url=f"https://example.com/story-{idx}",
+            published_ts=None,
+            score=60,
+            summary_text="Example summary",
+            event_flags={"robotics": True},
+        )
+        for idx in range(1, 5)
+    ]
+
+    prompt = build_claude_writer_prompt(window, candidates)
+
+    assert "Use exactly 4 items" in prompt
+    assert "Do not create synthetic wrap-up items" in prompt

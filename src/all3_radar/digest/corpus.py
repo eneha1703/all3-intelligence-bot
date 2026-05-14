@@ -227,6 +227,7 @@ def build_claude_selection_prompt(
 
 
 def build_claude_writer_prompt(window: DigestWindow, candidates: list[DigestCandidate]) -> str:
+    item_count = len(candidates)
     payload = [
         {
             "canonical_event_id": candidate.canonical_event_id,
@@ -251,7 +252,9 @@ def build_claude_writer_prompt(window: DigestWindow, candidates: list[DigestCand
             "Be concise, analytical, natural, and non-hyped.",
             "Sound like a sharp human editor, not a consultant memo and not an AI summary engine.",
             "Do not sound like an AI assistant, a press release, or a database recap.",
-            "Use exactly 5 items and keep each item to one compact paragraph.",
+            f"Use exactly {item_count} items and keep each item to one compact paragraph.",
+            "Write one item per selected story only.",
+            "Do not create synthetic wrap-up items or combine multiple selected stories into one extra item.",
             "Aim for roughly 55 to 90 words per item.",
             "Prefer 2 to 4 sentences per item.",
             "The first line must be the digest title exactly as provided.",
