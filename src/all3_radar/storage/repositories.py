@@ -278,6 +278,7 @@ class RadarRepository:
                            ni.published_ts,
                            rd.score,
                            rd.send_status,
+                           rd.skip_reason,
                            rd.summary_text,
                            rd.signals_json
                     FROM canonical_events ce
@@ -304,6 +305,7 @@ class RadarRepository:
                            ni.published_ts,
                            rd.score,
                            rd.send_status,
+                           rd.skip_reason,
                            rd.summary_text,
                            rd.signals_json
                     FROM normalized_items ni
