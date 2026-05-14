@@ -1,6 +1,6 @@
 import json
 
-from all3_radar.digest.digest_service import _prepare_digest_rows
+from all3_radar.digest.digest_service import _prefer_sent_digest_rows, _prepare_digest_rows
 
 
 def _row(
@@ -213,3 +213,61 @@ def test_prepare_digest_rows_emergency_backfills_to_five_items() -> None:
 
     assert len(prepared) == 5
     assert [row["canonical_event_id"] for row in prepared][-1] == "fallback-5"
+
+
+def test_prefer_sent_digest_rows_uses_sent_stories_before_stored_only() -> None:
+    rows = [
+        _row(
+            event_id="sent-1",
+            title="Flo Mobility raises funding for construction robotics",
+            score=86,
+            send_status="sent",
+            event_flags={"funding_event": True, "construction_innovation_signal": True},
+        ) | {"summary_text": "Construction robotics funding with deployment expansion."},
+        _row(
+            event_id="sent-2",
+            title="Xpanner lands $18M to automate construction sites",
+            score=77,
+            send_status="sent",
+            event_flags={"funding_event": True, "construction_innovation_signal": True},
+        ) | {"summary_text": "A physical delivery problem for construction automation."},
+        _row(
+            event_id="sent-3",
+            title="Mind Robotics raises $400M for factory AI robots",
+            score=66,
+            send_status="sent",
+            event_flags={"funding_event": True, "industrial_robotics_signal": True},
+        ) | {"summary_text": "Industrial robotics deployment in factory environments."},
+        _row(
+            event_id="sent-4",
+            title="Comau partners with Omron on industrial automation",
+            score=69,
+            send_status="sent",
+            event_flags={"partnership_event": True, "industrial_robotics_signal": True},
+        ) | {"summary_text": "Advanced industrial automation across manufacturing."},
+        _row(
+            event_id="stored-1",
+            title="Tech's hottest job: Documentary filmmaker",
+            score=58,
+            send_status="stored_only",
+            skip_reason="claude_final_card_rejected",
+            event_flags={"funding_event": True, "product_launch_event": True},
+        ) | {
+            "summary_text": "A consumer robotics startup has launched a founder documentary and launch video."
+        },
+        _row(
+            event_id="stored-2",
+            title="Helix-02 robots now sustain full factory-style 8-hour shifts without intervention",
+            score=63,
+            send_status="stored_only",
+            event_flags={"industrial_robotics_signal": True},
+        ),
+    ]
+
+    prepared = _prefer_sent_digest_rows(rows, limit=5)
+
+    prepared_ids = [row["canonical_event_id"] for row in prepared]
+    assert len(prepared_ids) == 5
+    assert "stored-1" not in prepared_ids
+    assert "stored-2" in prepared_ids
+    assert {"sent-1", "sent-2", "sent-3", "sent-4"}.issubset(set(prepared_ids))

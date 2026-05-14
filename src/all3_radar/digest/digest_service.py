@@ -470,6 +470,34 @@ def _prepare_digest_rows(rows: list[dict[str, object]], *, limit: int) -> list[d
     return _dedupe_semantic_digest_rows(prepared)[:limit]
 
 
+def _prefer_sent_digest_rows(rows: list[dict[str, object]], *, limit: int) -> list[dict[str, object]]:
+    deduped_rows = _dedupe_candidate_rows(rows)
+    fixed_rows = [row for row in deduped_rows if _is_fixed_shortlist_row(row)]
+    sent_rows = [
+        row
+        for row in deduped_rows
+        if not _is_fixed_shortlist_row(row) and str(row.get("send_status") or "") == "sent"
+    ]
+    stored_rows = [
+        row
+        for row in deduped_rows
+        if not _is_fixed_shortlist_row(row) and str(row.get("send_status") or "") != "sent"
+    ]
+
+    primary_rows = _prepare_digest_rows(fixed_rows + sent_rows, limit=limit)
+    if len(primary_rows) >= limit:
+        return primary_rows[:limit]
+
+    seen_ids = {str(row["canonical_event_id"]) for row in primary_rows}
+    fallback_rows = [
+        row
+        for row in stored_rows
+        if str(row["canonical_event_id"]) not in seen_ids
+    ]
+    fallback_prepared = _prepare_digest_rows(fallback_rows, limit=limit)
+    return _dedupe_candidate_rows(primary_rows + fallback_prepared)[:limit]
+
+
 def _candidate_identity_keys(candidate: DigestCandidate) -> tuple[str, ...]:
     keys = [f"event:{candidate.canonical_event_id}"]
     if candidate.canonical_url:
@@ -596,8 +624,7 @@ class DigestService:
         for row in rows:
             row.setdefault("manual_shortlist_signal", False)
         rows = manual_rows + rows
-        rows = _dedupe_candidate_rows(rows)
-        return _prepare_digest_rows(rows, limit=self.settings.digest.shortlist_size_before_claude)
+        return _prefer_sent_digest_rows(rows, limit=self.settings.digest.shortlist_size_before_claude)
 
     def _load_configured_override_rows(self, week_key: str) -> list[dict[str, object]]:
         path = self.repo_root / "config" / "digest_overrides.json"
