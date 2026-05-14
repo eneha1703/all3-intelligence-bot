@@ -83,3 +83,19 @@ def test_generic_profile_without_funding_signal_has_no_key() -> None:
     )
 
     assert key is None
+
+
+def test_xpanner_cross_source_titles_do_match_same_funding_event() -> None:
+    left = _funding_key(
+        "Exclusive: Xpanner Lands $18M To Offer Automation As A Service To Construction Sites",
+        "Xpanner, a startup automating construction work through robotics and physical AI technology, has raised $18 million in a Series B round.",
+    )
+    right = _funding_key(
+        "Xpanner Secures $18M in Series B Bridge Funding for AI-Powered Construction Automation Platform",
+        "Xpanner has secured $18M in Series B bridge funding to expand an AI-powered construction automation platform.",
+    )
+
+    assert left is not None and right is not None
+    assert left.entity == "xpanner"
+    assert right.entity == "xpanner"
+    assert same_funding_event(left, right) is True

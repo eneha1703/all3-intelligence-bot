@@ -22,6 +22,7 @@ APPOSITIVE_FUNDING_RE = re.compile(
 STARTUP_ENTITY_RE = re.compile(
     r"\b(?:startup|company|firm)\s+(?P<entity>[A-Z][A-Za-z0-9&.\-]*(?:\s+[A-Z][A-Za-z0-9&.\-]*){0,3})\b"
 )
+LEADING_LABEL_RE = re.compile(r"^(?:(?:Exclusive|Report|Reuters|Update|Analysis|Interview)\s*:\s*)+", re.IGNORECASE)
 AMOUNT_RE = re.compile(
     r"(?P<currency>[$в‚¬ВЈ])\s?(?P<value>\d+(?:\.\d+)?)\s?(?P<scale>m|mn|mm|million|b|bn|billion)?\b",
     re.IGNORECASE,
@@ -83,8 +84,14 @@ def funding_key_from_text(
         return None
     if published_ts is None:
         return None
-    text = f"{title} {preview or ''}".strip()
-    entity = _extract_primary_entity(text)
+    clean_title = _strip_leading_label(title)
+    preview_text = preview or ""
+    text = f"{clean_title} {preview_text}".strip()
+    entity = (
+        _extract_primary_entity(clean_title)
+        or _extract_primary_entity(preview_text)
+        or _extract_primary_entity(text)
+    )
     amount = _extract_amount(text)
     if entity is None or amount is None:
         return None
@@ -134,6 +141,10 @@ def _extract_primary_entity(text: str) -> str | None:
             if normalized:
                 return normalized
     return None
+
+
+def _strip_leading_label(text: str) -> str:
+    return LEADING_LABEL_RE.sub("", text).strip()
 
 
 def _normalize_entity(raw: str) -> str | None:
