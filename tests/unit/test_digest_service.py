@@ -72,3 +72,30 @@ def test_prepare_digest_rows_excludes_adjacent_logistics_candidates() -> None:
     prepared = _prepare_digest_rows(rows, limit=5)
 
     assert [row["canonical_event_id"] for row in prepared] == ["good-2"]
+
+
+def test_prepare_digest_rows_excludes_consumer_robotics_marketing_noise() -> None:
+    rows = [
+        _row(
+            event_id="good-3",
+            title="Comau partners with Omron to accelerate advanced industrial automation",
+            score=69,
+            send_status="stored_only",
+            skip_reason="claude_final_card_rejected",
+            event_flags={"partnership_event": True, "industrial_robotics_signal": True},
+        ),
+        _row(
+            event_id="bad-3",
+            title="Tech's hottest job: Documentary filmmaker",
+            score=58,
+            send_status="stored_only",
+            skip_reason="claude_final_card_rejected",
+            event_flags={"funding_event": True, "product_launch_event": True},
+        ) | {
+            "summary_text": "A consumer robotics startup has launched a founder documentary, launch video and behind the scenes doc ahead of shipping this summer."
+        },
+    ]
+
+    prepared = _prepare_digest_rows(rows, limit=5)
+
+    assert [row["canonical_event_id"] for row in prepared] == ["good-3"]

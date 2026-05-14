@@ -175,6 +175,21 @@ def _is_obvious_weekly_noise(row: dict[str, object]) -> bool:
     if any(
         phrase in combined
         for phrase in (
+            "documentary filmmaker",
+            "founder documentary",
+            "behind the scenes doc",
+            "social media video blitz",
+            "launch video",
+            "robo housemaid",
+            "consumer robotics startup",
+            "starts shipping this summer",
+        )
+    ):
+        return True
+
+    if any(
+        phrase in combined
+        for phrase in (
             "tracks ai use",
             "internal friction",
             "employees push back",
@@ -425,7 +440,13 @@ def _prepare_digest_rows(rows: list[dict[str, object]], *, limit: int) -> list[d
         return prepared[:limit]
 
     seen_ids = {str(row["canonical_event_id"]) for row in prepared}
-    backfill_rows = [row for row in remaining_rows if str(row["canonical_event_id"]) not in seen_ids]
+    backfill_rows = [
+        row
+        for row in remaining_rows
+        if str(row["canonical_event_id"]) not in seen_ids
+        and not _is_ineligible_weekly_candidate(row)
+        and not _is_obvious_weekly_noise(row)
+    ]
     prepared.extend(_dedupe_semantic_digest_rows(_sort_digest_rows(backfill_rows)))
     return _dedupe_semantic_digest_rows(prepared)[:limit]
 

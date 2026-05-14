@@ -201,8 +201,9 @@ def build_claude_selection_prompt(
             "Prioritize All3 relevance, physical AI, industrial robotics, construction automation, housing industrialization, timber adoption/scaling/economics/policy, infrastructure automation, strategic signal strength, novelty, and hard operational evidence.",
             "Prefer stories with a sharp operational takeaway, not just category relevance.",
             "Do not elevate timber logistics, marine terminal redevelopment, distribution hubs, or generic supply-chain positioning unless the story clearly changes adoption economics, building delivery, code acceptance, or project execution.",
+            "Do not include Ukraine reconstruction or non-core geography timber showcase stories unless they carry direct adoption-economics, code, permitting, or scalable delivery relevance to the core market thesis.",
             "Reject duplicate coverage of the same event and weak generic commentary.",
-            "Consumer AI, restaurant/menu personalization AI, generic automotive capex, generic trade-policy stories, and generic executive/profile stories should not make the Top 5 unless robotics/automation is central.",
+            "Consumer AI, consumer robotics marketing, founder documentaries, launch-video publicity, restaurant/menu personalization AI, generic automotive capex, generic trade-policy stories, and generic executive/profile stories should not make the Top 5 unless robotics/automation is central.",
     ]
     if mandatory_ids:
         lines.extend(
