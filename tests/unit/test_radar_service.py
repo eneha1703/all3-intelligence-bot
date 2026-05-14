@@ -120,6 +120,19 @@ def test_high_confidence_claude_editorial_rejection_is_not_protected_for_transpo
     assert _should_protect_from_high_confidence_claude_editorial_rejection(context) is False
 
 
+def test_high_confidence_claude_editorial_rejection_is_protected_for_timber_project_delivery_story() -> None:
+    context = _make_context(
+        title="22-Storey Mass Timber Pod Hotel Targets Vancouver's Howe Street",
+        preview="The 408-unit project has entered Vancouver's rezoning process through a formal application.",
+        source_id="wood_central_api",
+        metadata={},
+        event_flags={"timber_policy_signal": True},
+        score=51,
+    )
+
+    assert _should_protect_from_high_confidence_claude_editorial_rejection(context) is True
+
+
 def test_uk_market_story_is_not_forced_to_skip_claude_final_card() -> None:
     context = _make_context(
         title="Fusion21 opens bidding for £350m repairs framework",
