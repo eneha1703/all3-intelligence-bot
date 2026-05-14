@@ -597,21 +597,37 @@ class DigestService:
 
     def _load_shortlist_rows(self, window) -> list[dict[str, object]]:
         group_chat_ids = self._weekly_group_chat_ids()
-        sent_rows: list[dict[str, object]] = []
-        if group_chat_ids:
-            sent_rows = self.repository.load_telegram_sent_digest_candidates_for_week(
+        if not group_chat_ids:
+            rows = self.repository.load_digest_candidates_for_week(
                 start_date=window.previous_thursday.isoformat(),
                 end_date=window.current_thursday.isoformat(),
-                chat_ids=group_chat_ids,
                 limit=self.settings.digest.shortlist_size_before_claude,
                 require_canonical_events=self.settings.digest.require_canonical_events,
             )
-        manual_rows = self.repository.load_active_shortlist_candidates_for_week(
+            manual_rows = self.repository.load_active_shortlist_candidates_for_week(
+                start_date=window.previous_thursday.isoformat(),
+                end_date=window.current_thursday.isoformat(),
+                limit=self.settings.digest.shortlist_size_before_claude,
+                require_canonical_events=self.settings.digest.require_canonical_events,
+            )
+            for row in manual_rows:
+                row["manual_shortlist_signal"] = True
+            manual_rows.extend(self._load_configured_override_rows(window.week_key))
+            for row in rows:
+                row.setdefault("manual_shortlist_signal", False)
+            return _prepare_digest_rows(
+                _dedupe_candidate_rows(manual_rows + rows),
+                limit=self.settings.digest.shortlist_size_before_claude,
+            )
+
+        sent_rows = self.repository.load_telegram_sent_digest_candidates_for_week(
             start_date=window.previous_thursday.isoformat(),
             end_date=window.current_thursday.isoformat(),
+            chat_ids=group_chat_ids,
             limit=self.settings.digest.shortlist_size_before_claude,
             require_canonical_events=self.settings.digest.require_canonical_events,
         )
+        manual_rows = []
         for row in manual_rows:
             row["manual_shortlist_signal"] = True
         manual_rows.extend(self._load_configured_override_rows(window.week_key))
@@ -634,30 +650,7 @@ class DigestService:
         for row in sent_rows:
             row.setdefault("manual_shortlist_signal", False)
         rows = manual_rows + sent_rows
-        shortlist_rows = _prefer_sent_digest_rows(rows, limit=self.settings.digest.shortlist_size_before_claude)
-        if len(shortlist_rows) >= self.settings.digest.stories_per_digest:
-            return shortlist_rows
-
-        fallback_rows = self.repository.load_digest_candidates_for_week(
-            start_date=window.previous_thursday.isoformat(),
-            end_date=window.current_thursday.isoformat(),
-            limit=self.settings.digest.shortlist_size_before_claude,
-            require_canonical_events=self.settings.digest.require_canonical_events,
-        )
-        for row in fallback_rows:
-            row.setdefault("manual_shortlist_signal", False)
-        if not group_chat_ids:
-            return _prepare_digest_rows(manual_rows + fallback_rows, limit=self.settings.digest.shortlist_size_before_claude)
-
-        needed = max(self.settings.digest.stories_per_digest - len(shortlist_rows), 0)
-        if needed <= 0:
-            return shortlist_rows
-        seen_ids = {str(row["canonical_event_id"]) for row in shortlist_rows}
-        filtered_fallback_rows = [
-            row for row in fallback_rows if str(row["canonical_event_id"]) not in seen_ids
-        ]
-        supplemental_rows = _prepare_digest_rows(filtered_fallback_rows, limit=needed)
-        return _dedupe_candidate_rows(shortlist_rows + supplemental_rows)
+        return _prefer_sent_digest_rows(rows, limit=self.settings.digest.shortlist_size_before_claude)
 
     def _load_configured_override_rows(self, week_key: str) -> list[dict[str, object]]:
         path = self.repo_root / "config" / "digest_overrides.json"
