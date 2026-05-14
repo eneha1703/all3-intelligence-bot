@@ -9,6 +9,10 @@ from all3_radar.domain.models import CollectedRawItem, NormalizedItem, SourceDef
 
 TRACKING_PARAM_PREFIXES = ("utm_", "mc_", "fbclid", "gclid")
 WHITESPACE_RE = re.compile(r"\s+")
+CRUNCHBASE_SHARE_PREFIX_RE = re.compile(
+    r"^\s*\d+\s+Shares?\s+Email\s+Facebook\s+Twitter\s+LinkedIn\s*",
+    re.IGNORECASE,
+)
 
 
 def _clean_text(value: str | None) -> str | None:
@@ -16,6 +20,16 @@ def _clean_text(value: str | None) -> str | None:
         return None
     normalized = WHITESPACE_RE.sub(" ", value).strip()
     return normalized or None
+
+
+def _sanitize_source_snippet(source: SourceDefinition, snippet: str | None) -> str | None:
+    cleaned = _clean_text(snippet)
+    if cleaned is None:
+        return None
+    if source.id == "crunchbase_news_listing":
+        cleaned = CRUNCHBASE_SHARE_PREFIX_RE.sub("", cleaned).strip()
+        cleaned = _clean_text(cleaned)
+    return cleaned
 
 
 def normalize_url(url: str) -> str:
@@ -45,7 +59,7 @@ def normalize_collected_item(source: SourceDefinition, item: CollectedRawItem) -
         domain=domain,
         title=title,
         dek=None,
-        text_preview=_clean_text(item.snippet),
+        text_preview=_sanitize_source_snippet(source, item.snippet),
         published_ts=item.published_ts,
         collected_ts=item.collected_ts,
         language=None,
