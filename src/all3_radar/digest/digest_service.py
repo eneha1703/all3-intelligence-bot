@@ -200,6 +200,22 @@ def _is_obvious_weekly_noise(row: dict[str, object]) -> bool:
     return False
 
 
+def _is_ineligible_weekly_candidate(row: dict[str, object]) -> bool:
+    skip_reason = str(row.get("skip_reason") or "")
+    if skip_reason in {
+        "claude_editorial_rejected",
+        "editorial_not_telegram_worthy",
+        "editorial_thought_leadership_without_operational_signal",
+    }:
+        return True
+
+    flags = _row_event_flags(row)
+    if bool(flags.get("adjacent_logistics_only", False)):
+        return True
+
+    return False
+
+
 def _weekly_bucket(row: dict[str, object]) -> str:
     title = _normalize_digest_text(str(row.get("title") or ""))
     summary = _normalize_digest_text(str(row.get("summary_text") or ""))
@@ -363,6 +379,7 @@ def _dedupe_semantic_digest_rows(rows: list[dict[str, object]]) -> list[dict[str
 
 
 def _prepare_digest_rows(rows: list[dict[str, object]], *, limit: int) -> list[dict[str, object]]:
+    rows = [row for row in rows if not _is_ineligible_weekly_candidate(row)]
     manual_rows = _dedupe_semantic_digest_rows(
         _sort_digest_rows([row for row in rows if bool(row.get("manual_shortlist_signal"))])
     )
