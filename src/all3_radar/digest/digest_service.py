@@ -595,11 +595,12 @@ class DigestService:
         group_chat_ids = tuple(
             chat_id for chat_id in self.settings.integrations.telegram_alert_chat_ids if str(chat_id).startswith("-")
         )
-        return group_chat_ids or self.settings.integrations.telegram_alert_chat_ids
+        return group_chat_ids
 
     def _load_shortlist_rows(self, window) -> list[dict[str, object]]:
         group_chat_ids = self._weekly_group_chat_ids()
-        if not group_chat_ids:
+        group_mode_enabled = self.settings.telegram_group_curation.enabled
+        if not group_mode_enabled:
             rows = self.repository.load_digest_candidates_for_week(
                 start_date=window.previous_thursday.isoformat(),
                 end_date=window.current_thursday.isoformat(),
@@ -622,12 +623,12 @@ class DigestService:
                 limit=self.settings.digest.shortlist_size_before_claude,
             )
 
-        sent_rows = self.repository.load_telegram_sent_digest_candidates_for_week(
+        sent_rows = self.repository.load_telegram_group_sent_digest_candidates_for_week(
             start_date=window.previous_thursday.isoformat(),
             end_date=window.current_thursday.isoformat(),
-            chat_ids=group_chat_ids,
             limit=self.settings.digest.shortlist_size_before_claude,
             require_canonical_events=self.settings.digest.require_canonical_events,
+            chat_ids=group_chat_ids,
         )
         manual_rows = []
         for row in manual_rows:
@@ -768,7 +769,7 @@ class DigestService:
                 if bool(row.get("manual_shortlist_signal")) or bool(row.get("manual_digest_force_include"))
             )
             candidates = hydrate_digest_candidates(rows)
-            if self._weekly_group_chat_ids() and len(candidates) < self.settings.digest.stories_per_digest:
+            if self.settings.telegram_group_curation.enabled and len(candidates) < self.settings.digest.stories_per_digest:
                 raise ValueError(
                     f"Only {len(candidates)} eligible group stories available for weekly digest in {normalized_week_key}."
                 )

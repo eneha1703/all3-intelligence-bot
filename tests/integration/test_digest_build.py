@@ -630,7 +630,7 @@ def test_digest_shortlist_includes_telegram_reaction_candidates(monkeypatch, tmp
         sent_by_bot=False,
         sender_user_id="42",
         sender_chat_id="",
-        message_ts="2026-05-01T12:05:00+00:00",
+        message_ts="2026-04-30T12:05:00+00:00",
         message_text="Worth saving: https://example.com/destatis-orders",
         message_caption="",
         message_urls=("https://example.com/destatis-orders",),
@@ -646,7 +646,7 @@ def test_digest_shortlist_includes_telegram_reaction_candidates(monkeypatch, tmp
         actor_chat_id="",
         reaction_key="emoji:star",
         is_active=True,
-        picked_at="2026-05-06T12:30:00+00:00",
+        picked_at="2026-04-30T12:30:00+00:00",
         source_update_kind="message_reaction",
         raw_update={},
     )
@@ -717,6 +717,51 @@ def test_digest_shortlist_prefers_group_sent_deliveries_before_general_pool(monk
 
     monkeypatch.setenv("DATABASE_PATH", str(db_path))
     monkeypatch.setenv("CLAUDE_DIGEST_ENABLED", "false")
+    monkeypatch.setenv("TELEGRAM_ALERT_CHAT_IDS", "251263078,-100123")
+
+    service = DigestService(repo_root=repo_root, repository=repository)
+    result = service.build_shortlist("2026-W18")
+
+    candidate_ids = {candidate.canonical_event_id for candidate in result.candidates}
+    assert {"event-1", "event-2", "event-5", "event-12", "event-15"}.issubset(candidate_ids)
+    assert "event-13" not in candidate_ids
+
+
+def test_digest_shortlist_uses_bot_group_messages_as_source_of_truth(monkeypatch, tmp_path) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "digest.db"
+    schema_path = repo_root / "src" / "all3_radar" / "storage" / "schema.sql"
+    _seed_digest_db(db_path, schema_path)
+
+    repository = RadarRepository(db_path)
+    with sqlite3.connect(db_path) as connection:
+        now = "2026-04-30T10:00:00+00:00"
+        connection.execute("UPDATE radar_decisions SET send_status = 'sent' WHERE normalized_item_id IN ('item-1','item-2','item-5','item-12','item-15')")
+        messages = [
+            ("gm-1", "item-1", "event-1", "-100123", "m1"),
+            ("gm-2", "item-2", "event-2", "-100123", "m2"),
+            ("gm-3", "item-5", "event-5", "-100123", "m3"),
+            ("gm-4", "item-12", "event-12", "-100123", "m4"),
+            ("gm-5", "item-15", "event-15", "-100123", "m5"),
+            ("gm-6", "item-13", "event-13", "251263078", "m6"),
+        ]
+        for row_id, item_id, event_id, chat_id, message_id in messages:
+            connection.execute(
+                """
+                INSERT INTO telegram_group_messages (
+                  id, chat_id, telegram_message_id, sent_by_bot, sender_user_id, sender_chat_id,
+                  message_ts, message_text, message_caption, message_url, has_links, link_count,
+                  normalized_item_id, canonical_event_id, raw_update_json, created_at, updated_at
+                )
+                VALUES (?, ?, ?, 1, '', '', ?, '', '', NULL, 0, 0, ?, ?, '{}', ?, ?)
+                """,
+                (row_id, chat_id, message_id, now, item_id, event_id, now, now),
+            )
+        connection.commit()
+
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("CLAUDE_DIGEST_ENABLED", "false")
+    monkeypatch.setenv("TELEGRAM_GROUP_CURATION_ENABLED", "true")
     monkeypatch.setenv("TELEGRAM_ALERT_CHAT_IDS", "251263078,-100123")
 
     service = DigestService(repo_root=repo_root, repository=repository)

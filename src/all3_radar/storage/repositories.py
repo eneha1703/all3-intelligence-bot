@@ -418,6 +418,103 @@ class RadarRepository:
                 ).fetchall()
         return [dict(row) for row in rows]
 
+    def load_telegram_group_sent_digest_candidates_for_week(
+        self,
+        *,
+        start_date: str,
+        end_date: str,
+        limit: int,
+        require_canonical_events: bool,
+        chat_ids: tuple[str, ...] = (),
+    ) -> list[dict[str, Any]]:
+        chat_filter = "gm.chat_id LIKE '-%'" if not chat_ids else f"gm.chat_id IN ({','.join('?' for _ in chat_ids)})"
+        params: tuple[Any, ...]
+        if not chat_ids:
+            params = (start_date, end_date, limit)
+        else:
+            params = (*chat_ids, start_date, end_date, limit)
+        with connect(self.database_path) as connection:
+            if require_canonical_events:
+                rows = connection.execute(
+                    f"""
+                    WITH grouped_posts AS (
+                        SELECT COALESCE(gm.canonical_event_id, rd.canonical_event_id) AS canonical_event_id,
+                               MAX(gm.message_ts) AS last_message_ts
+                        FROM telegram_group_messages gm
+                        JOIN radar_decisions rd
+                          ON rd.normalized_item_id = gm.normalized_item_id
+                        WHERE gm.sent_by_bot = 1
+                          AND {chat_filter}
+                          AND date(gm.message_ts) >= date(?)
+                          AND date(gm.message_ts) <= date(?)
+                          AND COALESCE(gm.canonical_event_id, rd.canonical_event_id) IS NOT NULL
+                        GROUP BY COALESCE(gm.canonical_event_id, rd.canonical_event_id)
+                    )
+                    SELECT ce.id AS canonical_event_id,
+                           ni.id AS normalized_item_id,
+                           ni.source_id,
+                           ni.title,
+                           ni.canonical_url,
+                           ni.published_ts,
+                           rd.score,
+                           'sent' AS send_status,
+                           rd.skip_reason,
+                           rd.summary_text,
+                           rd.signals_json
+                    FROM grouped_posts gp
+                    JOIN canonical_events ce
+                      ON ce.id = gp.canonical_event_id
+                    JOIN normalized_items ni
+                      ON ni.id = ce.representative_item_id
+                    JOIN radar_decisions rd
+                      ON rd.normalized_item_id = ni.id
+                    WHERE ce.representative_item_id IS NOT NULL
+                      AND rd.relevance_status = 'keep'
+                    ORDER BY gp.last_message_ts DESC, rd.score DESC, ni.title ASC
+                    LIMIT ?
+                    """,
+                    params,
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    f"""
+                    WITH grouped_posts AS (
+                        SELECT COALESCE(gm.canonical_event_id, rd.canonical_event_id, gm.normalized_item_id) AS candidate_key,
+                               MAX(gm.message_ts) AS last_message_ts,
+                               MAX(gm.normalized_item_id) AS normalized_item_id
+                        FROM telegram_group_messages gm
+                        JOIN radar_decisions rd
+                          ON rd.normalized_item_id = gm.normalized_item_id
+                        WHERE gm.sent_by_bot = 1
+                          AND {chat_filter}
+                          AND date(gm.message_ts) >= date(?)
+                          AND date(gm.message_ts) <= date(?)
+                        GROUP BY COALESCE(gm.canonical_event_id, rd.canonical_event_id, gm.normalized_item_id)
+                    )
+                    SELECT COALESCE(rd.canonical_event_id, ni.id) AS canonical_event_id,
+                           ni.id AS normalized_item_id,
+                           ni.source_id,
+                           ni.title,
+                           ni.canonical_url,
+                           ni.published_ts,
+                           rd.score,
+                           'sent' AS send_status,
+                           rd.skip_reason,
+                           rd.summary_text,
+                           rd.signals_json
+                    FROM grouped_posts gp
+                    JOIN normalized_items ni
+                      ON ni.id = gp.normalized_item_id
+                    JOIN radar_decisions rd
+                      ON rd.normalized_item_id = ni.id
+                    WHERE rd.relevance_status = 'keep'
+                    ORDER BY gp.last_message_ts DESC, rd.score DESC, ni.title ASC
+                    LIMIT ?
+                    """,
+                    params,
+                ).fetchall()
+        return [dict(row) for row in rows]
+
     def upsert_canonical_event(self, assignment: ClusterAssignment, members: list[str], published_values: list[datetime | None]) -> None:
         first_published = min((value for value in published_values if value is not None), default=None)
         last_published = max((value for value in published_values if value is not None), default=None)
