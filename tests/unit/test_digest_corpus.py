@@ -64,7 +64,7 @@ def test_build_claude_writer_prompt_includes_house_style_and_examples() -> None:
     assert "worth noting" in prompt
 
 
-def test_build_claude_writer_prompt_uses_actual_selected_item_count() -> None:
+def test_build_claude_writer_prompt_requires_exactly_five_items() -> None:
     window = resolve_digest_window("2026-W20")
     candidates = [
         DigestCandidate(
@@ -83,5 +83,5 @@ def test_build_claude_writer_prompt_uses_actual_selected_item_count() -> None:
 
     prompt = build_claude_writer_prompt(window, candidates)
 
-    assert "Use exactly 4 items" in prompt
+    assert "Use exactly 5 items" in prompt
     assert "Do not create synthetic wrap-up items" in prompt

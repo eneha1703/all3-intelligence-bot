@@ -166,3 +166,50 @@ def test_prepare_digest_rows_prioritizes_sustained_factory_operation_as_fifth_it
         "infra-1",
         "robotics-1",
     ]
+
+
+def test_prepare_digest_rows_emergency_backfills_to_five_items() -> None:
+    rows = [
+        _row(
+            event_id="good-1",
+            title="Mind Robotics raises funding for industrial robotics deployment",
+            score=82,
+            send_status="sent",
+            event_flags={"funding_event": True, "industrial_robotics_signal": True},
+        ) | {"summary_text": "Platform opportunity in advanced manufacturing."},
+        _row(
+            event_id="good-2",
+            title="Xpanner lands $18M to automate construction sites",
+            score=77,
+            send_status="sent",
+            event_flags={"funding_event": True, "construction_innovation_signal": True},
+        ) | {"summary_text": "A physical delivery problem for construction automation."},
+        _row(
+            event_id="good-3",
+            title="22-storey mass timber pod hotel targets Vancouver's Howe Street",
+            score=76,
+            send_status="sent",
+            event_flags={"timber_strategic_signal": True},
+        ) | {"summary_text": "A mass timber project with rezoning and 408 units."},
+        _row(
+            event_id="good-4",
+            title="Helix-02 robots now sustain full factory-style 8-hour shifts without intervention",
+            score=63,
+            send_status="stored_only",
+            event_flags={"industrial_robotics_signal": True},
+        ),
+        _row(
+            event_id="fallback-5",
+            title="Industrial automation company expands manufacturing offering",
+            score=56,
+            send_status="stored_only",
+            event_flags={"industrial_robotics_signal": True},
+        ) | {
+            "summary_text": "A generic industrial automation expansion story.",
+        },
+    ]
+
+    prepared = _prepare_digest_rows(rows, limit=5)
+
+    assert len(prepared) == 5
+    assert [row["canonical_event_id"] for row in prepared][-1] == "fallback-5"

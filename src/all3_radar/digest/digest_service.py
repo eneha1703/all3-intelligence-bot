@@ -454,6 +454,19 @@ def _prepare_digest_rows(rows: list[dict[str, object]], *, limit: int) -> list[d
         and not _is_obvious_weekly_noise(row)
     ]
     prepared.extend(_dedupe_semantic_digest_rows(_sort_digest_rows(backfill_rows)))
+    prepared = _dedupe_semantic_digest_rows(prepared)
+    if len(prepared) >= limit:
+        return prepared[:limit]
+    if len(prepared) < min(4, limit):
+        return prepared[:limit]
+
+    seen_ids = {str(row["canonical_event_id"]) for row in prepared}
+    emergency_backfill_rows = [
+        row
+        for row in remaining_rows
+        if str(row["canonical_event_id"]) not in seen_ids and not _is_ineligible_weekly_candidate(row)
+    ]
+    prepared.extend(_dedupe_semantic_digest_rows(_sort_digest_rows(emergency_backfill_rows)))
     return _dedupe_semantic_digest_rows(prepared)[:limit]
 
 
