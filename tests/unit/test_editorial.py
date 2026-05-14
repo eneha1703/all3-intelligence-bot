@@ -172,6 +172,25 @@ def test_editorial_shaping_keeps_destatis_housing_overcrowding_signal() -> None:
     assert editorial.flags["telegram_worthy"] is True
 
 
+def test_editorial_shaping_keeps_haufe_germany_housing_policy_signal() -> None:
+    item = _make_item(
+        "Berlin: Senat beschliesst Gesetz fuer einfaches Bauen",
+        "Die Koalition will mit einem Gesetz fuer einfaches Bauen den Wohnungsbau beschleunigen und Wohnungsnot angehen.",
+        source_id="haufe_immobilien_listing",
+    )
+    item = StoredNormalizedItem(
+        **{**item.__dict__, "metadata": {"market_scope": "germany_housing_market", "origin_language": "de"}}
+    )
+    decision = _make_decision(housing_market_signal=True)
+
+    editorial = evaluate_send_stage_editorial(item, decision)
+
+    assert editorial.allow_send is True
+    assert editorial.reason is None
+    assert editorial.flags["housing_market_alert_signal"] is True
+    assert editorial.flags["telegram_worthy"] is True
+
+
 def test_editorial_shaping_keeps_humanoid_affordability_market_signal() -> None:
     item = _make_item(
         "China’s Unitree reshapes entry-level humanoid robot market with USD 4,290 droid",
