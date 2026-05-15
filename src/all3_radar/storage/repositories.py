@@ -854,6 +854,62 @@ class RadarRepository:
             ).fetchone()
         return bool(row)
 
+    def load_recent_group_post_candidates(self, *, lookback_days: int = 14, limit: int = 30) -> list[dict[str, Any]]:
+        with connect(self.database_path) as connection:
+            rows = connection.execute(
+                """
+                WITH unique_url_matches AS (
+                    SELECT ni.canonical_url AS canonical_url,
+                           MAX(ni.id) AS normalized_item_id
+                    FROM normalized_items ni
+                    JOIN radar_decisions rd
+                      ON rd.normalized_item_id = ni.id
+                    WHERE rd.relevance_status = 'keep'
+                    GROUP BY ni.canonical_url
+                    HAVING COUNT(DISTINCT COALESCE(rd.canonical_event_id, ni.id)) = 1
+                ),
+                grouped_messages AS (
+                    SELECT gm.chat_id,
+                           gm.telegram_message_id,
+                           gm.sent_by_bot,
+                           gm.message_ts,
+                           gm.message_text,
+                           gm.message_caption,
+                           gm.message_url,
+                           gm.normalized_item_id,
+                           gm.canonical_event_id
+                    FROM telegram_group_messages gm
+                    WHERE gm.message_ts >= datetime('now', ?)
+                )
+                SELECT gm.chat_id,
+                       gm.telegram_message_id,
+                       gm.sent_by_bot,
+                       gm.message_ts,
+                       gm.message_text,
+                       gm.message_caption,
+                       gm.message_url,
+                       ni.id AS normalized_item_id,
+                       COALESCE(gm.canonical_event_id, rd.canonical_event_id) AS canonical_event_id,
+                       ni.canonical_url,
+                       ni.title,
+                       ni.text_preview,
+                       ni.published_ts
+                FROM grouped_messages gm
+                LEFT JOIN unique_url_matches um
+                  ON gm.message_url IS NOT NULL
+                 AND um.canonical_url = gm.message_url
+                LEFT JOIN normalized_items ni
+                  ON ni.id = COALESCE(gm.normalized_item_id, um.normalized_item_id)
+                LEFT JOIN radar_decisions rd
+                  ON rd.normalized_item_id = ni.id
+                WHERE ni.id IS NOT NULL
+                ORDER BY gm.message_ts DESC, ni.published_ts DESC, gm.telegram_message_id DESC
+                LIMIT ?
+                """,
+                (f"-{lookback_days} days", limit),
+            ).fetchall()
+        return [dict(row) for row in rows]
+
     def load_recent_sent_alert_candidates(self, *, lookback_days: int = 7, limit: int = 200) -> list[dict[str, Any]]:
         with connect(self.database_path) as connection:
             rows = connection.execute(

@@ -9,6 +9,7 @@ from all3_radar.domain.enums import SourceKind, SourceLayer
 from all3_radar.domain.models import ClaudeFinalCardResult, SourceDefinition
 from all3_radar.pipeline.radar_service import RadarService, _settings_snapshot
 from all3_radar.summarization.claude_final_card_client import ClaudeFinalCardUnavailableError
+from all3_radar.summarization.claude_duplicate_review_client import ClaudeDuplicateReviewResult
 from all3_radar.summarization.claude_editorial_review_client import (
     ClaudeEditorialReviewResult,
     ClaudeEditorialReviewUnavailableError,
@@ -1249,6 +1250,183 @@ def test_radar_does_not_send_same_funding_event_when_manual_group_post_already_e
 
     assert decision_row == ("skip", "already_shared_in_group_same_funding_event")
     assert "Manual group funding-memory suppression" in caplog.text
+
+
+def test_radar_claude_duplicate_review_suppresses_recent_group_repeat(
+    monkeypatch, tmp_path, caplog
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "radar_claude_duplicate_gate.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+
+    now = datetime.now(timezone.utc)
+    first_feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>All3 shows heavy-duty construction robotics platform for rebar handling</title>
+    <link>https://source-a.example/all3-rebar-platform</link>
+    <description>All3 demonstrated a heavy-duty construction robotics platform designed to automate rebar handling and improve productivity on large building sites.</description>
+    <pubDate>{format_datetime(now - timedelta(days=2))}</pubDate>
+    <guid>a1</guid>
+  </item>
+</channel></rss>"""
+    second_feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Construction robotics startup All3 unveils rebar automation platform</title>
+    <link>https://source-b.example/all3-rebar-automation</link>
+    <description>All3 unveiled a construction robotics platform for rebar handling, positioning it as a way to automate heavy site work and raise productivity.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=1))}</pubDate>
+    <guid>b1</guid>
+  </item>
+</channel></rss>"""
+
+    registry = SourceRegistry(
+        (
+            SourceDefinition(
+                id="direct_a",
+                name="Direct A",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://direct-a.example/feed.xml",
+                priority=80,
+                tags=("robotics",),
+            ),
+            SourceDefinition(
+                id="direct_b",
+                name="Direct B",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://direct-b.example/feed.xml",
+                priority=80,
+                tags=("robotics",),
+            ),
+        )
+    )
+
+    class FakeGeminiClient:
+        is_available = True
+
+        def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
+            return ("All3 showed a construction robotics platform for rebar automation.", None)
+
+    class FakeClaudeEditorialReviewClient:
+        is_available = True
+
+        def review_candidate(self, **kwargs):
+            return ClaudeEditorialReviewResult(
+                send_ok=True,
+                reject_reason=None,
+                edited_title=kwargs["title"],
+                edited_summary="All3 showed a construction robotics platform for rebar automation.",
+                confidence="high",
+                used_claude=True,
+            )
+
+    class FakeClaudeDuplicateReviewClient:
+        is_available = True
+
+        def review_candidate(self, **kwargs):
+            return ClaudeDuplicateReviewResult(
+                is_duplicate=True,
+                matched_index=0,
+                confidence="high",
+                reason="Same All3 construction robotics platform story under a different source framing.",
+                used_claude=True,
+            )
+
+    class FakeTelegramSender:
+        def __init__(self) -> None:
+            self.sent_cards = []
+
+        def send_card(self, card):
+            self.sent_cards.append(card)
+            return [
+                TelegramDelivery(
+                    chat_id="123",
+                    status="sent",
+                    telegram_message_id="msg-1",
+                    error_text=None,
+                    payload_text=card.text,
+                )
+            ]
+
+    feeds = {
+        "https://direct-a.example/feed.xml": first_feed,
+        "https://direct-b.example/feed.xml": second_feed,
+    }
+
+    def fake_fetch_text(url: str) -> str:
+        return feeds[url]
+
+    fake_sender = FakeTelegramSender()
+    caplog.set_level("INFO")
+    service = RadarService(
+        repo_root=repo_root,
+        registry=registry,
+        fetch_text_fn=fake_fetch_text,
+        gemini_client=FakeGeminiClient(),
+        claude_editorial_review_client=FakeClaudeEditorialReviewClient(),
+        claude_duplicate_review_client=FakeClaudeDuplicateReviewClient(),
+        telegram_sender=fake_sender,
+    )
+
+    first_result = service.run(source_id="direct_a", dry_run=True)
+    assert first_result.sent_items == 0
+
+    with sqlite3.connect(db_path) as connection:
+            first_item = connection.execute(
+                """
+                SELECT ni.id, rd.canonical_event_id
+                FROM normalized_items ni
+                JOIN radar_decisions rd ON rd.normalized_item_id = ni.id
+                WHERE ni.title = ?
+                """,
+            ("All3 shows heavy-duty construction robotics platform for rebar handling",),
+        ).fetchone()
+    assert first_item is not None
+    service.repository.upsert_telegram_group_message(
+        chat_id="-1003766785618",
+        telegram_message_id="bot-previous-1",
+        sent_by_bot=True,
+        sender_user_id="",
+        sender_chat_id="",
+        message_ts=(now - timedelta(days=2)).isoformat(),
+        message_text="Previous bot post",
+        message_caption=None,
+        message_urls=("https://source-a.example/all3-rebar-platform",),
+        has_links=True,
+        normalized_item_id=str(first_item[0]),
+        canonical_event_id=str(first_item[1]) if first_item[1] else None,
+        raw_update={"source": "bot_delivery"},
+    )
+
+    second_result = service.run(source_id="direct_b", dry_run=False)
+
+    assert second_result.sent_items == 0
+    assert len(fake_sender.sent_cards) == 0
+
+    with sqlite3.connect(db_path) as connection:
+        decision_row = connection.execute(
+            """
+            SELECT rd.send_status, rd.skip_reason
+            FROM radar_decisions rd
+            JOIN normalized_items ni ON ni.id = rd.normalized_item_id
+            WHERE ni.title = ?
+            """,
+            ("Construction robotics startup All3 unveils rebar automation platform",),
+        ).fetchone()
+
+    assert decision_row == ("skip", "claude_duplicate_review_rejected")
+    assert "Claude duplicate suppression" in caplog.text
 
 
 def test_radar_does_not_resend_same_robotic_hand_valuation_story_across_runs(

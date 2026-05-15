@@ -54,6 +54,7 @@ from all3_radar.summarization.claude_editorial_review_client import (
     ClaudeEditorialReviewClient,
     ClaudeEditorialReviewUnavailableError,
 )
+from all3_radar.summarization.claude_duplicate_review_client import ClaudeDuplicateReviewClient
 from all3_radar.summarization.radar_summary import maybe_translate_delivery_card, summarize_candidate
 
 LOGGER = logging.getLogger(__name__)
@@ -677,6 +678,7 @@ class RadarService:
         fetch_text_fn: FetchText | None = None,
         gemini_client: GeminiClient | None = None,
         claude_editorial_review_client: ClaudeEditorialReviewClient | None = None,
+        claude_duplicate_review_client: ClaudeDuplicateReviewClient | None = None,
         claude_final_card_client: ClaudeFinalCardClient | None = None,
         telegram_sender: TelegramSender | None = None,
     ) -> None:
@@ -702,6 +704,18 @@ class RadarService:
             )
         else:
             self.claude_editorial_review_client = None
+        if claude_duplicate_review_client is not None:
+            self.claude_duplicate_review_client = claude_duplicate_review_client
+        elif self.settings.radar.claude_editorial_enabled:
+            self.claude_duplicate_review_client = ClaudeDuplicateReviewClient(
+                enabled=self.settings.radar.claude_editorial_enabled,
+                api_key=self.settings.integrations.anthropic_api_key,
+                model=self.settings.integrations.claude_editorial_model,
+                timeout_seconds=self.settings.integrations.claude_editorial_timeout_seconds,
+                max_tokens=min(self.settings.integrations.claude_editorial_max_tokens, 350),
+            )
+        else:
+            self.claude_duplicate_review_client = None
         if claude_final_card_client is not None:
             self.claude_final_card_client = claude_final_card_client
         elif self.settings.radar.claude_final_card_enabled:
@@ -1741,6 +1755,133 @@ class RadarService:
                 if context.summary is None and context.decision and context.decision.is_shortlisted:
                     context.summary = summarize_candidate(context.item, context.decision, self.gemini_client)
             record_stage_timing("summary_generation", summary_generation_started)
+
+            if (
+                sendable_contexts
+                and self.claude_duplicate_review_client is not None
+                and self.claude_duplicate_review_client.is_available
+            ):
+                duplicate_review_started = perf_counter()
+                recent_group_rows = self.repository.load_recent_group_post_candidates(lookback_days=14, limit=20)
+                if recent_group_rows:
+                    filtered_sendable_contexts: list[CurrentRunContext] = []
+                    for context in sendable_contexts:
+                        candidate_summary = context.final_summary_text or (
+                            context.summary.summary_text if context.summary else None
+                        )
+                        candidate_payload = {
+                            "title": context.final_headline or context.item.title,
+                            "url": context.item.canonical_url,
+                            "source": context.source.name,
+                            "summary": candidate_summary,
+                            "published_ts": context.item.published_ts.isoformat() if context.item.published_ts else None,
+                            "canonical_event_id": (
+                                context.cluster_assignment.canonical_event_id if context.cluster_assignment else None
+                            ),
+                        }
+                        recent_payload: list[dict[str, object]] = []
+                        for row in recent_group_rows:
+                            row_url = row.get("canonical_url") or row.get("message_url")
+                            if row_url == context.item.canonical_url:
+                                continue
+                            recent_payload.append(
+                                {
+                                    "title": row.get("title"),
+                                    "url": row_url,
+                                    "summary": row.get("text_preview") or row.get("message_text") or row.get("message_caption"),
+                                    "published_ts": row.get("published_ts"),
+                                    "message_ts": row.get("message_ts"),
+                                    "sent_by_bot": bool(row.get("sent_by_bot")),
+                                    "canonical_event_id": row.get("canonical_event_id"),
+                                }
+                            )
+                        if not recent_payload:
+                            filtered_sendable_contexts.append(context)
+                            continue
+                        try:
+                            duplicate_review = self.claude_duplicate_review_client.review_candidate(
+                                candidate=candidate_payload,
+                                recent_posts=recent_payload,
+                            )
+                        except ClaudeEditorialReviewUnavailableError as exc:
+                            LOGGER.warning(
+                                "Claude duplicate review fallback: item=%s reason=%s",
+                                context.item.normalized_item_id,
+                                exc,
+                            )
+                            filtered_sendable_contexts.append(context)
+                            continue
+                        except Exception as exc:
+                            LOGGER.warning(
+                                "Claude duplicate review error: item=%s reason=%s",
+                                context.item.normalized_item_id,
+                                exc,
+                            )
+                            filtered_sendable_contexts.append(context)
+                            continue
+
+                        matched_row = (
+                            recent_payload[duplicate_review.matched_index]
+                            if duplicate_review.matched_index is not None
+                            and 0 <= duplicate_review.matched_index < len(recent_payload)
+                            else None
+                        )
+                        should_skip_duplicate = False
+                        if duplicate_review.is_duplicate and matched_row is not None:
+                            age_days = 14
+                            message_ts = matched_row.get("message_ts")
+                            if isinstance(message_ts, str):
+                                try:
+                                    age_days = (
+                                        datetime.now(timezone.utc)
+                                        - datetime.fromisoformat(message_ts.replace("Z", "+00:00"))
+                                    ).days
+                                except ValueError:
+                                    age_days = 14
+                            if age_days <= 7 and duplicate_review.confidence in {"medium", "high"}:
+                                should_skip_duplicate = True
+                            elif 7 < age_days <= 14 and duplicate_review.confidence == "high":
+                                should_skip_duplicate = True
+
+                        if should_skip_duplicate:
+                            skipped_send_count += 1
+                            context.decision = RankedDecision(
+                                relevance_status=context.decision.relevance_status,
+                                send_status="skip",
+                                skip_reason="claude_duplicate_review_rejected",
+                                score=context.decision.score,
+                                signals={
+                                    **context.decision.signals,
+                                    "claude_duplicate_reviewed": True,
+                                    "claude_duplicate_confidence": duplicate_review.confidence,
+                                    "claude_duplicate_reason": duplicate_review.reason,
+                                    "claude_duplicate_matched_url": matched_row.get("url") if matched_row else None,
+                                    "claude_duplicate_matched_title": matched_row.get("title") if matched_row else None,
+                                },
+                                is_shortlisted=context.decision.is_shortlisted,
+                                is_borderline=context.decision.is_borderline,
+                            )
+                            LOGGER.info(
+                                "Claude duplicate suppression: item=%s matched_title=%s matched_url=%s confidence=%s reason=%s",
+                                context.item.normalized_item_id,
+                                matched_row.get("title") if matched_row else "<none>",
+                                matched_row.get("url") if matched_row else "<none>",
+                                duplicate_review.confidence,
+                                duplicate_review.reason or "duplicate_review",
+                            )
+                            continue
+
+                        _with_context_signals(
+                            context,
+                            claude_duplicate_reviewed=True,
+                            claude_duplicate_confidence=duplicate_review.confidence,
+                            claude_duplicate_reason=duplicate_review.reason,
+                            claude_duplicate_matched_url=matched_row.get("url") if matched_row else None,
+                            claude_duplicate_matched_title=matched_row.get("title") if matched_row else None,
+                        )
+                        filtered_sendable_contexts.append(context)
+                    sendable_contexts = filtered_sendable_contexts
+                record_stage_timing("claude_duplicate_review", duplicate_review_started)
 
             delivery_started = perf_counter()
             for context in sendable_contexts:
