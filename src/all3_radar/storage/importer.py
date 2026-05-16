@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .db import connect, initialize_database
 
@@ -41,6 +41,7 @@ def _copy_table(
     table_name: str,
     *,
     batch_size: int = 500,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> int:
     column_names = _table_columns(source_connection, table_name)
     quoted_columns = ", ".join(_quote_identifier(name) for name in column_names)
@@ -59,10 +60,16 @@ def _copy_table(
         if len(batch) >= batch_size:
             target_connection.executemany(insert_sql, batch)
             copied_rows += len(batch)
+            if progress_callback is not None:
+                progress_callback(
+                    f"   imported {copied_rows} rows into {table_name}..."
+                )
             batch.clear()
     if batch:
         target_connection.executemany(insert_sql, batch)
         copied_rows += len(batch)
+        if progress_callback is not None:
+            progress_callback(f"   imported {copied_rows} rows into {table_name}...")
     return copied_rows
 
 
@@ -72,6 +79,7 @@ def import_sqlite_database(
     target_database_path: Path,
     schema_path: Path,
     batch_size: int = 500,
+    progress_callback: Callable[[str], None] | None = None,
 ) -> dict[str, int]:
     if not source_database_path.exists():
         raise FileNotFoundError(f"Source database not found: {source_database_path}")
@@ -79,19 +87,38 @@ def import_sqlite_database(
     with sqlite3.connect(source_database_path) as source_connection:
         source_connection.row_factory = sqlite3.Row
         table_names = _list_user_tables(source_connection)
+        if progress_callback is not None:
+            progress_callback(
+                f"Opened source database {source_database_path} with {len(table_names)} tables."
+            )
 
         initialize_database(target_database_path, schema_path)
+        if progress_callback is not None:
+            progress_callback("Initialized target schema.")
         with connect(target_database_path) as target_connection:
             target_connection.execute("PRAGMA foreign_keys = OFF")
+            if progress_callback is not None:
+                progress_callback("Connected to target database. Clearing existing rows...")
             _delete_target_rows(target_connection, table_names)
             imported_counts: dict[str, int] = {}
-            for table_name in table_names:
+            total_tables = len(table_names)
+            for table_index, table_name in enumerate(table_names, start=1):
+                if progress_callback is not None:
+                    progress_callback(f"[{table_index}/{total_tables}] Importing {table_name}...")
                 imported_counts[table_name] = _copy_table(
                     source_connection,
                     target_connection,
                     table_name,
                     batch_size=batch_size,
+                    progress_callback=progress_callback,
                 )
+                target_connection.commit()
+                if progress_callback is not None:
+                    progress_callback(
+                        f"[{table_index}/{total_tables}] Finished {table_name}: {imported_counts[table_name]} rows."
+                    )
             target_connection.execute("PRAGMA foreign_keys = ON")
             target_connection.commit()
+            if progress_callback is not None:
+                progress_callback("Import committed successfully.")
             return imported_counts

@@ -45,11 +45,18 @@ def main() -> int:
             "TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must be set before running this import."
         )
 
+    def report(message: str) -> None:
+        print(message, flush=True)
+
+    report(f"Starting import from {source_database_path}")
+    report(f"Target Turso database: {database_url}")
+
     imported_counts = import_sqlite_database(
         source_database_path=source_database_path,
         target_database_path=Path("remote-import.db"),
         schema_path=schema_path,
         batch_size=args.batch_size,
+        progress_callback=report,
     )
 
     total_rows = sum(imported_counts.values())
