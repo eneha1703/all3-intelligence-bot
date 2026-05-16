@@ -8,6 +8,15 @@ python -m all3_radar.app.admin_cli db init
 python -m all3_radar.app.admin_cli sources list
 ```
 
+## GitHub Actions with Turso state
+
+For GitHub-hosted production runs, configure these repository secrets so runtime state is stored outside GitHub:
+
+- `TURSO_DATABASE_URL`
+- `TURSO_AUTH_TOKEN`
+
+When these are set, the bot uses remote libSQL/Turso over HTTP for `all3_radar` state and no longer relies on `actions/cache` for production memory.
+
 ## Radar run
 
 ```bash

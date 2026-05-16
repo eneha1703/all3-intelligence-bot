@@ -9,6 +9,7 @@ description = "Clean rebuild of the All3 radar and weekly digest bots"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+  "libsql>=0.1.8",
   "PyYAML>=6.0",
 ]
 
