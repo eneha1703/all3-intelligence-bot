@@ -10,7 +10,17 @@ python -m all3_radar.app.admin_cli sources list
 
 ## GitHub Actions with Turso state
 
-For GitHub-hosted production runs, configure these repository secrets so runtime state is stored outside GitHub:
+Correct order for a Turso migration:
+
+1. Create an empty Turso database.
+2. Create a `Read & Write` token for that database.
+3. Import the current local SQLite state into Turso with:
+
+```bash
+python scripts/import_sqlite_to_turso.py --source /path/to/all3_radar.db
+```
+
+4. Only after the import succeeds, configure these repository secrets so GitHub-hosted production runs use Turso for runtime state:
 
 - `TURSO_DATABASE_URL`
 - `TURSO_AUTH_TOKEN`
