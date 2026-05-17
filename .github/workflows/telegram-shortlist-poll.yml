@@ -13,8 +13,6 @@ jobs:
   poll-shortlist-updates:
     runs-on: ubuntu-latest
     env:
-      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
       TELEGRAM_ALERT_BOT_TOKEN: ${{ secrets.TELEGRAM_ALERT_BOT_TOKEN }}
       DATABASE_PATH: data/all3_radar.db
       TELEGRAM_GROUP_CURATION_ENABLED: ${{ vars.TELEGRAM_GROUP_CURATION_ENABLED }}
@@ -29,6 +27,34 @@ jobs:
       - name: Ensure data directory exists
         run: mkdir -p data
 
+      - name: Restore Bot 1 state
+        id: restore-radar-db
+        uses: actions/cache/restore@v4
+        with:
+          path: data/all3_radar.db
+          key: radar-db-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            radar-db-${{ github.ref_name }}-
+
+      - name: Log DB restore status
+        run: |
+          if [ -f data/all3_radar.db ]; then
+            echo "Bot 1 DB file is present before Telegram polling."
+            ls -lh data/all3_radar.db
+          else
+            echo "Bot 1 DB file is not present before Telegram polling."
+          fi
+
+      - name: Capture DB fingerprint before polling
+        id: db-before
+        shell: bash
+        run: |
+          if [ -f data/all3_radar.db ]; then
+            echo "hash=$(sha256sum data/all3_radar.db | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          else
+            echo "hash=missing" >> "$GITHUB_OUTPUT"
+          fi
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -39,17 +65,33 @@ jobs:
       - name: Initialize database
         run: python -m all3_radar.app.admin_cli db init
 
-      - name: Log DB mode after init
-        run: |
-          if [ -n "${TURSO_DATABASE_URL}" ]; then
-            echo "Bot 1 is using remote Turso state."
-          else
-            echo "Bot 1 is using local SQLite state."
-            ls -lh data/all3_radar.db
-          fi
-
       - name: Poll Telegram shortlist updates
         run: python -m all3_radar.app.radar_cli telegram-poll-updates --limit 50 --timeout-seconds 2
+
+      - name: Check DB file for persistence steps
+        if: always()
+        id: db-file
+        run: |
+          if [ -f data/all3_radar.db ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "Bot 1 DB snapshot available for save/upload."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "Bot 1 DB snapshot missing after Telegram polling."
+          fi
+
+      - name: Capture DB fingerprint after polling
+        if: always() && steps.db-file.outputs.exists == 'true'
+        id: db-after
+        shell: bash
+        run: echo "hash=$(sha256sum data/all3_radar.db | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Save Bot 1 state
+        if: success() && steps.db-file.outputs.exists == 'true' && steps.db-before.outputs.hash != steps.db-after.outputs.hash
+        uses: actions/cache/save@v4
+        with:
+          path: data/all3_radar.db
+          key: radar-db-${{ github.ref_name }}-${{ github.run_id }}
 
       - name: Upload DB snapshot
         if: failure() || github.event_name == 'workflow_dispatch'

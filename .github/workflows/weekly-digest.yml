@@ -23,8 +23,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
-      TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
       CLAUDE_DIGEST_ENABLED: ${{ github.event.inputs.claude_digest_enabled == 'true' && 'true' || 'false' }}
       CLAUDE_DIGEST_MODEL: "claude-sonnet-4-6"
       CLAUDE_DIGEST_TIMEOUT_SECONDS: "30"
@@ -43,6 +41,22 @@ jobs:
       - uses: actions/checkout@v4
       - name: Ensure data directory exists
         run: mkdir -p data
+      - name: Restore Bot 1 state
+        id: restore-radar-db
+        uses: actions/cache/restore@v4
+        with:
+          path: data/all3_radar.db
+          key: radar-db-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            radar-db-${{ github.ref_name }}-
+      - name: Log DB restore status
+        run: |
+          if [ -f data/all3_radar.db ]; then
+            echo "Bot 1 DB file is present before digest build."
+            ls -lh data/all3_radar.db
+          else
+            echo "Bot 1 DB file is not present before digest build."
+          fi
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -50,14 +64,6 @@ jobs:
         run: pip install -e .[dev]
       - name: Initialize database
         run: python -m all3_radar.app.admin_cli db init
-      - name: Log DB mode after init
-        run: |
-          if [ -n "${TURSO_DATABASE_URL}" ]; then
-            echo "Bot 1 is using remote Turso state."
-          else
-            echo "Bot 1 is using local SQLite state."
-            ls -lh data/all3_radar.db
-          fi
       - name: Build digest
         if: ${{ github.event.inputs.manual_curated_week18 != 'true' }}
         run: python -m all3_radar.app.digest_cli build --week "${{ github.event.inputs.week_key || 'latest' }}"
