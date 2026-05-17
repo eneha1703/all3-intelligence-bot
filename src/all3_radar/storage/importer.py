@@ -27,6 +27,11 @@ TABLE_IMPORT_ORDER = [
     "weekly_digest_candidates",
 ]
 
+RETRYABLE_STREAM_ERROR_SNIPPETS = (
+    "stream not found",
+    "stream error",
+)
+
 
 def _quote_identifier(value: str) -> str:
     return '"' + value.replace('"', '""') + '"'
@@ -62,9 +67,43 @@ def _delete_target_rows(connection: Any, table_names: list[str]) -> None:
         connection.execute(f"DELETE FROM {_quote_identifier(table_name)}")
 
 
+def _is_retryable_stream_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return any(snippet in message for snippet in RETRYABLE_STREAM_ERROR_SNIPPETS)
+
+
+def _write_batch(
+    *,
+    target_database_path: Path,
+    insert_sql: str,
+    batch: list[tuple[Any, ...]],
+    table_name: str,
+    progress_callback: Callable[[str], None] | None = None,
+    max_retries: int = 3,
+) -> None:
+    last_exc: Exception | None = None
+    for attempt in range(1, max_retries + 1):
+        try:
+            with connect(target_database_path) as target_connection:
+                target_connection.executemany(insert_sql, batch)
+                target_connection.commit()
+            return
+        except Exception as exc:  # pragma: no cover - exercised via remote runtime
+            last_exc = exc
+            if not _is_retryable_stream_error(exc) or attempt >= max_retries:
+                raise
+            if progress_callback is not None:
+                progress_callback(
+                    f"   retrying {table_name} batch after transient Turso stream error "
+                    f"(attempt {attempt}/{max_retries})..."
+                )
+    if last_exc is not None:
+        raise last_exc
+
+
 def _copy_table(
     source_connection: sqlite3.Connection,
-    target_connection: Any,
+    target_database_path: Path,
     table_name: str,
     *,
     batch_size: int = 500,
@@ -75,7 +114,7 @@ def _copy_table(
     placeholders = ", ".join("?" for _ in column_names)
     select_sql = f"SELECT {quoted_columns} FROM {_quote_identifier(table_name)}"
     insert_sql = (
-        f"INSERT INTO {_quote_identifier(table_name)} ({quoted_columns}) "
+        f"INSERT OR REPLACE INTO {_quote_identifier(table_name)} ({quoted_columns}) "
         f"VALUES ({placeholders})"
     )
 
@@ -85,7 +124,13 @@ def _copy_table(
     for row in cursor:
         batch.append(tuple(row[column_name] for column_name in column_names))
         if len(batch) >= batch_size:
-            target_connection.executemany(insert_sql, batch)
+            _write_batch(
+                target_database_path=target_database_path,
+                insert_sql=insert_sql,
+                batch=batch,
+                table_name=table_name,
+                progress_callback=progress_callback,
+            )
             copied_rows += len(batch)
             if progress_callback is not None:
                 progress_callback(
@@ -93,7 +138,13 @@ def _copy_table(
                 )
             batch.clear()
     if batch:
-        target_connection.executemany(insert_sql, batch)
+        _write_batch(
+            target_database_path=target_database_path,
+            insert_sql=insert_sql,
+            batch=batch,
+            table_name=table_name,
+            progress_callback=progress_callback,
+        )
         copied_rows += len(batch)
         if progress_callback is not None:
             progress_callback(f"   imported {copied_rows} rows into {table_name}...")
@@ -123,10 +174,10 @@ def import_sqlite_database(
         if progress_callback is not None:
             progress_callback("Initialized target schema.")
         with connect(target_database_path) as target_connection:
-            target_connection.execute("PRAGMA foreign_keys = OFF")
             if progress_callback is not None:
                 progress_callback("Connected to target database. Clearing existing rows...")
             _delete_target_rows(target_connection, list(reversed(table_names)))
+            target_connection.commit()
             imported_counts: dict[str, int] = {}
             total_tables = len(table_names)
             for table_index, table_name in enumerate(table_names, start=1):
@@ -134,18 +185,15 @@ def import_sqlite_database(
                     progress_callback(f"[{table_index}/{total_tables}] Importing {table_name}...")
                 imported_counts[table_name] = _copy_table(
                     source_connection,
-                    target_connection,
+                    target_database_path,
                     table_name,
                     batch_size=batch_size,
                     progress_callback=progress_callback,
                 )
-                target_connection.commit()
                 if progress_callback is not None:
                     progress_callback(
                         f"[{table_index}/{total_tables}] Finished {table_name}: {imported_counts[table_name]} rows."
                     )
-            target_connection.execute("PRAGMA foreign_keys = ON")
-            target_connection.commit()
             if progress_callback is not None:
                 progress_callback("Import committed successfully.")
             return imported_counts
