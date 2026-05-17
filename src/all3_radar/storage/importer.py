@@ -8,6 +8,25 @@ from typing import Any, Callable
 
 from .db import connect, initialize_database
 
+TABLE_IMPORT_ORDER = [
+    "sources",
+    "pipeline_runs",
+    "integration_cursors",
+    "raw_items",
+    "normalized_items",
+    "canonical_events",
+    "competitor_matches",
+    "event_members",
+    "radar_decisions",
+    "telegram_deliveries",
+    "telegram_group_messages",
+    "telegram_group_message_links",
+    "telegram_reaction_picks",
+    "editorial_signals",
+    "weekly_digest_runs",
+    "weekly_digest_candidates",
+]
+
 
 def _quote_identifier(value: str) -> str:
     return '"' + value.replace('"', '""') + '"'
@@ -23,6 +42,14 @@ def _list_user_tables(connection: sqlite3.Connection) -> list[str]:
         """
     ).fetchall()
     return [str(row[0]) for row in rows]
+
+
+def _ordered_table_names(table_names: list[str]) -> list[str]:
+    table_name_set = set(table_names)
+    ordered = [table_name for table_name in TABLE_IMPORT_ORDER if table_name in table_name_set]
+    ordered_set = set(ordered)
+    remaining = sorted(table_name for table_name in table_names if table_name not in ordered_set)
+    return ordered + remaining
 
 
 def _table_columns(connection: sqlite3.Connection, table_name: str) -> list[str]:
@@ -86,7 +113,7 @@ def import_sqlite_database(
 
     with sqlite3.connect(source_database_path) as source_connection:
         source_connection.row_factory = sqlite3.Row
-        table_names = _list_user_tables(source_connection)
+        table_names = _ordered_table_names(_list_user_tables(source_connection))
         if progress_callback is not None:
             progress_callback(
                 f"Opened source database {source_database_path} with {len(table_names)} tables."
@@ -99,7 +126,7 @@ def import_sqlite_database(
             target_connection.execute("PRAGMA foreign_keys = OFF")
             if progress_callback is not None:
                 progress_callback("Connected to target database. Clearing existing rows...")
-            _delete_target_rows(target_connection, table_names)
+            _delete_target_rows(target_connection, list(reversed(table_names)))
             imported_counts: dict[str, int] = {}
             total_tables = len(table_names)
             for table_index, table_name in enumerate(table_names, start=1):

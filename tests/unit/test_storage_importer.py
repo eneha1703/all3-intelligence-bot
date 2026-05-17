@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from all3_radar.storage.importer import import_sqlite_database
+from all3_radar.storage.importer import _ordered_table_names, import_sqlite_database
 
 
 def _insert_sample_rows(database_path: Path) -> None:
@@ -136,3 +136,25 @@ def test_import_sqlite_database_overwrites_existing_target_rows(tmp_path: Path) 
     with sqlite3.connect(target_path) as connection:
         count = connection.execute("SELECT COUNT(*) FROM integration_cursors").fetchone()[0]
     assert count == 0
+
+
+def test_ordered_table_names_respects_foreign_key_dependencies() -> None:
+    ordered = _ordered_table_names(
+        [
+            "weekly_digest_candidates",
+            "event_members",
+            "canonical_events",
+            "raw_items",
+            "sources",
+            "pipeline_runs",
+            "normalized_items",
+            "telegram_group_messages",
+            "telegram_group_message_links",
+        ]
+    )
+
+    assert ordered.index("sources") < ordered.index("raw_items") < ordered.index("normalized_items")
+    assert ordered.index("canonical_events") < ordered.index("event_members")
+    assert ordered.index("normalized_items") < ordered.index("event_members")
+    assert ordered.index("telegram_group_messages") < ordered.index("telegram_group_message_links")
+    assert ordered.index("canonical_events") < ordered.index("weekly_digest_candidates")
