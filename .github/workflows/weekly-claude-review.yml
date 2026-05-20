@@ -52,6 +52,8 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: weekly-claude-review-${{ github.event.inputs.week_key || 'latest' }}
-          path: data/weekly_claude_review_*.md
+          path: |
+            data/weekly_claude_review_*.md
+            data/editorial_memory.db
           if-no-files-found: error
-          retention-days: 2
+          retention-days: 7

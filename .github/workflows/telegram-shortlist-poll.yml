@@ -100,4 +100,4 @@ jobs:
           name: telegram-shortlist-poll-${{ github.run_id }}
           path: data/all3_radar.db
           if-no-files-found: ignore
-          retention-days: 1
+          retention-days: 7
