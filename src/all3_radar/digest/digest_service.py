@@ -858,6 +858,7 @@ class DigestService:
                 build_digest_markdown(
                     normalized_week_key,
                     selected_candidates,
+                    shortlist_candidates=candidates,
                     claude_used=claude_used,
                     fallback_reason=fallback_reason,
                 ),

@@ -30,7 +30,9 @@ def test_build_digest_markdown_includes_deterministic_sections() -> None:
     assert "## Claude Digest Status" in markdown
     assert "- Claude used: yes" in markdown
     assert "- Fallback reason: none" in markdown
+    assert "Shortlist considered: `1`" in markdown
     assert "## Signals Snapshot" in markdown
+    assert "## Candidate Shortlist" in markdown
     assert "## Top Stories" in markdown
     assert "[Flex and Teradyne expand partnership to scale physical AI](https://example.com/flex-teradyne)" in markdown
 

@@ -368,6 +368,7 @@ def test_digest_build_generates_telegram_ready_artifact_with_claude(monkeypatch,
     assert "## Claude Digest Status" in report_text
     assert "- Claude used: yes" in report_text
     assert "- Fallback reason: none" in report_text
+    assert "## Candidate Shortlist" in report_text
     assert "## Top Stories" in report_text
     assert "Sereact scales physical AI reliability after fresh funding" in report_text
     assert PROMETHEUS_TITLE in report_text
@@ -402,6 +403,8 @@ def test_digest_build_prefers_sent_stories_before_stored_only_backfill(monkeypat
     assert result.candidate_count == 6
     assert result.claude_used is False
     report_text = (tmp_path / "weekly_digest_2026-W18.report.md").read_text(encoding="utf-8")
+    assert "Shortlist considered: `6`" in report_text
+    assert "## Candidate Shortlist" in report_text
     assert "Sereact scales physical AI reliability after fresh funding" in report_text
     assert "Mass timber school pipeline points to repeatable civic deployment" in report_text
     assert "SoftBank and Roze turn AI infrastructure into a robotics delivery problem" in report_text

@@ -113,14 +113,17 @@ def build_digest_markdown(
     candidates: list[DigestCandidate],
     claude_section: str | None = None,
     *,
+    shortlist_candidates: list[DigestCandidate] | None = None,
     claude_used: bool = False,
     fallback_reason: str | None = None,
 ) -> str:
     generated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    shortlist_candidates = shortlist_candidates or candidates
     lines = [
         f"# Bot 1 Weekly Digest — {week_key}",
         "",
         f"Generated at: `{generated_at}`",
+        f"Shortlist considered: `{len(shortlist_candidates)}`",
         f"Stories included: `{len(candidates)}`",
         "",
     ]
@@ -139,7 +142,16 @@ def build_digest_markdown(
 
     lines.extend(["## Signals Snapshot", ""])
     lines.extend(_build_signal_snapshot(candidates))
-    lines.extend(["", "## Top Stories", ""])
+    lines.extend(["", "## Candidate Shortlist", ""])
+
+    if not shortlist_candidates:
+        lines.append("No eligible shortlist candidates were available for this week.")
+    else:
+        for index, candidate in enumerate(shortlist_candidates, start=1):
+            lines.extend(_format_story_block(index, candidate))
+            lines.append("")
+
+    lines.extend(["## Top Stories", ""])
 
     if not candidates:
         lines.append("No eligible Bot 1 stories were found for this week.")
