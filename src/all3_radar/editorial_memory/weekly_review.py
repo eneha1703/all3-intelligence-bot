@@ -115,13 +115,13 @@ class WeeklyClaudeReviewService:
 
         story_rows = _dedupe_story_rows(
             self.repository.load_weekly_review_story_rows(
-            start_date=window.previous_thursday.isoformat(),
+            start_date=window.start_date.isoformat(),
             end_date=window.current_thursday.isoformat(),
             limit=30,
             )
         )
         shortlist_rows = self.repository.load_active_shortlist_candidates_for_week(
-            start_date=window.previous_thursday.isoformat(),
+            start_date=window.start_date.isoformat(),
             end_date=window.current_thursday.isoformat(),
             limit=10,
             require_canonical_events=self.settings.digest.require_canonical_events,
@@ -129,7 +129,7 @@ class WeeklyClaudeReviewService:
         reaction_rows: list[dict] = []
         if self.settings.telegram_group_curation.enabled and self.settings.telegram_group_curation.reaction_shortlist_enabled:
             reaction_rows = self.repository.load_telegram_reaction_digest_candidates_for_week(
-                start_date=window.previous_thursday.isoformat(),
+                start_date=window.start_date.isoformat(),
                 end_date=window.current_thursday.isoformat(),
                 allowed_reaction_keys=self.settings.telegram_group_curation.shortlist_reaction_allowlist,
                 min_unique_reactors=self.settings.telegram_group_curation.shortlist_min_unique_reactors,

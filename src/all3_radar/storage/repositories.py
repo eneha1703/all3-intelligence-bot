@@ -275,7 +275,7 @@ class RadarRepository:
                            ni.source_id,
                            ni.title,
                            ni.canonical_url,
-                           ni.published_ts,
+                           COALESCE(ce.last_published_ts, ni.published_ts) AS published_ts,
                            rd.score,
                            rd.send_status,
                            rd.skip_reason,
@@ -357,7 +357,7 @@ class RadarRepository:
                            ni.source_id,
                            ni.title,
                            ni.canonical_url,
-                           ni.published_ts,
+                           COALESCE(ce.last_published_ts, ni.published_ts) AS published_ts,
                            rd.score,
                            'sent' AS send_status,
                            rd.skip_reason,
@@ -430,9 +430,9 @@ class RadarRepository:
         chat_filter = "gm.chat_id LIKE '-%'" if not chat_ids else f"gm.chat_id IN ({','.join('?' for _ in chat_ids)})"
         params: tuple[Any, ...]
         if not chat_ids:
-            params = (start_date, end_date, limit)
+            params = (start_date, end_date, start_date, end_date, limit)
         else:
-            params = (*chat_ids, start_date, end_date, limit)
+            params = (*chat_ids, start_date, end_date, start_date, end_date, limit)
         with connect(self.database_path) as connection:
             if require_canonical_events:
                 rows = connection.execute(
@@ -455,7 +455,7 @@ class RadarRepository:
                            ni.source_id,
                            ni.title,
                            ni.canonical_url,
-                           ni.published_ts,
+                           COALESCE(ce.last_published_ts, ni.published_ts) AS published_ts,
                            rd.score,
                            'sent' AS send_status,
                            rd.skip_reason,
@@ -470,6 +470,9 @@ class RadarRepository:
                       ON rd.normalized_item_id = ni.id
                     WHERE ce.representative_item_id IS NOT NULL
                       AND rd.relevance_status = 'keep'
+                      AND COALESCE(ce.last_published_ts, ni.published_ts) IS NOT NULL
+                      AND date(COALESCE(ce.last_published_ts, ni.published_ts)) >= date(?)
+                      AND date(COALESCE(ce.last_published_ts, ni.published_ts)) <= date(?)
                     ORDER BY gp.last_message_ts DESC, rd.score DESC, ni.title ASC
                     LIMIT ?
                     """,
@@ -508,6 +511,9 @@ class RadarRepository:
                     JOIN radar_decisions rd
                       ON rd.normalized_item_id = ni.id
                     WHERE rd.relevance_status = 'keep'
+                      AND ni.published_ts IS NOT NULL
+                      AND date(ni.published_ts) >= date(?)
+                      AND date(ni.published_ts) <= date(?)
                     ORDER BY gp.last_message_ts DESC, rd.score DESC, ni.title ASC
                     LIMIT ?
                     """,
@@ -1512,6 +1518,9 @@ class RadarRepository:
             if require_canonical_events
             else "COALESCE(rd.canonical_event_id, td.canonical_event_id, gm.canonical_event_id, ni.id)"
         )
+        published_expression = (
+            "COALESCE(ce.last_published_ts, ni.published_ts)" if require_canonical_events else "ni.published_ts"
+        )
         canonical_join = (
             "JOIN canonical_events ce ON ce.id = COALESCE(rd.canonical_event_id, td.canonical_event_id, gm.canonical_event_id)"
             if require_canonical_events
@@ -1538,7 +1547,7 @@ class RadarRepository:
                        ni.source_id,
                        ni.title,
                        ni.canonical_url,
-                       ni.published_ts,
+                       {published_expression} AS published_ts,
                        rd.score,
                        rd.send_status,
                        rd.summary_text,
@@ -1570,12 +1579,15 @@ class RadarRepository:
                   AND date(rp.picked_at) <= date(?)
                   AND rd.relevance_status = 'keep'
                   AND rd.send_status IN ('sent', 'stored_only')
+                  AND {published_expression} IS NOT NULL
+                  AND date({published_expression}) >= date(?)
+                  AND date({published_expression}) <= date(?)
                 GROUP BY {canonical_event_expression}, ni.id
                 HAVING unique_reactors >= ?
                 ORDER BY last_picked_at DESC, rd.score DESC, ni.published_ts DESC
                 LIMIT ?
                 """,
-                (*allowed_reaction_keys, start_date, end_date, min_unique_reactors, limit),
+                (*allowed_reaction_keys, start_date, end_date, start_date, end_date, min_unique_reactors, limit),
             ).fetchall()
         return [dict(row) for row in rows]
 
@@ -1632,7 +1644,7 @@ class RadarRepository:
                            ni.source_id,
                            ni.title,
                            ni.canonical_url,
-                           ni.published_ts,
+                           COALESCE(ce.last_published_ts, ni.published_ts) AS published_ts,
                            rd.score,
                            rd.send_status,
                            rd.summary_text,

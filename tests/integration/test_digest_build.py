@@ -346,7 +346,7 @@ def test_digest_build_generates_telegram_ready_artifact_with_claude(monkeypatch,
     assert result.fallback_reason is None
 
     digest_text = output_path.read_text(encoding="utf-8")
-    assert digest_text.startswith("Top 5 News Highlights | 23-30 April 2026 | Week 18")
+    assert digest_text.startswith("Top 5 News Highlights | 24-30 April 2026 | Week 18")
     assert '<a href="https://example.com/sereact">Link</a>' in digest_text
     assert "https://example.com/sereact" not in digest_text.replace(
         '<a href="https://example.com/sereact">Link</a>', ""
@@ -428,7 +428,7 @@ def test_digest_build_falls_back_to_deterministic_artifact_without_claude(monkey
     assert result.claude_used is False
     assert result.fallback_reason == "timeout"
     digest_text = output_path.read_text(encoding="utf-8")
-    assert digest_text.startswith("Top 5 News Highlights | 23-30 April 2026 | Week 18")
+    assert digest_text.startswith("Top 5 News Highlights | 24-30 April 2026 | Week 18")
     assert '<a href="https://example.com/sereact">Link</a>' in digest_text
     assert "Taco Bell adds AI menu personalization" not in digest_text
     assert "Waymo, Alphabet's robotaxi service" not in digest_text
@@ -447,7 +447,7 @@ def test_digest_build_falls_back_to_deterministic_artifact_without_claude(monkey
         candidate_count = connection.execute("SELECT COUNT(*) FROM weekly_digest_candidates").fetchone()[0]
 
     assert digest_row[0] == "completed"
-    assert digest_row[1].startswith("Top 5 News Highlights | 23-30 April 2026 | Week 18")
+    assert digest_row[1].startswith("Top 5 News Highlights | 24-30 April 2026 | Week 18")
     assert candidate_count == 6
     report_text = (tmp_path / "weekly_digest_2026-W18.report.md").read_text(encoding="utf-8")
     assert "## Claude Digest Status" in report_text

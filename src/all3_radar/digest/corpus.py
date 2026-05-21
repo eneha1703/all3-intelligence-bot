@@ -36,6 +36,7 @@ class DigestCandidate:
 class DigestWindow:
     week_key: str
     previous_thursday: date
+    start_date: date
     current_thursday: date
     iso_week_number: int
     title: str
@@ -73,16 +74,18 @@ def _format_digest_range(previous_thursday: date, current_thursday: date) -> str
 def resolve_digest_window(week_key: str, today: date | None = None) -> DigestWindow:
     current_thursday = _normalize_current_thursday(week_key, today=today)
     previous_thursday = current_thursday - timedelta(days=7)
+    start_date = previous_thursday + timedelta(days=1)
     iso_year, iso_week, _ = current_thursday.isocalendar()
     normalized_week_key = f"{iso_year}-W{iso_week:02d}"
     title = (
         f"Top 5 News Highlights | "
-        f"{_format_digest_range(previous_thursday, current_thursday)} | "
+        f"{_format_digest_range(start_date, current_thursday)} | "
         f"Week {iso_week}"
     )
     return DigestWindow(
         week_key=normalized_week_key,
         previous_thursday=previous_thursday,
+        start_date=start_date,
         current_thursday=current_thursday,
         iso_week_number=iso_week,
         title=title,
@@ -91,7 +94,7 @@ def resolve_digest_window(week_key: str, today: date | None = None) -> DigestWin
 
 def parse_week_key(week_key: str) -> tuple[date, date]:
     window = resolve_digest_window(week_key)
-    return window.previous_thursday, window.current_thursday
+    return window.start_date, window.current_thursday
 
 
 def build_default_output_path(repo_root: Path, week_key: str) -> Path:
@@ -196,7 +199,7 @@ def build_claude_selection_prompt(
     lines = [
             "You are selecting the Top 5 weekly digest stories for Bot 2.",
             f"Digest title: {window.title}",
-            f"Digest window: {window.previous_thursday.isoformat()} through {window.current_thursday.isoformat()}",
+            f"Digest window: {window.start_date.isoformat()} through {window.current_thursday.isoformat()}",
             "Select exactly 5 distinct stories from the provided candidates.",
             "Prioritize All3 relevance, physical AI, industrial robotics, construction automation, housing industrialization, timber adoption/scaling/economics/policy, infrastructure automation, strategic signal strength, novelty, and hard operational evidence.",
             "Prefer stories with a sharp operational takeaway, not just category relevance.",

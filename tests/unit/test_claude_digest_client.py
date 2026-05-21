@@ -175,7 +175,7 @@ def test_claude_digest_client_validates_telegram_digest_output(monkeypatch) -> N
         timeout_seconds=10,
         max_tokens=500,
     )
-    expected_title = "Top 5 News Highlights | 23-30 April 2026 | Week 18"
+    expected_title = "Top 5 News Highlights | 24-30 April 2026 | Week 18"
 
     def fake_urlopen(request, timeout):  # noqa: ANN001
         return _FakeResponse(
@@ -210,7 +210,7 @@ def test_claude_digest_client_rejects_visible_raw_urls(monkeypatch) -> None:
         timeout_seconds=10,
         max_tokens=500,
     )
-    expected_title = "Top 5 News Highlights | 23-30 April 2026 | Week 18"
+    expected_title = "Top 5 News Highlights | 24-30 April 2026 | Week 18"
 
     def fake_urlopen(request, timeout):  # noqa: ANN001
         return _FakeResponse(

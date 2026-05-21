@@ -602,13 +602,13 @@ class DigestService:
         group_mode_enabled = self.settings.telegram_group_curation.enabled
         if not group_mode_enabled:
             rows = self.repository.load_digest_candidates_for_week(
-                start_date=window.previous_thursday.isoformat(),
+                start_date=window.start_date.isoformat(),
                 end_date=window.current_thursday.isoformat(),
                 limit=self.settings.digest.shortlist_size_before_claude,
                 require_canonical_events=self.settings.digest.require_canonical_events,
             )
             manual_rows = self.repository.load_active_shortlist_candidates_for_week(
-                start_date=window.previous_thursday.isoformat(),
+                start_date=window.start_date.isoformat(),
                 end_date=window.current_thursday.isoformat(),
                 limit=self.settings.digest.shortlist_size_before_claude,
                 require_canonical_events=self.settings.digest.require_canonical_events,
@@ -624,7 +624,7 @@ class DigestService:
             )
 
         sent_rows = self.repository.load_telegram_group_sent_digest_candidates_for_week(
-            start_date=window.previous_thursday.isoformat(),
+            start_date=window.start_date.isoformat(),
             end_date=window.current_thursday.isoformat(),
             limit=self.settings.digest.shortlist_size_before_claude,
             require_canonical_events=self.settings.digest.require_canonical_events,

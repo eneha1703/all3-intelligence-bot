@@ -28,6 +28,7 @@ def _seed_digest_item(
     *,
     canonical_url: str = "https://example.com/robotics-factory",
     item_suffix: str = "1",
+    published_ts: str = "2026-05-01T12:00:00+00:00",
 ) -> None:
     now = "2026-05-01T12:00:00+00:00"
     with sqlite3.connect(repository.database_path) as connection:
@@ -45,7 +46,7 @@ def _seed_digest_item(
                 "Robotics factory deployment",
                 None,
                 "A robotics factory deployment with physical industry relevance.",
-                now,
+                published_ts,
                 now,
                 "en",
                 "direct",
@@ -64,8 +65,8 @@ def _seed_digest_item(
                 f"item-{item_suffix}",
                 f"event-{item_suffix}",
                 "Robotics factory deployment",
-                now,
-                now,
+                published_ts,
+                published_ts,
                 now,
                 now,
             ),
@@ -290,6 +291,35 @@ def test_reaction_digest_candidates_include_user_posted_links_when_matched(tmp_p
     assert rows[0]["unique_reactors"] == 1
 
 
+def test_group_sent_digest_candidates_exclude_previous_week_published_story(tmp_path) -> None:
+    repository = _repository(tmp_path)
+    _seed_digest_item(repository, published_ts="2026-04-29T12:00:00+00:00")
+    repository.upsert_telegram_group_message(
+        chat_id="-100123",
+        telegram_message_id="90",
+        sent_by_bot=True,
+        sender_user_id="bot",
+        sender_chat_id="-100123",
+        message_ts="2026-05-02T12:00:00+00:00",
+        message_text="Posted by bot",
+        message_caption=None,
+        message_urls=("https://example.com/robotics-factory",),
+        has_links=True,
+        normalized_item_id="item-1",
+        canonical_event_id="event-1",
+        raw_update={},
+    )
+
+    rows = repository.load_telegram_group_sent_digest_candidates_for_week(
+        start_date="2026-05-01",
+        end_date="2026-05-07",
+        limit=10,
+        require_canonical_events=True,
+    )
+
+    assert rows == []
+
+
 def test_reaction_digest_candidates_include_bot_delivered_messages_without_group_message(tmp_path) -> None:
     repository = _repository(tmp_path)
     _seed_digest_item(repository)
@@ -339,6 +369,25 @@ def test_reaction_digest_candidates_include_bot_delivered_messages_without_group
     assert rows[0]["canonical_event_id"] == "event-1"
     assert rows[0]["normalized_item_id"] == "item-1"
     assert rows[0]["title"] == "Robotics factory deployment"
+
+
+def test_reaction_digest_candidates_exclude_previous_week_published_story(tmp_path) -> None:
+    repository = _repository(tmp_path)
+    _seed_digest_item(repository, published_ts="2026-04-29T12:00:00+00:00")
+    service = _enabled_service(repository)
+    service.ingest_update(_message_update())
+    service.ingest_update(_star_reaction_update(active=True))
+
+    rows = repository.load_telegram_reaction_digest_candidates_for_week(
+        start_date="2026-05-01",
+        end_date="2026-05-07",
+        allowed_reaction_keys=("emoji:star",),
+        min_unique_reactors=1,
+        limit=10,
+        require_canonical_events=True,
+    )
+
+    assert rows == []
 
 
 def test_reaction_digest_candidates_skip_ambiguous_multi_link_user_message(tmp_path) -> None:

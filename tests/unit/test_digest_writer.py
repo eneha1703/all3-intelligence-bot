@@ -49,11 +49,11 @@ def test_build_digest_html_embeds_link_without_visible_raw_url() -> None:
     )
 
     digest_html = build_digest_html(
-        "Top 5 News Highlights | 23-30 April 2026 | Week 18",
+        "Top 5 News Highlights | 24-30 April 2026 | Week 18",
         [candidate],
     )
 
-    assert digest_html.startswith("Top 5 News Highlights | 23-30 April 2026 | Week 18")
+    assert digest_html.startswith("Top 5 News Highlights | 24-30 April 2026 | Week 18")
     assert '<a href="https://example.com/destatis">Link</a>' in digest_html
     assert "https://example.com/destatis" not in digest_html.replace('<a href="https://example.com/destatis">Link</a>', "")
 
@@ -75,7 +75,7 @@ def test_build_digest_html_trims_broken_summary_fragments() -> None:
         event_flags={"funding_event": True, "construction_innovation_signal": True},
     )
 
-    digest_html = build_digest_html("Top 5 News Highlights | 7-14 May 2026 | Week 20", [candidate])
+    digest_html = build_digest_html("Top 5 News Highlights | 8-14 May 2026 | Week 20", [candidate])
 
     assert "and international." not in digest_html
     assert "construction sites in India." in digest_html
@@ -94,7 +94,7 @@ def test_build_digest_html_uses_class_fallback_for_missing_summary() -> None:
         event_flags={"construction_statistics_signal": True},
     )
 
-    digest_html = build_digest_html("Top 5 News Highlights | 7-14 May 2026 | Week 20", [candidate])
+    digest_html = build_digest_html("Top 5 News Highlights | 8-14 May 2026 | Week 20", [candidate])
 
     assert "This story remained one of the week's strongest operational signals across the All3 scope." not in digest_html
     assert "Official housing and construction data added another hard market-pressure signal this week." in digest_html
