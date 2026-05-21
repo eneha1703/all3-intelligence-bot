@@ -65,3 +65,27 @@ def test_parse_destatis_press_listing_fails_when_no_trustworthy_dates() -> None:
             source=_destatis_source(),
             collected_at=datetime(2026, 4, 25, tzinfo=timezone.utc),
         )
+
+
+def test_parse_destatis_press_listing_normalizes_duplicated_article_prefix() -> None:
+    html = """
+    <div class="news">
+      <a href="/DE/Presse/Pressemitteilungen/DE/Presse/Pressemitteilungen/2026/05/PD26_166_3111.html">
+        Baugenehmigungen f&uuml;r Wohnungen im April 2026
+      </a>
+      <div class="copytext">
+        <time>21. Mai 2026</time>
+        Pressemitteilung Nr. 166 vom 21. Mai 2026
+      </div>
+    </div>
+    """
+
+    items = parse_destatis_press_listing(
+        feed_text=html,
+        source=_destatis_source(),
+        collected_at=datetime(2026, 5, 21, tzinfo=timezone.utc),
+    )
+
+    assert len(items) == 1
+    assert items[0].url == "https://www.destatis.de/DE/Presse/Pressemitteilungen/2026/05/PD26_166_3111.html"
+    assert items[0].external_id == "PD26_166_3111.html"

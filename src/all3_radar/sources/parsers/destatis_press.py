@@ -12,6 +12,7 @@ from urllib.parse import urljoin, urlparse
 from all3_radar.domain.models import CollectedRawItem, SourceDefinition
 
 WHITESPACE_RE = re.compile(r"\s+")
+DESTATIS_ARTICLE_PREFIX = "/DE/Presse/Pressemitteilungen/"
 DESTATIS_ARTICLE_PATH_RE = re.compile(r"/DE/Presse/Pressemitteilungen/\d{4}/\d{2}/[^\"'#?]+\.html?$")
 GERMAN_DATE_RE = re.compile(
     r"(\d{1,2})\.\s*(Januar|Februar|März|Maerz|April|Mai|Juni|Juli|August|September|Oktober|November|Dezember)\s+(\d{4})",
@@ -49,6 +50,19 @@ def _clean_text(value: str | None) -> str | None:
 def _extract_external_id(url: str) -> str | None:
     path = urlparse(url).path.rstrip("/").rsplit("/", 1)[-1]
     return path or None
+
+
+def _normalize_destatis_article_url(base_url: str, href: str) -> str:
+    absolute_url = urljoin(base_url, href)
+    parsed = urlparse(absolute_url)
+    path = parsed.path
+
+    duplicated_prefix = f"{DESTATIS_ARTICLE_PREFIX}DE/Presse/Pressemitteilungen/"
+    if duplicated_prefix in path:
+        path = path.replace(duplicated_prefix, DESTATIS_ARTICLE_PREFIX, 1)
+        absolute_url = parsed._replace(path=path).geturl()
+
+    return absolute_url
 
 
 def parse_destatis_published_ts(value: str) -> datetime | None:
@@ -118,7 +132,7 @@ class _DestatisPressHTMLParser(HTMLParser):
         href = attr_map.get("href")
         if not href:
             return
-        absolute_url = urljoin(self.base_url, href)
+        absolute_url = _normalize_destatis_article_url(self.base_url, href)
         if not DESTATIS_ARTICLE_PATH_RE.search(urlparse(absolute_url).path):
             return
 
