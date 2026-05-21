@@ -13,6 +13,13 @@ Weekly Digest House Style
 - Start with the strongest concrete fact:
   funding amount, deployment scale, production metric, building scale, policy change, timeline, or capacity.
 - Then add one concise interpretation of why the development matters.
+- When a story combines demand recovery with supply lag, name the actual bottleneck directly:
+  permits, approvals, completions, delivery time, or pipeline rebuild speed.
+- Avoid generic endings like:
+  "that gap makes faster, more predictable construction more valuable"
+  when the specific mechanism can be named more clearly.
+- For funding and automation stories, explain the practical wedge when the facts support it:
+  retrofit model, task-specific workflow, commercial packaging, deployment context, or measurable labour/time gain.
 - The takeaway can be about All3, construction, physical AI, robotics, timber adoption, industrial systems, infrastructure, or the sector more broadly.
 - The takeaway does not always need to be framed around All3 specifically; it can be about the sector or market structure more broadly.
 - Do not force every item into the same conclusion formula.

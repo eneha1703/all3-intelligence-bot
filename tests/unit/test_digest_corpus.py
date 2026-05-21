@@ -59,14 +59,21 @@ def test_build_claude_writer_prompt_includes_house_style_and_examples() -> None:
     assert "Do not sound like a market memo, strategy deck, or founder essay." in prompt
     assert "Do not default to starting every paragraph with the company name." in prompt
     assert "Mix the editorial voice across items so the digest reads like it was written by a person, not a template." in prompt
+    assert "When a story combines demand recovery with supply lag, name the actual bottleneck directly" in prompt
+    assert "For funding and automation stories, explain the practical wedge" in prompt
     assert "Editorial memory rules:" in prompt
     assert "digest_human_editor_voice" in prompt
+    assert "digest_name_pipeline_constraint" in prompt
+    assert "digest_surface_operational_wedge" in prompt
     assert "Editorial memory good examples:" in prompt
     assert "Editorial memory bad examples:" in prompt
     assert "Data centers may become the next robotics construction site" in prompt
+    assert "Germany's housing market is recovering before the pipeline does" in prompt
+    assert "Xpanner finds a practical wedge for construction automation" in prompt
     assert "Germany's housing delivery is slowing as the system loses speed" in prompt
     assert "Mercer Mass Timber Offers Free CLT Design Tool" in prompt
     assert "Figure's humanoids are now making beds, not building cars" in prompt
+    assert "That gap makes faster, more predictable construction more valuable." in prompt
     assert "worth noting" in prompt
 
 

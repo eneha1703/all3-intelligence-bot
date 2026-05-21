@@ -74,6 +74,18 @@ rules:
     status: active
     summary: Do not write like you are justifying relevance to the team; prefer observed implications grounded in facts.
 
+  - id: digest_name_pipeline_constraint
+    scope:
+      - digest_writing
+    status: active
+    summary: When demand is recovering faster than supply, name the actual pipeline constraint directly, such as permits, approvals, completions, or delivery time, instead of ending on a generic relevance line.
+
+  - id: digest_surface_operational_wedge
+    scope:
+      - digest_writing
+    status: active
+    summary: For funding and automation stories, explain the practical commercial wedge, deployment model, or measurable workflow gain rather than stopping at a generic funding recap.
+
   - id: selection_prefer_high_signal_sector_relevance
     scope:
       - story_selection

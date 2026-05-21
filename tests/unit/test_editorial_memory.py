@@ -69,6 +69,8 @@ def test_editorial_memory_rules_file_loads() -> None:
     payload = load_rules(resolve_editorial_memory_rules_path(repo_root))
     rule_ids = {rule["id"] for rule in payload["rules"]}
     assert "digest_human_editor_voice" in rule_ids
+    assert "digest_name_pipeline_constraint" in rule_ids
+    assert "digest_surface_operational_wedge" in rule_ids
     assert "selection_prefer_high_signal_sector_relevance" in rule_ids
 
 

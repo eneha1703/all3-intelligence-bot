@@ -2,6 +2,36 @@
   {
     "label": "good",
     "notes": [
+      "Names the pipeline constraint directly",
+      "Uses the second datapoint to sharpen the angle",
+      "Avoids a generic relevance ending"
+    ],
+    "headline": "Germany's housing market is recovering before the pipeline does",
+    "body_html": "German residential prices rose 2.3% y-o-y in Q1 2026, with Top 7 cities rising 3.6% and new contract rents up 3%. Permits are improving from the lows, but Jan-Feb 2026 approvals were still about 28% below the same period in 2021-22. Demand pressure is returning faster than the pipeline is rebuilding, which makes delivery speed and certainty more valuable. <a href=\"SOURCE_URL\">Link</a>"
+  },
+  {
+    "label": "good",
+    "notes": [
+      "Explains the commercial wedge",
+      "Task-specific deployment framing",
+      "Economics-first angle"
+    ],
+    "headline": "Xpanner finds a practical wedge for construction automation",
+    "body_html": "Xpanner raised USD 18M to scale Automation-as-a-Service for construction sites by retrofitting machines contractors already own. Its X1 Kit pairs that retrofit model with task-specific licences for piling, trenching, grading and material handling, and the company says some workflows can cut labour from six people to one. The wedge is practical: start where automation can be sold on site economics, not vision. <a href=\"SOURCE_URL\">Link</a>"
+  },
+  {
+    "label": "bad",
+    "notes": [
+      "Generic concluding relevance line",
+      "Does not name the pipeline bottleneck clearly",
+      "More vague than it needs to be"
+    ],
+    "headline": "Germany's housing market is recovering before supply does",
+    "body_html": "German residential prices rose 2.3% y-o-y in Q1 2026, with multifamily house prices up 2.2% and new contract rents up 3%. In the Top 7 cities, residential prices rose 3.6% y-o-y on average. This is no longer just market stabilisation after the downturn. The housing shortage is showing up again in both prices and rents, before the delivery system has caught up. That gap makes faster, more predictable construction more valuable. <a href=\"SOURCE_URL\">Link</a>"
+  },
+  {
+    "label": "good",
+    "notes": [
       "Compact weekly note",
       "Interpretive but grounded",
       "Strong fact first",

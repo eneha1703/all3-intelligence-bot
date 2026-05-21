@@ -19,7 +19,7 @@ def _active_scoped_rules(repo_root: Path, scope: str, max_rules: int) -> list[di
 def build_digest_memory_context(
     repo_root: Path,
     *,
-    max_rules: int = 6,
+    max_rules: int = 16,
     max_good_examples: int = 3,
     max_bad_examples: int = 3,
 ) -> str:
