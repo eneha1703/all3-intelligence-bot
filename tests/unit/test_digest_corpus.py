@@ -64,6 +64,11 @@ def test_build_claude_writer_prompt_includes_house_style_and_examples() -> None:
     assert "Mix the editorial voice across items so the digest reads like it was written by a person, not a template." in prompt
     assert "If a selected item has thin grounding, stay close to the provided title and summary" in prompt
     assert "Do not infer geography, market comparisons, buyer motivations, policy context, financing dynamics, or adoption drivers" in prompt
+    assert "Story-type guidance:" in prompt
+    assert "- timber_adoption: focus on adoption barriers, share shifts, competing delivery systems" in prompt
+    assert "- construction_robotics_funding: the funding is not the point by itself." in prompt
+    assert '"story_type": "general_relevant"' in prompt
+    assert '"angle_guard": [' in prompt
     assert "When a story combines demand recovery with supply lag, name the actual bottleneck directly" in prompt
     assert "For funding and automation stories, explain the practical wedge" in prompt
     assert "Editorial memory rules:" in prompt
@@ -103,3 +108,53 @@ def test_build_claude_writer_prompt_requires_exactly_five_items() -> None:
 
     assert "Use exactly 5 items" in prompt
     assert "Do not create synthetic wrap-up items" in prompt
+
+
+def test_build_claude_writer_prompt_includes_specific_angle_guards_for_timber_and_deployment() -> None:
+    window = resolve_digest_window("2026-W21")
+    candidates = [
+        DigestCandidate(
+            canonical_event_id="event-timber",
+            normalized_item_id="item-timber",
+            source_id="wood_central_api",
+            title="Mid-Rise Surge Marks Timber Frame's Inflection Point",
+            canonical_url="https://example.com/timber",
+            published_ts=None,
+            score=48,
+            summary_text=(
+                "Australia's mid-rise approvals jumped sharply in 2025, while structural timber consumption fell "
+                "and imported prefabricated dwellings and LVL volumes rose."
+            ),
+            event_flags={"timber_strategic_signal": True},
+            story_type="timber_adoption",
+            angle_guard=(
+                "Surface the adoption barrier, delivery-system mismatch, or share shift. Do not default to generic timber momentum or sustainability language.",
+                "Center the contradiction between rising mid-rise demand and timber losing practical share; do not drift into a generic 'timber is becoming normal' angle.",
+            ),
+        ),
+        DigestCandidate(
+            canonical_event_id="event-deploy",
+            normalized_item_id="item-deploy",
+            source_id="business_insider_feed",
+            title="Silicon Valley's latest binge-watch is a humanoid warehouse worker",
+            canonical_url="https://example.com/figure",
+            published_ts=None,
+            score=86,
+            summary_text=(
+                "Figure AI's humanoids drew over 3 million views on X as they sorted packages with zero failures for 24 hours."
+            ),
+            event_flags={"industrial_robotics_signal": True, "deployment_event": True},
+            story_type="industrial_deployment",
+            angle_guard=(
+                "Treat this as an operational proof or deployment-threshold story. Focus on what the run or rollout shows and what it still does not prove.",
+                "Ignore audience, virality, or character-name details unless they change the operating claim.",
+            ),
+        ),
+    ]
+
+    prompt = build_claude_writer_prompt(window, candidates)
+
+    assert '"story_type": "timber_adoption"' in prompt
+    assert '"story_type": "industrial_deployment"' in prompt
+    assert "Center the contradiction between rising mid-rise demand and timber losing practical share" in prompt
+    assert "Ignore audience, virality, or character-name details unless they change the operating claim." in prompt

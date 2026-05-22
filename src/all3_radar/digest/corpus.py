@@ -30,6 +30,8 @@ class DigestCandidate:
     score: int
     summary_text: str | None
     event_flags: dict[str, bool]
+    story_type: str = "general_relevant"
+    angle_guard: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -107,11 +109,179 @@ def build_report_output_path(repo_root: Path, week_key: str) -> Path:
     return repo_root / "data" / f"weekly_digest_{safe_week}.report.md"
 
 
+def _normalize_story_text(value: str | None) -> str:
+    if not value:
+        return ""
+    normalized = re.sub(r"[^a-z0-9]+", " ", value.lower())
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def _has_any_story_phrase(text: str, phrases: tuple[str, ...]) -> bool:
+    return any(phrase in text for phrase in phrases)
+
+
+def _classify_story_type(title: str, summary_text: str | None, event_flags: dict[str, bool]) -> str:
+    combined = f"{_normalize_story_text(title)} {_normalize_story_text(summary_text)}".strip()
+
+    if (
+        bool(event_flags.get("timber_strategic_signal"))
+        or bool(event_flags.get("timber_policy_signal"))
+        or bool(event_flags.get("timber_economics_signal"))
+        or bool(event_flags.get("timber_performance_signal"))
+        or _has_any_story_phrase(combined, ("timber", "mass timber", "clt", "glulam", "lvl"))
+    ):
+        return "timber_adoption"
+
+    if bool(event_flags.get("construction_statistics_signal")) or _has_any_story_phrase(
+        combined,
+        (
+            "permits",
+            "approvals",
+            "completions",
+            "housing gap",
+            "prices rose",
+            "rents up",
+            "project starts",
+            "planning approvals",
+            "pipeline",
+        ),
+    ):
+        return "housing_market_signal"
+
+    if bool(event_flags.get("funding_event")) and (
+        bool(event_flags.get("construction_innovation_signal"))
+        or _has_any_story_phrase(
+            combined,
+            (
+                "construction robotics",
+                "construction sites",
+                "jobsite",
+                "retrofit",
+                "automation as a service",
+                "off site robotic fabrication",
+                "on site assembly",
+                "task specific",
+            ),
+        )
+    ):
+        return "construction_robotics_funding"
+
+    if _has_any_story_phrase(
+        combined,
+        (
+            "simulation",
+            "sim to real",
+            "digital twins",
+            "factory robots that behave identically",
+            "trained in simulation",
+            "physical robot behaviour",
+            "nvidia",
+            "fanuc",
+        ),
+    ):
+        return "robotics_tooling"
+
+    if (
+        bool(event_flags.get("industrial_robotics_signal"))
+        or bool(event_flags.get("deployment_event"))
+    ) and _has_any_story_phrase(
+        combined,
+        (
+            "deploy",
+            "deployment",
+            "operating",
+            "factory",
+            "plants",
+            "warehouse",
+            "zero failures",
+            "24 hours",
+            "full shift",
+            "without intervention",
+            "humanoid",
+            "robots are already",
+        ),
+    ):
+        return "industrial_deployment"
+
+    if bool(event_flags.get("funding_event")) and _has_any_story_phrase(
+        combined,
+        (
+            "valuation",
+            "total funding",
+            "advanced manufacturing",
+            "physical industries",
+            "platform opportunity",
+        ),
+    ):
+        return "strategic_capital"
+
+    return "general_relevant"
+
+
+def _build_angle_guard(story_type: str, title: str, summary_text: str | None, event_flags: dict[str, bool]) -> tuple[str, ...]:
+    combined = f"{_normalize_story_text(title)} {_normalize_story_text(summary_text)}".strip()
+    notes: list[str] = []
+
+    if story_type == "timber_adoption":
+        notes.append(
+            "Surface the adoption barrier, delivery-system mismatch, or share shift. Do not default to generic timber momentum or sustainability language."
+        )
+        if _has_any_story_phrase(
+            combined,
+            (
+                "consumption fell",
+                "imports rose",
+                "losing share",
+                "light gauge steel",
+                "prefabricated dwelling",
+                "mid rise approvals",
+                "mid rise has overtaken detached",
+            ),
+        ):
+            notes.append(
+                "Center the contradiction between rising mid-rise demand and timber losing practical share; do not drift into a generic 'timber is becoming normal' angle."
+            )
+    elif story_type == "construction_robotics_funding":
+        notes.append(
+            "Investor roll call is secondary unless the investor itself is the signal. Focus on the workflow wedge, retrofit model, task packaging, or measurable labour/time gain."
+        )
+    elif story_type == "industrial_deployment":
+        notes.append(
+            "Treat this as an operational proof or deployment-threshold story. Focus on what the run or rollout shows and what it still does not prove."
+        )
+        if _has_any_story_phrase(combined, ("viewers", "viral", "livestream", "bob frank and gary", "x as it sorted")):
+            notes.append(
+                "Ignore audience, virality, or character-name details unless they change the operating claim."
+            )
+        if _has_any_story_phrase(combined, ("atlas", "hyundai", "own factories", "us plants")):
+            notes.append(
+                "Frame this as an internal factory test-bed and scale commitment, not as generic humanoid hype."
+            )
+    elif story_type == "robotics_tooling":
+        notes.append(
+            "Frame this as a deployment-cost, deployment-speed, or sim-to-real reliability story, not as a generic partnership recap."
+        )
+    elif story_type == "housing_market_signal":
+        notes.append(
+            "Name the actual pipeline constraint directly: permits, approvals, completions, delivery time, or rebuild speed."
+        )
+    elif story_type == "strategic_capital":
+        notes.append(
+            "Explain what investors are actually betting on operationally, not just that capital is flowing."
+        )
+
+    if not notes:
+        notes.append("Stay close to the strongest fact and one observed implication.")
+    return tuple(notes)
+
+
 def hydrate_digest_candidates(rows: list[dict[str, Any]]) -> list[DigestCandidate]:
     candidates: list[DigestCandidate] = []
     for row in rows:
         signals = json.loads(row["signals_json"] or "{}")
         event_flags = signals.get("event_flags", {}) if isinstance(signals, dict) else {}
+        story_type = _classify_story_type(str(row["title"]), row.get("summary_text"), event_flags)
+        angle_guard = _build_angle_guard(story_type, str(row["title"]), row.get("summary_text"), event_flags)
         candidates.append(
             DigestCandidate(
                 canonical_event_id=str(row["canonical_event_id"]),
@@ -123,6 +293,8 @@ def hydrate_digest_candidates(rows: list[dict[str, Any]]) -> list[DigestCandidat
                 score=int(row["score"]),
                 summary_text=row.get("summary_text"),
                 event_flags={key: bool(value) for key, value in event_flags.items()},
+                story_type=story_type,
+                angle_guard=angle_guard,
             )
         )
     return candidates
@@ -193,6 +365,8 @@ def build_claude_selection_prompt(
             "score": candidate.score,
             "summary": candidate.summary_text,
             "signals": candidate.event_flags,
+            "story_type": candidate.story_type,
+            "angle_guard": list(candidate.angle_guard),
         }
         for candidate in selected
     ]
@@ -240,6 +414,8 @@ def build_claude_writer_prompt(window: DigestWindow, candidates: list[DigestCand
             "score": candidate.score,
             "summary": candidate.summary_text,
             "signals": candidate.event_flags,
+            "story_type": candidate.story_type,
+            "angle_guard": list(candidate.angle_guard),
         }
         for candidate in candidates
     ]
@@ -299,6 +475,14 @@ def build_claude_writer_prompt(window: DigestWindow, candidates: list[DigestCand
             "Do not end every item with generic phrases like 'the signal is', 'this highlights', or 'this underscores'.",
             "Mix the editorial voice across items so the digest reads like it was written by a person, not a template.",
             "If an item does not support a strong interpretive angle from the provided facts, stay concrete and restrained rather than inventing significance.",
+            "",
+            "Story-type guidance:",
+            "- housing_market_signal: name the pipeline bottleneck directly and do not end on a vague housing-pressure line.",
+            "- timber_adoption: focus on adoption barriers, share shifts, competing delivery systems, code/economics, or where timber is winning or losing practical ground. Do not drift into generic timber momentum or sustainability language.",
+            "- construction_robotics_funding: the funding is not the point by itself. Focus on the commercial wedge, workflow, retrofit logic, packaging model, or measurable site gain.",
+            "- industrial_deployment: focus on the operating claim, deployment threshold, or what the proof does and does not show. Do not spend the implication on audience, virality, or publicity.",
+            "- robotics_tooling: frame the item around deployment speed, deployment cost, sim-to-real transfer, or training friction, not just the partnership announcement.",
+            "- strategic_capital: explain what the capital is betting on operationally, not just that the round was large.",
             f"Title: {window.title}",
             "",
             "House style guide:",

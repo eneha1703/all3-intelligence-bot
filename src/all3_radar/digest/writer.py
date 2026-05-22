@@ -59,7 +59,10 @@ def _format_story_block(index: int, candidate: DigestCandidate) -> list[str]:
     lines = [
         f"{index}. [{candidate.title}]({candidate.canonical_url})",
         f"   Source: `{candidate.source_id}` | Published: `{published_label}` | Score: `{candidate.score}`",
+        f"   Story type: `{candidate.story_type}`",
     ]
+    if candidate.angle_guard:
+        lines.append(f"   Angle guard: {'; '.join(candidate.angle_guard)}")
     if candidate.summary_text:
         lines.append(f"   Summary: {candidate.summary_text}")
     return lines

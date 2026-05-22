@@ -417,9 +417,12 @@ def test_digest_build_uses_text_preview_when_stored_summary_is_missing(monkeypat
     assert result.claude_used is True
     assert len(fake_client.writer_prompts) == 1
     assert preview_text in fake_client.writer_prompts[0]
+    assert '"story_type": "timber_adoption"' in fake_client.writer_prompts[0]
+    assert "Center the contradiction between rising mid-rise demand and timber losing practical share" in fake_client.writer_prompts[0]
 
     report_text = (tmp_path / "weekly_digest_2026-W18.report.md").read_text(encoding="utf-8")
     assert f"Summary: {preview_text}" in report_text
+    assert "Story type: `timber_adoption`" in report_text
 
 
 def test_digest_build_prefers_sent_stories_before_stored_only_backfill(monkeypatch, tmp_path) -> None:
