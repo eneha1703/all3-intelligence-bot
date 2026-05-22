@@ -13,6 +13,7 @@ from all3_radar.config.loader import load_settings
 from all3_radar.digest.claude_client import ClaudeDigestClient, ClaudeDigestUnavailableError
 from all3_radar.digest.corpus import (
     DigestCandidate,
+    build_claude_revision_prompt,
     build_claude_selection_prompt,
     build_claude_writer_prompt,
     build_default_output_path,
@@ -846,6 +847,18 @@ class DigestService:
                         expected_title=window.title,
                     )
                     claude_used = True
+                    revision_prompt = build_claude_revision_prompt(window, selected_candidates, final_markdown)
+                    try:
+                        final_markdown = self.claude_client.revise_telegram_digest(
+                            revision_prompt,
+                            expected_title=window.title,
+                        )
+                    except ClaudeDigestUnavailableError as exc:
+                        LOGGER.warning(
+                            "Claude digest revision unavailable for week=%s reason=%s",
+                            normalized_week_key,
+                            exc,
+                        )
                 except ClaudeDigestUnavailableError as exc:
                     fallback_reason = str(exc)
                     final_markdown = build_digest_html(window.title, selected_candidates)

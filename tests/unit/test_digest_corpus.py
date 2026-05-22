@@ -1,6 +1,11 @@
 from datetime import date
 
-from all3_radar.digest.corpus import DigestCandidate, build_claude_writer_prompt, resolve_digest_window
+from all3_radar.digest.corpus import (
+    DigestCandidate,
+    build_claude_revision_prompt,
+    build_claude_writer_prompt,
+    resolve_digest_window,
+)
 
 
 def test_resolve_digest_window_formats_same_month_range() -> None:
@@ -108,6 +113,41 @@ def test_build_claude_writer_prompt_requires_exactly_five_items() -> None:
 
     assert "Use exactly 5 items" in prompt
     assert "Do not create synthetic wrap-up items" in prompt
+
+
+def test_build_claude_revision_prompt_includes_quality_checks() -> None:
+    window = resolve_digest_window("2026-W21")
+    candidate = DigestCandidate(
+        canonical_event_id="event-1",
+        normalized_item_id="item-1",
+        source_id="ai_insider_rss",
+        title="August Robotics Raises $30M in Series B Funding for Autonomous Construction Robotics",
+        canonical_url="https://example.com/august",
+        published_ts=None,
+        score=66,
+        summary_text=(
+            "August Robotics has raised $30 million to expand production, increase deployments and develop additional automation systems."
+        ),
+        event_flags={"funding_event": True, "construction_innovation_signal": True},
+        story_type="construction_robotics_funding",
+        angle_guard=(
+            "Investor roll call is secondary unless the investor itself is the signal. Focus on the workflow wedge, retrofit model, task packaging, or measurable labour/time gain.",
+        ),
+    )
+
+    draft = (
+        "Top 5 News Highlights | 15-21 May 2026 | Week 21\n\n"
+        "1. <b>August Robotics raises USD 30M to scale autonomous construction systems</b>\n"
+        'The Series B round was led by Big Pi Ventures with multiple existing backers returning. <a href="https://example.com/august">Link</a>'
+    )
+
+    prompt = build_claude_revision_prompt(window, [candidate], draft)
+
+    assert "Review the drafted Weekly Digest Bot 2 message item by item" in prompt
+    assert "Remove investor laundry lists unless the investor identity itself is the signal." in prompt
+    assert "For construction_robotics_funding stories, the workflow wedge matters more than the cap table." in prompt
+    assert "Return the full final digest only." in prompt
+    assert draft in prompt
 
 
 def test_build_claude_writer_prompt_includes_specific_angle_guards_for_timber_and_deployment() -> None:

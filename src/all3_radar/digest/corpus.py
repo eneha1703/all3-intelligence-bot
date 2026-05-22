@@ -497,3 +497,49 @@ def build_claude_writer_prompt(window: DigestWindow, candidates: list[DigestCand
             json.dumps(payload, ensure_ascii=False, sort_keys=True),
         ]
     )
+
+
+def build_claude_revision_prompt(window: DigestWindow, candidates: list[DigestCandidate], draft_markdown: str) -> str:
+    payload = [
+        {
+            "canonical_event_id": candidate.canonical_event_id,
+            "source": candidate.source_id,
+            "title": candidate.title,
+            "url": candidate.canonical_url,
+            "published_ts": candidate.published_ts.isoformat() if candidate.published_ts else None,
+            "score": candidate.score,
+            "summary": candidate.summary_text,
+            "signals": candidate.event_flags,
+            "story_type": candidate.story_type,
+            "angle_guard": list(candidate.angle_guard),
+        }
+        for candidate in candidates
+    ]
+    return "\n".join(
+        [
+            "Review the drafted Weekly Digest Bot 2 message item by item and return a corrected final version in Telegram HTML.",
+            f"Digest title: {window.title}",
+            "Keep exactly 5 items, keep the same stories, and preserve the visible Link anchors.",
+            "Return the full final digest only. Do not add notes, bullets, JSON, or commentary.",
+            "Use the selected-item data as the ground truth.",
+            "Fix only what is needed, but fix it decisively when a paragraph drifts away from the source facts or the intended angle.",
+            "Priority checks:",
+            "1. Remove unsupported inference, invented context, or added market logic not present in the provided item data.",
+            "2. Correct angle drift if the paragraph ignores the story_type or angle_guard.",
+            "3. Remove investor laundry lists unless the investor identity itself is the signal.",
+            "4. Remove audience, virality, character-name, or publicity details unless they change the operating claim.",
+            "5. Keep implications narrow, factual, and operational.",
+            "6. Prefer the sharper contradiction or bottleneck when the item data clearly contains one.",
+            "For timber_adoption stories, prefer adoption barrier, share-loss, economics, delivery-system mismatch, or code angle over generic timber momentum.",
+            "For construction_robotics_funding stories, the workflow wedge matters more than the cap table.",
+            "For industrial_deployment stories, the operating threshold matters more than the social reaction.",
+            "For robotics_tooling stories, frame the implication around deployment speed, cost, or sim-to-real reliability.",
+            "If the draft is already strong, return it with minimal or no changes.",
+            "",
+            "Selected items JSON:",
+            json.dumps(payload, ensure_ascii=False, sort_keys=True),
+            "",
+            "Draft digest to revise:",
+            draft_markdown,
+        ]
+    )

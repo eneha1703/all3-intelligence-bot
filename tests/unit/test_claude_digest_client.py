@@ -232,3 +232,70 @@ def test_claude_digest_client_rejects_visible_raw_urls(monkeypatch) -> None:
 
     with pytest.raises(ClaudeDigestUnavailableError):
         client.generate_telegram_digest("prompt", expected_title=expected_title)
+
+
+def test_claude_digest_client_validates_revision_output(monkeypatch) -> None:
+    client = ClaudeDigestClient(
+        enabled=True,
+        api_key="secret",
+        model="claude-test",
+        timeout_seconds=10,
+        max_tokens=500,
+    )
+    expected_title = "Top 5 News Highlights | 15-21 May 2026 | Week 21"
+
+    def fake_urlopen(request, timeout):  # noqa: ANN001
+        return _FakeResponse(
+            {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"{expected_title}\n\n"
+                            '1. <b>Timber is losing share where it should be winning</b>\n'
+                            'Australia is approving more mid-rise projects, but structural timber still appears to be losing share to rival delivery systems. '
+                            '<a href="https://example.com/timber">Link</a>'
+                        ),
+                    }
+                ]
+            }
+        )
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    digest_text = client.revise_telegram_digest("prompt", expected_title=expected_title)
+
+    assert digest_text.startswith(expected_title)
+    assert '<a href="https://example.com/timber">Link</a>' in digest_text
+
+
+def test_claude_digest_client_revision_rejects_visible_raw_urls(monkeypatch) -> None:
+    client = ClaudeDigestClient(
+        enabled=True,
+        api_key="secret",
+        model="claude-test",
+        timeout_seconds=10,
+        max_tokens=500,
+    )
+    expected_title = "Top 5 News Highlights | 15-21 May 2026 | Week 21"
+
+    def fake_urlopen(request, timeout):  # noqa: ANN001
+        return _FakeResponse(
+            {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": (
+                            f"{expected_title}\n\n"
+                            "1. <b>Bad revision</b>\n"
+                            'This revision leaks https://example.com/raw and also has <a href="https://example.com/raw">Link</a>'
+                        ),
+                    }
+                ]
+            }
+        )
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    with pytest.raises(ClaudeDigestUnavailableError):
+        client.revise_telegram_digest("prompt", expected_title=expected_title)

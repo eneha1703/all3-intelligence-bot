@@ -283,6 +283,7 @@ class _FakeClaudeClient:
     def __init__(self) -> None:
         self.selection_prompts: list[str] = []
         self.writer_prompts: list[str] = []
+        self.revision_prompts: list[str] = []
 
     def select_top_story_ids(self, prompt: str, *, allowed_ids: set[str], exact_count: int = 5) -> list[str]:
         self.selection_prompts.append(prompt)
@@ -315,6 +316,28 @@ class _FakeClaudeClient:
             ]
         )
 
+    def revise_telegram_digest(self, prompt: str, *, expected_title: str) -> str:
+        self.revision_prompts.append(prompt)
+        assert "Review the drafted Weekly Digest Bot 2 message item by item" in prompt
+        assert "Remove investor laundry lists unless the investor identity itself is the signal." in prompt
+        assert "For industrial_deployment stories, the operating threshold matters more than the social reaction." in prompt
+        assert expected_title in prompt
+        return "\n\n".join(
+            [
+                expected_title,
+                '1. <b>Sereact turns funding into a reliability test for warehouse physical AI</b>\n'
+                'The funding matters less as capital than as a signal that customers now expect measurable production reliability from warehouse robotics platforms. <a href="https://example.com/sereact">Link</a>',
+                '2. <b>Mass timber moves from showcase projects toward repeatable civic deployment</b>\n'
+                'The typology mix suggests timber adoption is broadening into replicable public-sector delivery rather than isolated demonstration work. <a href="https://example.com/mass-timber">Link</a>',
+                '3. <b>Project Prometheus shows how big the physical AI bet is becoming</b>\n'
+                'The round size matters because investors are starting to treat physical AI as a platform opportunity across aerospace, automotive, advanced manufacturing, and drug discovery. <a href="https://example.com/project-prometheus">Link</a>',
+                '4. <b>SoftBank and Roze show AI infrastructure becoming a physical automation problem</b>\n'
+                'The strategic signal is that data-center growth now depends on construction and delivery automation, not just compute budgets. <a href="https://example.com/softbank-roze">Link</a>',
+                '5. <b>All3 raises USD 25M for robotic construction</b>\n'
+                'All3 combines AI-assisted design, off-site robotic fabrication, and on-site assembly into a construction platform tied to real deployment economics. <a href="https://example.com/all3-techfundingnews">Link</a>',
+            ]
+        )
+
 
 class _FailingClaudeClient:
     is_available = True
@@ -323,6 +346,9 @@ class _FailingClaudeClient:
         raise ClaudeDigestUnavailableError("timeout")
 
     def generate_telegram_digest(self, prompt: str, *, expected_title: str) -> str:
+        raise ClaudeDigestUnavailableError("timeout")
+
+    def revise_telegram_digest(self, prompt: str, *, expected_title: str) -> str:
         raise ClaudeDigestUnavailableError("timeout")
 
 
@@ -384,6 +410,7 @@ def test_digest_build_generates_telegram_ready_artifact_with_claude(monkeypatch,
 
     assert len(fake_client.selection_prompts) == 1
     assert len(fake_client.writer_prompts) == 1
+    assert len(fake_client.revision_prompts) == 1
 
 
 def test_digest_build_uses_text_preview_when_stored_summary_is_missing(monkeypatch, tmp_path) -> None:
