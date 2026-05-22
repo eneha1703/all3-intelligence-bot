@@ -97,7 +97,7 @@ jobs:
               raise SystemExit("Curated digest does not start with the required title prefix.")
           if len(digest_text.strip()) >= 4096:
               raise SystemExit("Curated digest is too long for a single Telegram message.")
-          if len(re.findall(r"(?m)^\d+\. <b>", digest_text)) != 5:
+          if len(re.findall(r"(?m)^\s*\d+\.\s*<b>", digest_text)) != 5:
               raise SystemExit("Curated digest must contain exactly 5 numbered items.")
           if '<a href="' not in digest_text or '>Link</a>' not in digest_text:
               raise SystemExit("Curated digest is missing embedded HTML Link anchors.")
@@ -151,7 +151,7 @@ jobs:
           if len(message) >= 4096:
               raise SystemExit(f"Digest message is too long for a single Telegram message: {len(message)}")
 
-          numbered_items = re.findall(r"(?m)^\d+\. <b>", message)
+          numbered_items = re.findall(r"(?m)^\s*\d+\.\s*<b>", message)
           if len(numbered_items) < 5:
               raise SystemExit(f"Digest must contain at least 5 numbered items, found {len(numbered_items)}.")
 
