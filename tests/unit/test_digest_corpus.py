@@ -62,6 +62,8 @@ def test_build_claude_writer_prompt_includes_house_style_and_examples() -> None:
     assert "Do not sound like a market memo, strategy deck, or founder essay." in prompt
     assert "Do not default to starting every paragraph with the company name." in prompt
     assert "Mix the editorial voice across items so the digest reads like it was written by a person, not a template." in prompt
+    assert "If a selected item has thin grounding, stay close to the provided title and summary" in prompt
+    assert "Do not infer geography, market comparisons, buyer motivations, policy context, financing dynamics, or adoption drivers" in prompt
     assert "When a story combines demand recovery with supply lag, name the actual bottleneck directly" in prompt
     assert "For funding and automation stories, explain the practical wedge" in prompt
     assert "Editorial memory rules:" in prompt

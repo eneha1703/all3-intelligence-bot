@@ -386,6 +386,42 @@ def test_digest_build_generates_telegram_ready_artifact_with_claude(monkeypatch,
     assert len(fake_client.writer_prompts) == 1
 
 
+def test_digest_build_uses_text_preview_when_stored_summary_is_missing(monkeypatch, tmp_path) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "digest.db"
+    output_path = tmp_path / "weekly_digest_2026-W18.md"
+    schema_path = repo_root / "src" / "all3_radar" / "storage" / "schema.sql"
+    _seed_digest_db(db_path, schema_path)
+
+    preview_text = (
+        "Australia's mid-rise approvals jumped sharply in 2025, while structural timber consumption fell "
+        "and imported prefabricated dwellings and LVL volumes rose."
+    )
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            "UPDATE radar_decisions SET summary_text = NULL WHERE normalized_item_id = 'item-4'"
+        )
+        connection.execute(
+            "UPDATE normalized_items SET text_preview = ? WHERE id = 'item-4'",
+            (preview_text,),
+        )
+        connection.commit()
+
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("CLAUDE_DIGEST_ENABLED", "true")
+
+    fake_client = _FakeClaudeClient()
+    service = DigestService(repo_root=repo_root, claude_client=fake_client)
+    result = service.build_digest("2026-W18", output_path=output_path)
+
+    assert result.claude_used is True
+    assert len(fake_client.writer_prompts) == 1
+    assert preview_text in fake_client.writer_prompts[0]
+
+    report_text = (tmp_path / "weekly_digest_2026-W18.report.md").read_text(encoding="utf-8")
+    assert f"Summary: {preview_text}" in report_text
+
+
 def test_digest_build_prefers_sent_stories_before_stored_only_backfill(monkeypatch, tmp_path) -> None:
     repo_root = Path(__file__).resolve().parents[2]
     db_path = tmp_path / "digest.db"

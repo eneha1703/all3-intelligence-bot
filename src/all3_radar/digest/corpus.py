@@ -292,6 +292,8 @@ def build_claude_writer_prompt(window: DigestWindow, candidates: list[DigestCand
             "Do not use padded strategy-speak like 'this reflects broader recognition' when a sharper factual angle is available.",
             "Do not overstate with speculative lines like 'this could compress the gap' unless the provided facts directly support that claim.",
             "If a better sharp angle is not available, stay concrete and restrained rather than sounding clever.",
+            "If a selected item has thin grounding, stay close to the provided title and summary instead of filling gaps creatively.",
+            "Do not infer geography, market comparisons, buyer motivations, policy context, financing dynamics, or adoption drivers unless they are explicitly present in the provided input.",
             "Do not sound like a market memo, strategy deck, or founder essay.",
             "Avoid stacked clauses. Keep syntax simple and direct.",
             "Do not end every item with generic phrases like 'the signal is', 'this highlights', or 'this underscores'.",

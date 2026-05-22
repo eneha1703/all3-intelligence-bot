@@ -279,7 +279,7 @@ class RadarRepository:
                            rd.score,
                            rd.send_status,
                            rd.skip_reason,
-                           rd.summary_text,
+                           COALESCE(NULLIF(rd.summary_text, ''), NULLIF(ni.text_preview, ''), NULLIF(ni.dek, '')) AS summary_text,
                            rd.signals_json
                     FROM canonical_events ce
                     JOIN normalized_items ni ON ni.id = ce.representative_item_id
@@ -306,7 +306,7 @@ class RadarRepository:
                            rd.score,
                            rd.send_status,
                            rd.skip_reason,
-                           rd.summary_text,
+                           COALESCE(NULLIF(rd.summary_text, ''), NULLIF(ni.text_preview, ''), NULLIF(ni.dek, '')) AS summary_text,
                            rd.signals_json
                     FROM normalized_items ni
                     JOIN radar_decisions rd ON rd.normalized_item_id = ni.id
@@ -361,7 +361,7 @@ class RadarRepository:
                            rd.score,
                            'sent' AS send_status,
                            rd.skip_reason,
-                           rd.summary_text,
+                           COALESCE(NULLIF(rd.summary_text, ''), NULLIF(ni.text_preview, ''), NULLIF(ni.dek, '')) AS summary_text,
                            rd.signals_json
                     FROM delivered d
                     JOIN canonical_events ce
@@ -403,7 +403,7 @@ class RadarRepository:
                            rd.score,
                            'sent' AS send_status,
                            rd.skip_reason,
-                           rd.summary_text,
+                           COALESCE(NULLIF(rd.summary_text, ''), NULLIF(ni.text_preview, ''), NULLIF(ni.dek, '')) AS summary_text,
                            rd.signals_json
                     FROM delivered d
                     JOIN normalized_items ni
@@ -459,7 +459,7 @@ class RadarRepository:
                            rd.score,
                            'sent' AS send_status,
                            rd.skip_reason,
-                           rd.summary_text,
+                           COALESCE(NULLIF(rd.summary_text, ''), NULLIF(ni.text_preview, ''), NULLIF(ni.dek, '')) AS summary_text,
                            rd.signals_json
                     FROM grouped_posts gp
                     JOIN canonical_events ce
@@ -503,7 +503,7 @@ class RadarRepository:
                            rd.score,
                            'sent' AS send_status,
                            rd.skip_reason,
-                           rd.summary_text,
+                           COALESCE(NULLIF(rd.summary_text, ''), NULLIF(ni.text_preview, ''), NULLIF(ni.dek, '')) AS summary_text,
                            rd.signals_json
                     FROM grouped_posts gp
                     JOIN normalized_items ni
@@ -1550,7 +1550,7 @@ class RadarRepository:
                        {published_expression} AS published_ts,
                        rd.score,
                        rd.send_status,
-                       rd.summary_text,
+                       COALESCE(NULLIF(rd.summary_text, ''), NULLIF(ni.text_preview, ''), NULLIF(ni.dek, '')) AS summary_text,
                        rd.signals_json,
                        COUNT(DISTINCT NULLIF(COALESCE(NULLIF(rp.reactor_user_id, ''), rp.actor_chat_id), '')) AS unique_reactors,
                        MAX(rp.picked_at) AS last_picked_at
@@ -1647,7 +1647,7 @@ class RadarRepository:
                            COALESCE(ce.last_published_ts, ni.published_ts) AS published_ts,
                            rd.score,
                            rd.send_status,
-                           rd.summary_text,
+                           COALESCE(NULLIF(rd.summary_text, ''), NULLIF(ni.text_preview, ''), NULLIF(ni.dek, '')) AS summary_text,
                            rd.signals_json
                     FROM editorial_signals es
                     JOIN normalized_items ni ON ni.id = es.normalized_item_id
@@ -1676,7 +1676,7 @@ class RadarRepository:
                            ni.published_ts,
                            rd.score,
                            rd.send_status,
-                           rd.summary_text,
+                           COALESCE(NULLIF(rd.summary_text, ''), NULLIF(ni.text_preview, ''), NULLIF(ni.dek, '')) AS summary_text,
                            rd.signals_json
                     FROM editorial_signals es
                     JOIN normalized_items ni ON ni.id = es.normalized_item_id
