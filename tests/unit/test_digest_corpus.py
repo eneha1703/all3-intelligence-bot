@@ -4,6 +4,7 @@ from all3_radar.digest.corpus import (
     DigestCandidate,
     build_claude_revision_prompt,
     build_claude_writer_prompt,
+    hydrate_digest_candidates,
     resolve_digest_window,
 )
 
@@ -74,6 +75,7 @@ def test_build_claude_writer_prompt_includes_house_style_and_examples() -> None:
     assert "- construction_robotics_funding: the funding is not the point by itself." in prompt
     assert '"story_type": "general_relevant"' in prompt
     assert '"angle_guard": [' in prompt
+    assert '"digest_grounding":' in prompt
     assert "When a story combines demand recovery with supply lag, name the actual bottleneck directly" in prompt
     assert "For funding and automation stories, explain the practical wedge" in prompt
     assert "Editorial memory rules:" in prompt
@@ -146,6 +148,7 @@ def test_build_claude_revision_prompt_includes_quality_checks() -> None:
     assert "Review the drafted Weekly Digest Bot 2 message item by item" in prompt
     assert "Remove investor laundry lists unless the investor identity itself is the signal." in prompt
     assert "For construction_robotics_funding stories, the workflow wedge matters more than the cap table." in prompt
+    assert "Treat `summary` as the cleaned editorial grounding." in prompt
     assert "Return the full final digest only." in prompt
     assert draft in prompt
 
@@ -198,3 +201,83 @@ def test_build_claude_writer_prompt_includes_specific_angle_guards_for_timber_an
     assert '"story_type": "industrial_deployment"' in prompt
     assert "Center the contradiction between rising mid-rise demand and timber losing practical share" in prompt
     assert "Ignore audience, virality, or character-name details unless they change the operating claim." in prompt
+
+
+def test_hydrate_digest_candidates_builds_timber_grounding_without_attribution_noise() -> None:
+    candidates = hydrate_digest_candidates(
+        [
+            {
+                "canonical_event_id": "event-timber",
+                "normalized_item_id": "item-timber",
+                "source_id": "wood_central_api",
+                "title": "Just Look Up — Mid-Rise Surge Marks Timber Frame’s Inflection Point",
+                "canonical_url": "https://example.com/timber",
+                "published_ts": None,
+                "score": 48,
+                "summary_text": (
+                    "Mid-rise has overtaken detached housing as the building typology driving Australia’s housing growth, "
+                    "with established frame and truss supply chains now ceding ground in a market they have historically "
+                    "dominated. That is according to IndustryEdge Managing Director Tim Woods, who addressed FTMA’s National Conference."
+                ),
+                "signals_json": '{"event_flags":{"timber_strategic_signal":true}}',
+            }
+        ]
+    )
+
+    candidate = candidates[0]
+    assert candidate.story_type == "timber_adoption"
+    assert candidate.digest_grounding is not None
+    assert "growth typology" in candidate.digest_grounding
+    assert "ceding ground" in candidate.digest_grounding
+    assert "Tim Woods" not in candidate.digest_grounding
+    assert "National Conference" not in candidate.digest_grounding
+
+
+def test_hydrate_digest_candidates_builds_cleaner_funding_and_deployment_grounding() -> None:
+    candidates = hydrate_digest_candidates(
+        [
+            {
+                "canonical_event_id": "event-funding",
+                "normalized_item_id": "item-funding",
+                "source_id": "ai_insider_rss",
+                "title": "August Robotics Raises $30M in Series B Funding for Autonomous Construction Robotics",
+                "canonical_url": "https://example.com/august",
+                "published_ts": None,
+                "score": 66,
+                "summary_text": (
+                    "Insider Brief August Robotics has raised $30 million in a Series B funding round led by Big Pi Ventures "
+                    "as the construction robotics company looks to expand production, increase deployments and develop additional "
+                    "automation systems. Existing investors Blackbird, Skip Capital, Tanarra and Future Family Office joined the round."
+                ),
+                "signals_json": '{"event_flags":{"funding_event":true,"construction_innovation_signal":true}}',
+            },
+            {
+                "canonical_event_id": "event-deploy",
+                "normalized_item_id": "item-deploy",
+                "source_id": "business_insider_feed",
+                "title": "Silicon Valley's latest binge-watch is a humanoid warehouse worker",
+                "canonical_url": "https://example.com/figure",
+                "published_ts": None,
+                "score": 86,
+                "summary_text": (
+                    "Viewers gave the three humanoids sorting packages names: Bob, Frank and Gary. "
+                    "Figure AI's humanoids drew over 3 million views on X as it sorted packages on a viral livestream. "
+                    "CEO Brett Adcock said the robots worked autonomously with zero failures for 24 hours."
+                ),
+                "signals_json": '{"event_flags":{"industrial_robotics_signal":true,"deployment_event":true}}',
+            },
+        ]
+    )
+
+    funding_candidate = candidates[0]
+    assert funding_candidate.story_type == "construction_robotics_funding"
+    assert funding_candidate.digest_grounding == (
+        "The new funding is being used to expand production, increase deployments and develop additional automation systems."
+    )
+    assert "Big Pi Ventures" not in funding_candidate.digest_grounding
+
+    deployment_candidate = candidates[1]
+    assert deployment_candidate.story_type == "industrial_deployment"
+    assert "24 hours" in (deployment_candidate.digest_grounding or "")
+    assert "zero reported failures" in (deployment_candidate.digest_grounding or "")
+    assert "3 million views" not in (deployment_candidate.digest_grounding or "")

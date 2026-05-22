@@ -39,11 +39,14 @@ def _default_candidate_paragraph(candidate: DigestCandidate) -> str:
 
 
 def _sanitize_summary_text(candidate: DigestCandidate) -> str:
-    generated = generate_fallback_summary(candidate.title, candidate.summary_text)
-    if generated:
-        normalized = URL_RE.sub("", generated).strip()
+    if candidate.digest_grounding:
+        normalized = URL_RE.sub("", candidate.digest_grounding).strip()
     elif candidate.summary_text:
-        normalized = URL_RE.sub("", candidate.summary_text).strip()
+        generated = generate_fallback_summary(candidate.title, candidate.summary_text)
+        if generated:
+            normalized = URL_RE.sub("", generated).strip()
+        else:
+            normalized = URL_RE.sub("", candidate.summary_text).strip()
     else:
         normalized = _default_candidate_paragraph(candidate)
     normalized = re.sub(r"\s+", " ", normalized).strip(" .")
@@ -63,6 +66,8 @@ def _format_story_block(index: int, candidate: DigestCandidate) -> list[str]:
     ]
     if candidate.angle_guard:
         lines.append(f"   Angle guard: {'; '.join(candidate.angle_guard)}")
+    if candidate.digest_grounding:
+        lines.append(f"   Digest grounding: {candidate.digest_grounding}")
     if candidate.summary_text:
         lines.append(f"   Summary: {candidate.summary_text}")
     return lines

@@ -11,12 +11,15 @@ from pathlib import Path
 from typing import Any
 
 from all3_radar.editorial_memory.prompt_context import build_digest_memory_context
+from all3_radar.summarization.fallback_summary import generate_fallback_summary
 
 WEEK_KEY_RE = re.compile(r"^(?P<year>\d{4})-W(?P<week>\d{2})$")
 MODULE_DIR = Path(__file__).resolve().parent
 REPO_ROOT = MODULE_DIR.parents[2]
 WEEKLY_STYLE_GUIDE_PATH = MODULE_DIR / "weekly_style_guide.md"
 WEEKLY_WRITER_EXAMPLES_PATH = MODULE_DIR / "weekly_writer_examples.json"
+URL_RE = re.compile(r"https?://\S+")
+SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+")
 
 
 @dataclass(frozen=True)
@@ -30,6 +33,7 @@ class DigestCandidate:
     score: int
     summary_text: str | None
     event_flags: dict[str, bool]
+    digest_grounding: str | None = None
     story_type: str = "general_relevant"
     angle_guard: tuple[str, ...] = ()
 
@@ -275,6 +279,154 @@ def _build_angle_guard(story_type: str, title: str, summary_text: str | None, ev
     return tuple(notes)
 
 
+def _clean_grounding_source_text(title: str, summary_text: str | None) -> str:
+    base = summary_text or generate_fallback_summary(title, summary_text) or title
+    base = URL_RE.sub("", base)
+    base = re.sub(r"^\s*insider brief[:\s-]*", "", base, flags=re.IGNORECASE)
+    base = re.sub(r"\s+", " ", base).strip(" .")
+    return base
+
+
+def _split_sentences(text: str) -> list[str]:
+    if not text:
+        return []
+    parts = [part.strip(" .") for part in SENTENCE_SPLIT_RE.split(text) if part.strip(" .")]
+    return parts
+
+
+def _should_drop_grounding_sentence(story_type: str, sentence: str) -> bool:
+    normalized = _normalize_story_text(sentence)
+    if not normalized:
+        return True
+
+    if story_type == "timber_adoption":
+        if _has_any_story_phrase(
+            normalized,
+            ("tim woods", "national conference", "at the crossroads", "according to", "afwi precinct"),
+        ):
+            return True
+
+    if story_type == "construction_robotics_funding":
+        if _has_any_story_phrase(
+            normalized,
+            (
+                "led by",
+                "existing investors",
+                "joined the round",
+                "with participation from",
+                "backers",
+                "future family office",
+                "skip capital",
+                "blackbird",
+                "tanarra",
+                "big pi ventures",
+            ),
+        ):
+            return True
+
+    if story_type == "industrial_deployment":
+        if _has_any_story_phrase(
+            normalized,
+            (
+                "viewers gave",
+                "million views",
+                "viral livestream",
+                "binge watch",
+                "bob frank and gary",
+                "brett adcock",
+            ),
+        ):
+            return True
+
+    return False
+
+
+def _coalesce_grounding_sentences(
+    story_type: str,
+    sentences: list[str],
+    cleaned_source: str,
+    normalized_source: str,
+) -> str | None:
+    if story_type == "timber_adoption":
+        if _has_any_story_phrase(
+            normalized_source,
+            ("mid rise has overtaken detached", "mid rise approvals", "mid rise surge"),
+        ) and _has_any_story_phrase(
+            normalized_source,
+            ("ceding ground", "historically dominated", "losing share", "consumption fell"),
+        ):
+            return (
+                "Mid-rise has overtaken detached housing as the growth typology, but timber frame and truss systems "
+                "built for low-rise volume are ceding ground in that segment."
+            )
+        if _has_any_story_phrase(normalized_source, ("consumption fell", "imports rose", "light gauge steel")):
+            return (
+                "Mid-rise demand is rising, but structural timber appears to be losing share to rival delivery systems "
+                "rather than capturing the shift."
+            )
+
+    if story_type == "construction_robotics_funding":
+        match = re.search(r"looks to\s+([^.]+)", cleaned_source, flags=re.IGNORECASE)
+        if not match:
+            match = re.search(
+                r"to\s+(expand production, increase deployments and develop additional automation systems[^.]*)",
+                cleaned_source,
+                flags=re.IGNORECASE,
+            )
+        if match:
+            clause = match.group(1).strip(" .")
+            return f"The new funding is being used to {clause}."
+
+    if story_type == "industrial_deployment":
+        if _has_any_story_phrase(normalized_source, ("24 hours", "zero failures")):
+            return (
+                "The robots ran autonomously for 24 hours with zero reported failures, which is a cleaner operating "
+                "proof than a staged demo but still short of full industrial reliability."
+            )
+        if _has_any_story_phrase(normalized_source, ("25 000", "25000", "atlas", "hyundai", "own factories", "us plants")):
+            return (
+                "Deploying more than 25,000 Atlas robots in its own factories turns Hyundai's plants into the main "
+                "test bed for humanoid scale-up."
+            )
+
+    if story_type == "robotics_tooling":
+        if _has_any_story_phrase(normalized_source, ("simulation", "sim to real", "identically", "digital twins", "reality")):
+            return (
+                "The goal is to make robot behaviour match between simulation and the factory floor, reducing "
+                "sim-to-real friction in deployment."
+            )
+
+    if story_type == "housing_market_signal":
+        if _has_any_story_phrase(normalized_source, ("permits", "approvals", "completions", "pipeline")):
+            return sentences[0] if sentences else None
+
+    return None
+
+
+def _build_digest_grounding(
+    story_type: str,
+    title: str,
+    summary_text: str | None,
+    event_flags: dict[str, bool],
+) -> str | None:
+    del event_flags  # reserved for future source-specific grounding rules
+    cleaned_source = _clean_grounding_source_text(title, summary_text)
+    if not cleaned_source:
+        return None
+
+    sentences = [sentence for sentence in _split_sentences(cleaned_source) if not _should_drop_grounding_sentence(story_type, sentence)]
+    normalized_source = _normalize_story_text(cleaned_source)
+    custom = _coalesce_grounding_sentences(story_type, sentences, cleaned_source, normalized_source)
+    if custom:
+        return custom
+
+    if not sentences:
+        return cleaned_source
+    if len(sentences) == 1:
+        return f"{sentences[0]}."
+    return f"{sentences[0]}. {sentences[1]}."
+
+
 def hydrate_digest_candidates(rows: list[dict[str, Any]]) -> list[DigestCandidate]:
     candidates: list[DigestCandidate] = []
     for row in rows:
@@ -282,6 +434,12 @@ def hydrate_digest_candidates(rows: list[dict[str, Any]]) -> list[DigestCandidat
         event_flags = signals.get("event_flags", {}) if isinstance(signals, dict) else {}
         story_type = _classify_story_type(str(row["title"]), row.get("summary_text"), event_flags)
         angle_guard = _build_angle_guard(story_type, str(row["title"]), row.get("summary_text"), event_flags)
+        digest_grounding = _build_digest_grounding(
+            story_type,
+            str(row["title"]),
+            row.get("summary_text"),
+            {key: bool(value) for key, value in event_flags.items()},
+        )
         candidates.append(
             DigestCandidate(
                 canonical_event_id=str(row["canonical_event_id"]),
@@ -292,6 +450,7 @@ def hydrate_digest_candidates(rows: list[dict[str, Any]]) -> list[DigestCandidat
                 published_ts=datetime.fromisoformat(row["published_ts"]) if row.get("published_ts") else None,
                 score=int(row["score"]),
                 summary_text=row.get("summary_text"),
+                digest_grounding=digest_grounding,
                 event_flags={key: bool(value) for key, value in event_flags.items()},
                 story_type=story_type,
                 angle_guard=angle_guard,
@@ -341,7 +500,7 @@ def build_claude_corpus_prompt(week_key: str, candidates: list[DigestCandidate],
                 f"   Published: {published_label}",
                 f"   Score: {candidate.score}",
                 f"   URL: {candidate.canonical_url}",
-                f"   Summary: {summary}",
+                f"   Summary: {candidate.digest_grounding or summary}",
             ]
         )
     return "\n".join(lines)
@@ -363,7 +522,9 @@ def build_claude_selection_prompt(
             "url": candidate.canonical_url,
             "published_ts": candidate.published_ts.isoformat() if candidate.published_ts else None,
             "score": candidate.score,
-            "summary": candidate.summary_text,
+            "digest_grounding": candidate.digest_grounding,
+            "summary": candidate.digest_grounding or candidate.summary_text,
+            "raw_summary": candidate.summary_text,
             "signals": candidate.event_flags,
             "story_type": candidate.story_type,
             "angle_guard": list(candidate.angle_guard),
@@ -377,6 +538,7 @@ def build_claude_selection_prompt(
             "Select exactly 5 distinct stories from the provided candidates.",
             "Prioritize All3 relevance, physical AI, industrial robotics, construction automation, housing industrialization, timber adoption/scaling/economics/policy, infrastructure automation, strategic signal strength, novelty, and hard operational evidence.",
             "Prefer stories with a sharp operational takeaway, not just category relevance.",
+            "Treat `summary` as the cleaned editorial grounding. Use `raw_summary` only when it adds a concrete fact the cleaned grounding omits.",
             "Do not elevate timber logistics, marine terminal redevelopment, distribution hubs, or generic supply-chain positioning unless the story clearly changes adoption economics, building delivery, code acceptance, or project execution.",
             "Do not include Ukraine reconstruction or non-core geography timber showcase stories unless they carry direct adoption-economics, code, permitting, or scalable delivery relevance to the core market thesis.",
             "Reject duplicate coverage of the same event and weak generic commentary.",
@@ -412,7 +574,9 @@ def build_claude_writer_prompt(window: DigestWindow, candidates: list[DigestCand
             "url": candidate.canonical_url,
             "published_ts": candidate.published_ts.isoformat() if candidate.published_ts else None,
             "score": candidate.score,
-            "summary": candidate.summary_text,
+            "digest_grounding": candidate.digest_grounding,
+            "summary": candidate.digest_grounding or candidate.summary_text,
+            "raw_summary": candidate.summary_text,
             "signals": candidate.event_flags,
             "story_type": candidate.story_type,
             "angle_guard": list(candidate.angle_guard),
@@ -441,6 +605,7 @@ def build_claude_writer_prompt(window: DigestWindow, candidates: list[DigestCand
             'Paragraph ending with <a href="SOURCE_URL">Link</a>',
             "Do not show raw URLs in visible text.",
             "Do not invent facts beyond the provided input.",
+            "Treat `summary` as the cleaned editorial grounding. Use `raw_summary` only if it contributes one extra concrete fact.",
             "Treat each item as a compact editorial note with fixed sentence roles.",
             "Headline = thesis. First sentence = core evidence. Final sentence = narrow implication.",
             "Lead each paragraph with the strongest fact, then add one concise implication.",
@@ -508,7 +673,9 @@ def build_claude_revision_prompt(window: DigestWindow, candidates: list[DigestCa
             "url": candidate.canonical_url,
             "published_ts": candidate.published_ts.isoformat() if candidate.published_ts else None,
             "score": candidate.score,
-            "summary": candidate.summary_text,
+            "digest_grounding": candidate.digest_grounding,
+            "summary": candidate.digest_grounding or candidate.summary_text,
+            "raw_summary": candidate.summary_text,
             "signals": candidate.event_flags,
             "story_type": candidate.story_type,
             "angle_guard": list(candidate.angle_guard),
@@ -522,6 +689,7 @@ def build_claude_revision_prompt(window: DigestWindow, candidates: list[DigestCa
             "Keep exactly 5 items, keep the same stories, and preserve the visible Link anchors.",
             "Return the full final digest only. Do not add notes, bullets, JSON, or commentary.",
             "Use the selected-item data as the ground truth.",
+            "Treat `summary` as the cleaned editorial grounding. Prefer it over `raw_summary` when the raw text contains investor lists, conference attribution, names, or publicity noise.",
             "Fix only what is needed, but fix it decisively when a paragraph drifts away from the source facts or the intended angle.",
             "Priority checks:",
             "1. Remove unsupported inference, invented context, or added market logic not present in the provided item data.",

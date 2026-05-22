@@ -297,6 +297,7 @@ class _FakeClaudeClient:
         self.writer_prompts.append(prompt)
         assert "Sereact scales physical AI reliability after fresh funding" in prompt
         assert PROMETHEUS_TITLE in prompt
+        assert '"digest_grounding":' in prompt
         assert "Taco Bell adds AI menu personalization" not in prompt
         assert BMW_FUND_TITLE not in prompt
         assert BIOORBIT_TITLE not in prompt
@@ -319,6 +320,7 @@ class _FakeClaudeClient:
     def revise_telegram_digest(self, prompt: str, *, expected_title: str) -> str:
         self.revision_prompts.append(prompt)
         assert "Review the drafted Weekly Digest Bot 2 message item by item" in prompt
+        assert '"digest_grounding":' in prompt
         assert "Remove investor laundry lists unless the investor identity itself is the signal." in prompt
         assert "For industrial_deployment stories, the operating threshold matters more than the social reaction." in prompt
         assert expected_title in prompt
