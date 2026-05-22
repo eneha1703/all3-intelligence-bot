@@ -34,6 +34,8 @@ class DigestCandidate:
     summary_text: str | None
     event_flags: dict[str, bool]
     digest_grounding: str | None = None
+    full_text_excerpt: str | None = None
+    full_text_status: str | None = None
     story_type: str = "general_relevant"
     angle_guard: tuple[str, ...] = ()
 
@@ -523,6 +525,8 @@ def build_claude_selection_prompt(
             "published_ts": candidate.published_ts.isoformat() if candidate.published_ts else None,
             "score": candidate.score,
             "digest_grounding": candidate.digest_grounding,
+            "full_text_excerpt": candidate.full_text_excerpt,
+            "full_text_status": candidate.full_text_status,
             "summary": candidate.digest_grounding or candidate.summary_text,
             "raw_summary": candidate.summary_text,
             "signals": candidate.event_flags,
@@ -539,6 +543,7 @@ def build_claude_selection_prompt(
             "Prioritize All3 relevance, physical AI, industrial robotics, construction automation, housing industrialization, timber adoption/scaling/economics/policy, infrastructure automation, strategic signal strength, novelty, and hard operational evidence.",
             "Prefer stories with a sharp operational takeaway, not just category relevance.",
             "Treat `summary` as the cleaned editorial grounding. Use `raw_summary` only when it adds a concrete fact the cleaned grounding omits.",
+            "When `full_text_excerpt` is available, treat it as the strongest grounding source for selection because it comes from a reread of the article URL.",
             "Do not elevate timber logistics, marine terminal redevelopment, distribution hubs, or generic supply-chain positioning unless the story clearly changes adoption economics, building delivery, code acceptance, or project execution.",
             "Do not include Ukraine reconstruction or non-core geography timber showcase stories unless they carry direct adoption-economics, code, permitting, or scalable delivery relevance to the core market thesis.",
             "Reject duplicate coverage of the same event and weak generic commentary.",
@@ -575,6 +580,8 @@ def build_claude_writer_prompt(window: DigestWindow, candidates: list[DigestCand
             "published_ts": candidate.published_ts.isoformat() if candidate.published_ts else None,
             "score": candidate.score,
             "digest_grounding": candidate.digest_grounding,
+            "full_text_excerpt": candidate.full_text_excerpt,
+            "full_text_status": candidate.full_text_status,
             "summary": candidate.digest_grounding or candidate.summary_text,
             "raw_summary": candidate.summary_text,
             "signals": candidate.event_flags,
@@ -606,6 +613,7 @@ def build_claude_writer_prompt(window: DigestWindow, candidates: list[DigestCand
             "Do not show raw URLs in visible text.",
             "Do not invent facts beyond the provided input.",
             "Treat `summary` as the cleaned editorial grounding. Use `raw_summary` only if it contributes one extra concrete fact.",
+            "When `full_text_excerpt` is available, use it to correct weak or incomplete summaries, but do not quote long passages.",
             "Treat each item as a compact editorial note with fixed sentence roles.",
             "Headline = thesis. First sentence = core evidence. Final sentence = narrow implication.",
             "Lead each paragraph with the strongest fact, then add one concise implication.",
@@ -674,6 +682,8 @@ def build_claude_revision_prompt(window: DigestWindow, candidates: list[DigestCa
             "published_ts": candidate.published_ts.isoformat() if candidate.published_ts else None,
             "score": candidate.score,
             "digest_grounding": candidate.digest_grounding,
+            "full_text_excerpt": candidate.full_text_excerpt,
+            "full_text_status": candidate.full_text_status,
             "summary": candidate.digest_grounding or candidate.summary_text,
             "raw_summary": candidate.summary_text,
             "signals": candidate.event_flags,
@@ -690,6 +700,7 @@ def build_claude_revision_prompt(window: DigestWindow, candidates: list[DigestCa
             "Return the full final digest only. Do not add notes, bullets, JSON, or commentary.",
             "Use the selected-item data as the ground truth.",
             "Treat `summary` as the cleaned editorial grounding. Prefer it over `raw_summary` when the raw text contains investor lists, conference attribution, names, or publicity noise.",
+            "When `full_text_excerpt` is available, use it to check whether the draft missed the article's main contradiction, metric, or operating point.",
             "Fix only what is needed, but fix it decisively when a paragraph drifts away from the source facts or the intended angle.",
             "Priority checks:",
             "1. Remove unsupported inference, invented context, or added market logic not present in the provided item data.",

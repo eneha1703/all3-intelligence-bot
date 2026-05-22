@@ -354,6 +354,20 @@ class _FailingClaudeClient:
         raise ClaudeDigestUnavailableError("timeout")
 
 
+def _fake_article_fetcher(url: str, timeout_seconds: int) -> str:
+    slug = url.rsplit("/", 1)[-1]
+    return f"""
+    <html>
+      <body>
+        <article>
+          <p>Full reread for {slug} adds article-level facts that were not available in the stored digest summary.</p>
+          <p>The reread keeps the digest grounded in the original article rather than only the RSS preview.</p>
+        </article>
+      </body>
+    </html>
+    """
+
+
 def test_digest_build_generates_telegram_ready_artifact_with_claude(monkeypatch, tmp_path) -> None:
     repo_root = Path(__file__).resolve().parents[2]
     db_path = tmp_path / "digest.db"
@@ -366,7 +380,7 @@ def test_digest_build_generates_telegram_ready_artifact_with_claude(monkeypatch,
     monkeypatch.setenv("CLAUDE_DIGEST_ENABLED", "true")
 
     fake_client = _FakeClaudeClient()
-    service = DigestService(repo_root=repo_root, claude_client=fake_client)
+    service = DigestService(repo_root=repo_root, claude_client=fake_client, full_text_fetcher=_fake_article_fetcher)
     result = service.build_digest("2026-W18", output_path=output_path)
 
     assert result.candidate_count == 6
@@ -413,6 +427,9 @@ def test_digest_build_generates_telegram_ready_artifact_with_claude(monkeypatch,
     assert len(fake_client.selection_prompts) == 1
     assert len(fake_client.writer_prompts) == 1
     assert len(fake_client.revision_prompts) == 1
+    assert '"full_text_excerpt":' in fake_client.selection_prompts[0]
+    assert "Full reread for sereact" in fake_client.writer_prompts[0]
+    assert "Full text reread: `html_blocks`" in report_text
 
 
 def test_digest_build_uses_text_preview_when_stored_summary_is_missing(monkeypatch, tmp_path) -> None:
@@ -440,7 +457,7 @@ def test_digest_build_uses_text_preview_when_stored_summary_is_missing(monkeypat
     monkeypatch.setenv("CLAUDE_DIGEST_ENABLED", "true")
 
     fake_client = _FakeClaudeClient()
-    service = DigestService(repo_root=repo_root, claude_client=fake_client)
+    service = DigestService(repo_root=repo_root, claude_client=fake_client, full_text_fetcher=_fake_article_fetcher)
     result = service.build_digest("2026-W18", output_path=output_path)
 
     assert result.claude_used is True
@@ -492,7 +509,11 @@ def test_digest_build_falls_back_to_deterministic_artifact_without_claude(monkey
     monkeypatch.setenv("DATABASE_PATH", str(db_path))
     monkeypatch.setenv("CLAUDE_DIGEST_ENABLED", "true")
 
-    service = DigestService(repo_root=repo_root, claude_client=_FailingClaudeClient())
+    service = DigestService(
+        repo_root=repo_root,
+        claude_client=_FailingClaudeClient(),
+        full_text_fetcher=_fake_article_fetcher,
+    )
     result = service.build_digest("2026-W18", output_path=output_path)
 
     assert result.candidate_count == 6

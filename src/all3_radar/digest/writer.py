@@ -68,6 +68,13 @@ def _format_story_block(index: int, candidate: DigestCandidate) -> list[str]:
         lines.append(f"   Angle guard: {'; '.join(candidate.angle_guard)}")
     if candidate.digest_grounding:
         lines.append(f"   Digest grounding: {candidate.digest_grounding}")
+    if candidate.full_text_status:
+        lines.append(f"   Full text reread: `{candidate.full_text_status}`")
+    if candidate.full_text_excerpt:
+        excerpt = candidate.full_text_excerpt[:700].rsplit(" ", 1)[0].strip()
+        if len(candidate.full_text_excerpt) > len(excerpt):
+            excerpt = f"{excerpt}..."
+        lines.append(f"   Full text excerpt: {excerpt}")
     if candidate.summary_text:
         lines.append(f"   Summary: {candidate.summary_text}")
     return lines

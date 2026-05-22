@@ -35,6 +35,10 @@ class DigestConfig:
     require_canonical_events: bool
     claude_digest_enabled: bool
     claude_digest_max_input_items: int
+    claude_digest_full_text_enabled: bool
+    claude_digest_full_text_max_candidates: int
+    claude_digest_full_text_max_chars: int
+    claude_digest_full_text_timeout_seconds: int
 
 
 @dataclass(frozen=True)

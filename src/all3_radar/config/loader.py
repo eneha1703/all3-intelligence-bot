@@ -158,6 +158,30 @@ def load_settings(repo_root: Path, env: Mapping[str, str] | None = None) -> Sett
                 "digest.claude_digest_max_input_items",
                 default=_parse_int(digest["claude_digest_max_input_items"], "digest.claude_digest_max_input_items"),
             ),
+            claude_digest_full_text_enabled=_parse_bool(
+                env.get("CLAUDE_DIGEST_FULL_TEXT_ENABLED", digest.get("claude_digest_full_text_enabled", True))
+            ),
+            claude_digest_full_text_max_candidates=_parse_int(
+                env.get(
+                    "CLAUDE_DIGEST_FULL_TEXT_MAX_CANDIDATES",
+                    digest.get("claude_digest_full_text_max_candidates", 10),
+                ),
+                "digest.claude_digest_full_text_max_candidates",
+                default=10,
+            ),
+            claude_digest_full_text_max_chars=_parse_int(
+                env.get("CLAUDE_DIGEST_FULL_TEXT_MAX_CHARS", digest.get("claude_digest_full_text_max_chars", 3500)),
+                "digest.claude_digest_full_text_max_chars",
+                default=3500,
+            ),
+            claude_digest_full_text_timeout_seconds=_parse_int(
+                env.get(
+                    "CLAUDE_DIGEST_FULL_TEXT_TIMEOUT_SECONDS",
+                    digest.get("claude_digest_full_text_timeout_seconds", 8),
+                ),
+                "digest.claude_digest_full_text_timeout_seconds",
+                default=8,
+            ),
         ),
         telegram=TelegramConfig(
             parse_mode=str(telegram["parse_mode"]),

@@ -18,6 +18,10 @@ digest:
   require_canonical_events: true
   claude_digest_enabled: false
   claude_digest_max_input_items: 12
+  claude_digest_full_text_enabled: true
+  claude_digest_full_text_max_candidates: 10
+  claude_digest_full_text_max_chars: 3500
+  claude_digest_full_text_timeout_seconds: 8
 
 telegram:
   parse_mode: HTML

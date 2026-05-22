@@ -23,6 +23,10 @@ def test_load_settings_applies_env_overrides() -> None:
             "CLAUDE_DIGEST_MODEL": "claude-test",
             "CLAUDE_DIGEST_TIMEOUT_SECONDS": "17",
             "CLAUDE_DIGEST_MAX_TOKENS": "999",
+            "CLAUDE_DIGEST_FULL_TEXT_ENABLED": "true",
+            "CLAUDE_DIGEST_FULL_TEXT_MAX_CANDIDATES": "7",
+            "CLAUDE_DIGEST_FULL_TEXT_MAX_CHARS": "2222",
+            "CLAUDE_DIGEST_FULL_TEXT_TIMEOUT_SECONDS": "6",
             "CLAUDE_FINAL_CARD_MODEL": "claude-final-test",
             "CLAUDE_FINAL_CARD_TIMEOUT_SECONDS": "13",
             "CLAUDE_FINAL_CARD_MAX_TOKENS": "333",
@@ -52,6 +56,10 @@ def test_load_settings_applies_env_overrides() -> None:
     assert settings.integrations.claude_digest_model == "claude-test"
     assert settings.integrations.claude_digest_timeout_seconds == 17
     assert settings.integrations.claude_digest_max_tokens == 999
+    assert settings.digest.claude_digest_full_text_enabled is True
+    assert settings.digest.claude_digest_full_text_max_candidates == 7
+    assert settings.digest.claude_digest_full_text_max_chars == 2222
+    assert settings.digest.claude_digest_full_text_timeout_seconds == 6
     assert settings.integrations.claude_final_card_model == "claude-final-test"
     assert settings.integrations.claude_final_card_timeout_seconds == 13
     assert settings.integrations.claude_final_card_max_tokens == 333
@@ -87,12 +95,18 @@ def test_empty_claude_digest_integer_envs_use_defaults() -> None:
             "CLAUDE_DIGEST_MAX_INPUT_ITEMS": "",
             "CLAUDE_DIGEST_TIMEOUT_SECONDS": "",
             "CLAUDE_DIGEST_MAX_TOKENS": "",
+            "CLAUDE_DIGEST_FULL_TEXT_MAX_CANDIDATES": "",
+            "CLAUDE_DIGEST_FULL_TEXT_MAX_CHARS": "",
+            "CLAUDE_DIGEST_FULL_TEXT_TIMEOUT_SECONDS": "",
         },
     )
 
     assert settings.digest.claude_digest_max_input_items == 12
     assert settings.integrations.claude_digest_timeout_seconds == 20
     assert settings.integrations.claude_digest_max_tokens == 1200
+    assert settings.digest.claude_digest_full_text_max_candidates == 10
+    assert settings.digest.claude_digest_full_text_max_chars == 3500
+    assert settings.digest.claude_digest_full_text_timeout_seconds == 8
 
 
 def test_empty_claude_final_card_integer_envs_use_defaults() -> None:
@@ -166,12 +180,18 @@ def test_whitespace_claude_digest_integer_envs_use_defaults() -> None:
             "CLAUDE_DIGEST_MAX_INPUT_ITEMS": "   ",
             "CLAUDE_DIGEST_TIMEOUT_SECONDS": " \t ",
             "CLAUDE_DIGEST_MAX_TOKENS": "  ",
+            "CLAUDE_DIGEST_FULL_TEXT_MAX_CANDIDATES": "  ",
+            "CLAUDE_DIGEST_FULL_TEXT_MAX_CHARS": "  ",
+            "CLAUDE_DIGEST_FULL_TEXT_TIMEOUT_SECONDS": "  ",
         },
     )
 
     assert settings.digest.claude_digest_max_input_items == 12
     assert settings.integrations.claude_digest_timeout_seconds == 20
     assert settings.integrations.claude_digest_max_tokens == 1200
+    assert settings.digest.claude_digest_full_text_max_candidates == 10
+    assert settings.digest.claude_digest_full_text_max_chars == 3500
+    assert settings.digest.claude_digest_full_text_timeout_seconds == 8
 
 
 def test_whitespace_claude_final_card_integer_envs_use_defaults() -> None:
@@ -196,6 +216,9 @@ def test_whitespace_claude_final_card_integer_envs_use_defaults() -> None:
         ("CLAUDE_DIGEST_MAX_INPUT_ITEMS", "abc", "digest.claude_digest_max_input_items"),
         ("CLAUDE_DIGEST_TIMEOUT_SECONDS", "abc", "integrations.claude_digest_timeout_seconds"),
         ("CLAUDE_DIGEST_MAX_TOKENS", "abc", "integrations.claude_digest_max_tokens"),
+        ("CLAUDE_DIGEST_FULL_TEXT_MAX_CANDIDATES", "abc", "digest.claude_digest_full_text_max_candidates"),
+        ("CLAUDE_DIGEST_FULL_TEXT_MAX_CHARS", "abc", "digest.claude_digest_full_text_max_chars"),
+        ("CLAUDE_DIGEST_FULL_TEXT_TIMEOUT_SECONDS", "abc", "digest.claude_digest_full_text_timeout_seconds"),
         ("CLAUDE_FINAL_CARD_MAX_CANDIDATES", "abc", "radar.claude_final_card_max_candidates"),
         ("CLAUDE_FINAL_CARD_TIMEOUT_SECONDS", "abc", "integrations.claude_final_card_timeout_seconds"),
         ("CLAUDE_FINAL_CARD_MAX_TOKENS", "abc", "integrations.claude_final_card_max_tokens"),

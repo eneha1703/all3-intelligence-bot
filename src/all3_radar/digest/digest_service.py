@@ -5,9 +5,10 @@ from __future__ import annotations
 import json
 import logging
 import re
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Callable
 
 from all3_radar.config.loader import load_settings
 from all3_radar.digest.claude_client import ClaudeDigestClient, ClaudeDigestUnavailableError
@@ -20,6 +21,7 @@ from all3_radar.digest.corpus import (
     hydrate_digest_candidates,
     resolve_digest_window,
 )
+from all3_radar.digest.full_text import fetch_article_text
 from all3_radar.digest.writer import build_digest_html, build_digest_markdown
 from all3_radar.domain.enums import PipelineName, PipelineStatus
 from all3_radar.observability.logging import configure_logging
@@ -578,6 +580,7 @@ class DigestService:
         repo_root: Path,
         repository: RadarRepository | None = None,
         claude_client: ClaudeDigestClient | None = None,
+        full_text_fetcher: Callable[[str, int], str] | None = None,
     ) -> None:
         self.repo_root = repo_root
         self.settings = load_settings(repo_root)
@@ -590,6 +593,7 @@ class DigestService:
             timeout_seconds=self.settings.integrations.claude_digest_timeout_seconds,
             max_tokens=self.settings.integrations.claude_digest_max_tokens,
         )
+        self.full_text_fetcher = full_text_fetcher
         initialize_database(self.settings.app.database_path, repo_root / "src" / "all3_radar" / "storage" / "schema.sql")
 
     def _weekly_group_chat_ids(self) -> tuple[str, ...]:
@@ -711,12 +715,41 @@ class DigestService:
             )
         return rows
 
+    def _enrich_candidates_with_full_text(self, candidates: list[DigestCandidate]) -> list[DigestCandidate]:
+        if (
+            not candidates
+            or not self.claude_client.is_available
+            or not self.settings.digest.claude_digest_full_text_enabled
+        ):
+            return candidates
+
+        max_candidates = min(self.settings.digest.claude_digest_full_text_max_candidates, len(candidates))
+        enriched: list[DigestCandidate] = []
+        for index, candidate in enumerate(candidates):
+            if index >= max_candidates or not candidate.canonical_url:
+                enriched.append(candidate)
+                continue
+            result = fetch_article_text(
+                candidate.canonical_url,
+                timeout_seconds=self.settings.digest.claude_digest_full_text_timeout_seconds,
+                max_chars=self.settings.digest.claude_digest_full_text_max_chars,
+                fetch_text_fn=self.full_text_fetcher,
+            )
+            enriched.append(
+                replace(
+                    candidate,
+                    full_text_excerpt=result.text,
+                    full_text_status=result.status,
+                )
+            )
+        return enriched
+
     def build_shortlist(self, week_key: str) -> WeeklyDigestShortlistResult:
         window = resolve_digest_window(week_key)
         pipeline_run_id = self.repository.create_pipeline_run(PipelineName.DIGEST, _settings_snapshot(self.settings))
         digest_run_id = self.repository.create_weekly_digest_run(pipeline_run_id, window.week_key)
         rows = self._load_shortlist_rows(window)
-        candidates = hydrate_digest_candidates(rows)
+        candidates = self._enrich_candidates_with_full_text(hydrate_digest_candidates(rows))
         shortlist_payload = json.dumps(
             [
                 {
@@ -769,7 +802,7 @@ class DigestService:
                 for row in rows
                 if bool(row.get("manual_shortlist_signal")) or bool(row.get("manual_digest_force_include"))
             )
-            candidates = hydrate_digest_candidates(rows)
+            candidates = self._enrich_candidates_with_full_text(hydrate_digest_candidates(rows))
             if self.settings.telegram_group_curation.enabled and len(candidates) < self.settings.digest.stories_per_digest:
                 raise ValueError(
                     f"Only {len(candidates)} eligible group stories available for weekly digest in {normalized_week_key}."
