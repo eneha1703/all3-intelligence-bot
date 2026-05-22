@@ -19,6 +19,24 @@ JSON_LD_RE = re.compile(
     r"<script[^>]+type=[\"']application/ld\+json[\"'][^>]*>(.*?)</script>",
     re.IGNORECASE | re.DOTALL,
 )
+ARTICLE_TYPES = {
+    "article",
+    "newsarticle",
+    "reportagenewsarticle",
+    "analysisnewsarticle",
+    "blogposting",
+    "techarticle",
+}
+NON_ARTICLE_TYPES = {
+    "person",
+    "organization",
+    "webpage",
+    "website",
+    "breadcrumblist",
+    "imageobject",
+    "videoobject",
+    "listitem",
+}
 
 
 @dataclass(frozen=True)
@@ -101,8 +119,50 @@ def _clean_text(value: str | None) -> str | None:
     return cleaned or None
 
 
+def _normalize_type_names(value: object) -> set[str]:
+    if isinstance(value, str):
+        values = [value]
+    elif isinstance(value, list):
+        values = [item for item in value if isinstance(item, str)]
+    else:
+        return set()
+    return {item.strip().lower() for item in values if item.strip()}
+
+
+def _looks_like_bio_or_boilerplate(text: str) -> bool:
+    normalized = text.lower()
+    if any(
+        phrase in normalized
+        for phrase in (
+            "award-winning journalist",
+            "years of experience",
+            "coverage has reached audiences",
+            "available for corporate host",
+            "available for corporate",
+            "in-house emcee",
+            "recipient, he is passionate",
+            "subscribe to our newsletter",
+        )
+    ):
+        return True
+    return normalized.count("share copy link") > 0
+
+
+def _json_ld_value_score(text: str, *, field_name: str, type_names: set[str]) -> int:
+    score = len(text)
+    if field_name == "articleBody":
+        score += 1000
+    if type_names & ARTICLE_TYPES:
+        score += 500
+    if type_names & NON_ARTICLE_TYPES:
+        score -= 1000
+    if _looks_like_bio_or_boilerplate(text):
+        score -= 3000
+    return score
+
+
 def _extract_json_ld_article_text(article_html: str) -> str | None:
-    texts: list[str] = []
+    scored_texts: list[tuple[int, str]] = []
     for match in JSON_LD_RE.finditer(article_html):
         raw = html.unescape(match.group(1)).strip()
         if not raw:
@@ -111,22 +171,27 @@ def _extract_json_ld_article_text(article_html: str) -> str | None:
             payload = json.loads(raw)
         except json.JSONDecodeError:
             continue
-        candidates = payload if isinstance(payload, list) else [payload]
-        for candidate in candidates:
+        graph_candidates = payload if isinstance(payload, list) else [payload]
+        for candidate in graph_candidates:
             if not isinstance(candidate, dict):
                 continue
             graph = candidate.get("@graph")
             if isinstance(graph, list):
-                candidates.extend(item for item in graph if isinstance(item, dict))
-            article_body = candidate.get("articleBody")
-            description = candidate.get("description")
-            for value in (article_body, description):
+                graph_candidates.extend(item for item in graph if isinstance(item, dict))
+            type_names = _normalize_type_names(candidate.get("@type"))
+            article_like = bool(type_names & ARTICLE_TYPES) or "articleBody" in candidate
+            if type_names & NON_ARTICLE_TYPES and not article_like:
+                continue
+            for field_name in ("articleBody", "description"):
+                value = candidate.get(field_name)
                 cleaned = _clean_text(str(value)) if value else None
                 if cleaned and len(cleaned) > 120:
-                    texts.append(cleaned)
-    if not texts:
+                    score = _json_ld_value_score(cleaned, field_name=field_name, type_names=type_names)
+                    if score > 0:
+                        scored_texts.append((score, cleaned))
+    if not scored_texts:
         return None
-    return max(texts, key=len)
+    return max(scored_texts, key=lambda item: item[0])[1]
 
 
 def extract_article_text(article_html: str, *, max_chars: int = 3500) -> ArticleTextResult:
