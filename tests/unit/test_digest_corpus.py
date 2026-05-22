@@ -55,7 +55,8 @@ def test_build_claude_writer_prompt_includes_house_style_and_examples() -> None:
     assert "House style guide:" in prompt
     assert "Write like a smart human editor producing a short weekly note." in prompt
     assert "Aim for roughly 45 to 75 words per item." in prompt
-    assert "Prefer 2 or 3 short sentences per item." in prompt
+    assert "Prefer 2 short sentences per item. Use 3 only when the third adds a clearly different fact or caveat." in prompt
+    assert "Push toward a laconic editorial voice: compact, dry, and slightly hard-edged rather than rounded or explanatory." in prompt
     assert "Use currency formatting like USD 120B, USD 25M, and EUR 100M." in prompt
     assert 'avoid "we", "our", "our need", "our goals", or "our strategy".' in prompt
     assert "Do not simply restate the source headline in either the bold headline or the first sentence." in prompt
@@ -64,12 +65,16 @@ def test_build_claude_writer_prompt_includes_house_style_and_examples() -> None:
     assert "Do not repeat a number, percentage, funding amount, valuation, unit count, or timeline" in prompt
     assert "Write like an industry editor, not a columnist, feature writer, or culture critic." in prompt
     assert "Use plain English. If a sentence can be simpler, make it simpler." in prompt
+    assert "If a paragraph still works after cutting 20% of the words, cut them." in prompt
     assert "Avoid words like 'thesis', 'lineage', 'durable', 'utilisation'" in prompt
+    assert "Avoid glue phrases like 'which makes', 'that means', 'this gives', 'the capital goes toward', or 'the result is'" in prompt
     assert "Do not sound like a market memo, strategy deck, or founder essay." in prompt
     assert "Do not default to starting every paragraph with the company name." in prompt
     assert "Mix the editorial voice across items so the digest reads like it was written by a person, not a template." in prompt
     assert "If a selected item has thin grounding, stay close to the provided title and summary" in prompt
     assert "Do not infer geography, market comparisons, buyer motivations, policy context, financing dynamics, or adoption drivers" in prompt
+    assert "Do not round off a sharp point with a soft qualifier just to sound balanced." in prompt
+    assert "Do not drift into elegantly generic wording that could fit almost any adjacent story." in prompt
     assert "Story-type guidance:" in prompt
     assert "- timber_adoption: focus on adoption barriers, share shifts, competing delivery systems" in prompt
     assert "- construction_robotics_funding: the funding is not the point by itself." in prompt
@@ -146,8 +151,11 @@ def test_build_claude_revision_prompt_includes_quality_checks() -> None:
     prompt = build_claude_revision_prompt(window, [candidate], draft)
 
     assert "Review the drafted Weekly Digest Bot 2 message item by item" in prompt
+    assert "Revise with a ruthless editor's hand: cut padding, cut repeated explanation, and cut one sentence entirely if the item becomes stronger." in prompt
     assert "Remove investor laundry lists unless the investor identity itself is the signal." in prompt
     assert "For construction_robotics_funding stories, the workflow wedge matters more than the cap table." in prompt
+    assert "Prefer 2 short sentences over 3 when nothing important is lost." in prompt
+    assert "Replace rounded, generic phrasing with a blunter observed line whenever the facts support it." in prompt
     assert "Treat `summary` as the cleaned editorial grounding." in prompt
     assert "Return the full final digest only." in prompt
     assert draft in prompt

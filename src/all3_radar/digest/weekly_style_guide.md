@@ -5,7 +5,10 @@ Weekly Digest House Style
 - Weekly digest items should read like a short editorial note, not a database recap or strategy memo.
 - Use exactly one paragraph per item.
 - Keep each item compact: target roughly 45 to 75 words.
+- Prefer 2 sentences. Use 3 only when the third adds a clearly different fact or caveat.
 - Do not let items become bulky, padded, or over-explained.
+- Write with a slightly hard edge: concise, dry, and sure-footed rather than rounded, explanatory, or overly balanced.
+- Cut throat-clearing. If the point can be stated directly, state it directly.
 - Treat each item as a compact editorial note with fixed sentence roles:
   headline = thesis
   first sentence = core evidence
@@ -13,6 +16,7 @@ Weekly Digest House Style
 - Start with the strongest concrete fact:
   funding amount, deployment scale, production metric, building scale, policy change, timeline, or capacity.
 - Then add one concise interpretation of why the development matters.
+- The last line should land cleanly. Prefer a blunt observed implication over a carefully padded conclusion.
 - When a story combines demand recovery with supply lag, name the actual bottleneck directly:
   permits, approvals, completions, delivery time, or pipeline rebuild speed.
 - Avoid generic endings like:
@@ -28,6 +32,7 @@ Weekly Digest House Style
 - Prefer plain factual transitions over rhetorical framing.
 - Use plain English.
 - If a sentence can be simpler, make it simpler.
+- If a paragraph still works after cutting 20% of the words, cut them.
 - Prefer short, common words over memo words and finance words.
 - Avoid words like:
   "thesis"
@@ -49,6 +54,13 @@ Weekly Digest House Style
   "finding traction"
   "different logic"
   if a plainer line will do.
+- Avoid glue phrases like:
+  "which makes"
+  "that means"
+  "this gives"
+  "the capital goes toward"
+  "the result is"
+  when a more direct line will do.
 - Avoid stacked clauses and overbuilt sentences.
 - Prefer direct wording:
   "factory use" over "production-grade utilisation"
@@ -80,6 +92,8 @@ Weekly Digest House Style
 - Do not write like a market memo, strategy deck, or founder essay.
 - If a story is modest, write a modest item. Do not manufacture weight through rhetoric.
 - If the implication starts sounding like an essay, cut it back to the one thing the facts clearly support.
+- Do not round off a sharp point with a soft qualifier just to sound balanced.
+- Do not explain the implication twice in two slightly different ways.
 - Do not write from a first-person company perspective:
   avoid "we", "our", "our need", "our goals", or "our strategy".
 - Do not sound like you are justifying relevance to the team.
@@ -127,6 +141,7 @@ Avoid:
 - duplicated number in headline and first sentence
 - repetitive AI-sounding transitions
 - overlong paragraphs
+- elegantly generic phrasing that sounds polished but could fit almost any similar story
 - over-clever headlines that sound written to impress rather than to clarify
 - empty statements like "important development" without a concrete implication
 - generic endings that could fit any story
