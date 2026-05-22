@@ -141,6 +141,21 @@ def test_build_news_card_removes_trailing_according_fragment() -> None:
     assert "used in joints such as shoulders and elbows in humanoid robots." in card.text
 
 
+def test_build_news_card_drops_dangling_between_fragment_sentence() -> None:
+    card = build_news_card(
+        headline="Kawasaki opens Silicon Valley Physical AI Center to accelerate industrial robotics deployment",
+        summary_text=(
+            "Kawasaki Heavy Industries has opened the Kawasaki Physical AI Center San Jose, a dedicated facility in Silicon Valley focused on developing real-world physical AI applications for industrial robotics. "
+            "The center is designed to accelerate collaboration between Japanese and."
+        ),
+        url="https://example.com/kawasaki-story",
+    )
+
+    assert card is not None
+    assert "between Japanese and" not in card.text
+    assert "developing real-world physical AI applications for industrial robotics." in card.text
+
+
 def test_build_replay_card_prepends_clear_replay_label() -> None:
     card = build_news_card(
         headline="Mass timber premiums run six to ten times higher than concrete and steel",

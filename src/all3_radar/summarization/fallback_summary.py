@@ -134,6 +134,9 @@ TRAILING_FRAGMENT_PATTERNS = [
     re.compile(r",?\s*as\s+(?:a|an)\s+[$€£]\d[\d,]*(?:\.\d+)?\s*(?:million|billion|m|bn)\.?$", re.IGNORECASE),
     re.compile(r",?\s*\d+\s*hours\s+a\s+day,\s*(?:one|two|three|four|five|six|seven|eight|nine|ten)\.?$", re.IGNORECASE),
 ]
+FULL_SENTENCE_DANGLING_PATTERNS = [
+    re.compile(r"^.*\bbetween\s+[^.]{1,80}\s+and\.?$", re.IGNORECASE),
+]
 CAPTION_MARKERS = (
     "getty images",
     "courtesy of",
@@ -326,6 +329,8 @@ def _cleanup_trailing_fragment(sentence: str) -> str:
 
 def _trim_long_sentence(sentence: str) -> str:
     normalized = WHITESPACE_RE.sub(" ", sentence).strip()
+    if any(pattern.match(normalized) for pattern in FULL_SENTENCE_DANGLING_PATTERNS):
+        return ""
     if len(normalized.split()) <= MAX_SENTENCE_WORDS:
         return _ensure_terminal_punctuation(_cleanup_trailing_fragment(normalized))
 
