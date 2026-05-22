@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from collections import Counter
 from pathlib import Path
@@ -129,8 +130,8 @@ def render_run_audit_markdown(
             "",
             "## Sent Items",
             "",
-            "| Title | Source | Canonical URL |",
-            "| --- | --- | --- |",
+            "| Title | Source | Card Writer | Summary Source | Claude Outcome | Claude Reason | Canonical URL |",
+            "| --- | --- | --- | --- | --- | --- | --- |",
         ]
     )
     if sent_rows:
@@ -138,9 +139,34 @@ def render_run_audit_markdown(
             title = _sanitize_cell(row.get("title"))
             source_id = _sanitize_cell(row.get("source_id"))
             canonical_url = _sanitize_cell(row.get("canonical_url"))
-            lines.append(f"| {title} | {source_id} | {canonical_url} |")
+            signals = _decode_signals(row.get("signals_json"))
+            card_writer = _sanitize_cell(signals.get("card_writer"))
+            summary_source = _sanitize_cell(signals.get("final_card_summary_source"))
+            claude_outcome = _sanitize_cell(signals.get("claude_final_card_outcome"))
+            claude_reason = _sanitize_cell(signals.get("claude_final_card_reason"))
+            lines.append(
+                f"| {title} | {source_id} | {card_writer} | {summary_source} | "
+                f"{claude_outcome} | {claude_reason} | {canonical_url} |"
+            )
     else:
-        lines.append("| none | none | none |")
+        lines.append("| none | none | none | none | none | none | none |")
+
+    lines.extend(
+        [
+            "",
+            "## Sent Item Summaries",
+            "",
+            "| Title | Summary Text |",
+            "| --- | --- |",
+        ]
+    )
+    if sent_rows:
+        for row in sent_rows:
+            title = _sanitize_cell(row.get("title"))
+            summary_text = _sanitize_cell(row.get("summary_text"))
+            lines.append(f"| {title} | {summary_text} |")
+    else:
+        lines.append("| none | none |")
 
     lines.extend(
         [
@@ -213,3 +239,15 @@ def _sanitize_cell(value: Any) -> str:
     if value is None:
         return ""
     return str(value).replace("\n", " ").replace("|", "\\|").strip()
+
+
+def _decode_signals(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if not value:
+        return {}
+    try:
+        payload = json.loads(str(value))
+    except json.JSONDecodeError:
+        return {}
+    return payload if isinstance(payload, dict) else {}

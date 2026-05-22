@@ -1838,6 +1838,8 @@ class RadarRepository:
                   rd.relevance_status,
                   rd.send_status,
                   rd.skip_reason,
+                  rd.summary_text,
+                  rd.signals_json,
                   rd.created_at
                 FROM radar_decisions rd
                 JOIN normalized_items ni ON ni.id = rd.normalized_item_id

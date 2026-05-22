@@ -27,6 +27,13 @@ def test_render_run_audit_markdown_includes_summary_skip_counts_and_sent_items(m
             "canonical_url": "https://example.com/a",
             "send_status": "sent",
             "skip_reason": None,
+            "summary_text": "Story A final summary.",
+            "signals_json": (
+                '{"card_writer":"claude_final_card",'
+                '"final_card_summary_source":"claude_final_card",'
+                '"claude_final_card_outcome":"rewritten",'
+                '"claude_final_card_reason":null}'
+            ),
         },
         {
             "title": "Story B",
@@ -34,6 +41,13 @@ def test_render_run_audit_markdown_includes_summary_skip_counts_and_sent_items(m
             "canonical_url": "https://example.com/b",
             "send_status": "sent",
             "skip_reason": None,
+            "summary_text": "Story B fallback summary.",
+            "signals_json": (
+                '{"card_writer":"deterministic_after_claude_final_card_fallback",'
+                '"final_card_summary_source":"gemini_summary",'
+                '"claude_final_card_outcome":"fallback_unavailable",'
+                '"claude_final_card_reason":"timeout"}'
+            ),
         },
         {
             "title": "Suppressed funding duplicate",
@@ -41,6 +55,8 @@ def test_render_run_audit_markdown_includes_summary_skip_counts_and_sent_items(m
             "canonical_url": "https://example.com/c",
             "send_status": "skip",
             "skip_reason": "already_sent_same_funding_event",
+            "summary_text": "",
+            "signals_json": "{}",
         },
         {
             "title": "Suppressed product duplicate",
@@ -48,6 +64,8 @@ def test_render_run_audit_markdown_includes_summary_skip_counts_and_sent_items(m
             "canonical_url": "https://example.com/d",
             "send_status": "skip",
             "skip_reason": "duplicate_same_product_launch_event_shortlist",
+            "summary_text": "",
+            "signals_json": "{}",
         },
         {
             "title": "Weak card",
@@ -55,6 +73,8 @@ def test_render_run_audit_markdown_includes_summary_skip_counts_and_sent_items(m
             "canonical_url": "https://example.com/e",
             "send_status": "skip",
             "skip_reason": "weak_or_empty_telegram_card",
+            "summary_text": "",
+            "signals_json": "{}",
         },
     ]
     source_audit_rows = [
@@ -109,8 +129,13 @@ def test_render_run_audit_markdown_includes_summary_skip_counts_and_sent_items(m
     assert "- `duplicate_same_product_launch_event_shortlist`: `1`" in markdown
     assert "- `duplicate_same_partnership_event_shortlist`: `0`" in markdown
     assert "- `weak_or_empty_telegram_card`: `1`" in markdown
-    assert "| Story A | source-a | https://example.com/a |" in markdown
-    assert "| Story B | source-b | https://example.com/b |" in markdown
+    assert "| Story A | source-a | claude_final_card | claude_final_card | rewritten |  | https://example.com/a |" in markdown
+    assert (
+        "| Story B | source-b | deterministic_after_claude_final_card_fallback | gemini_summary | "
+        "fallback_unavailable | timeout | https://example.com/b |"
+    ) in markdown
+    assert "| Story A | Story A final summary. |" in markdown
+    assert "| Story B | Story B fallback summary. |" in markdown
     assert "| source-f | Source F | failed: timeout | 0 | 9.876 |" in markdown
     assert "| source-a | 4 | 1.234 |" in markdown
     assert "| source-f | 0 | 9.876 |" in markdown
