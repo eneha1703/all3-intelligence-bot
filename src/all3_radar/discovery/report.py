@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, is_dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -110,3 +111,27 @@ def write_discovery_outputs(result: DiscoveryRunResult, output_dir: Path) -> tup
     markdown_path.write_text(build_discovery_report(result), encoding="utf-8")
     json_path.write_text(json.dumps(result, default=_json_default, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return markdown_path, json_path
+
+
+def write_discovery_failure_report(output_dir: Path, *, error: BaseException) -> Path:
+    output_dir.mkdir(parents=True, exist_ok=True)
+    generated_at = datetime.now(timezone.utc)
+    stamp = generated_at.strftime("%Y%m%dT%H%M%SZ")
+    markdown_path = output_dir / f"web-discovery-failed-{stamp}.md"
+    markdown_path.write_text(
+        "\n".join(
+            [
+                "# Daily Web Discovery Failed",
+                "",
+                f"Generated at: `{generated_at.isoformat()}`",
+                f"Error type: `{type(error).__name__}`",
+                f"Error: `{str(error)}`",
+                "",
+                "The discovery provider did not return a usable response. No candidates were ingested or sent.",
+                "Retry manually with a smaller `max_search_uses` value or a higher `WEB_DISCOVERY_TIMEOUT_SECONDS`.",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    return markdown_path

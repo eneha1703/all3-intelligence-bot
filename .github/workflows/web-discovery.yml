@@ -25,7 +25,7 @@ jobs:
       WEB_DISCOVERY_MAX_SEARCH_USES: ${{ github.event.inputs.max_search_uses || vars.WEB_DISCOVERY_MAX_SEARCH_USES || '8' }}
       WEB_DISCOVERY_MAX_CANDIDATES: ${{ vars.WEB_DISCOVERY_MAX_CANDIDATES || '20' }}
       WEB_DISCOVERY_MAX_NEW_CANDIDATES: ${{ vars.WEB_DISCOVERY_MAX_NEW_CANDIDATES || '12' }}
-      WEB_DISCOVERY_TIMEOUT_SECONDS: ${{ vars.WEB_DISCOVERY_TIMEOUT_SECONDS || '60' }}
+      WEB_DISCOVERY_TIMEOUT_SECONDS: ${{ vars.WEB_DISCOVERY_TIMEOUT_SECONDS || '180' }}
       WEB_DISCOVERY_MAX_TOKENS: ${{ vars.WEB_DISCOVERY_MAX_TOKENS || '2500' }}
 
     steps:
@@ -67,7 +67,7 @@ jobs:
         run: pip install -e .[dev]
 
       - name: Run web discovery
-        run: python -m all3_radar.app.radar_cli discover-web
+        run: python -m all3_radar.app.radar_cli discover-web --allow-failure-report
 
       - name: Upload web discovery report
         if: always()

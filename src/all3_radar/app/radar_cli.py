@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from all3_radar.config.loader import load_settings
+from all3_radar.discovery.report import write_discovery_failure_report
 from all3_radar.discovery.service import run_web_discovery
 from all3_radar.pipeline.radar_service import run_radar
 from all3_radar.pipeline.replay_service import replay_radar_window
@@ -31,6 +32,11 @@ def build_parser() -> argparse.ArgumentParser:
     discovery_parser.add_argument(
         "--output-dir",
         help="Directory for markdown and JSON discovery reports. Defaults to data/web-discovery.",
+    )
+    discovery_parser.add_argument(
+        "--allow-failure-report",
+        action="store_true",
+        help="Write a failure report and exit 0 when the provider is unavailable or times out.",
     )
 
     replay_parser = subparsers.add_parser("replay-window", help="Replay a historical published-date window")
@@ -76,9 +82,9 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     repo_root = Path(__file__).resolve().parents[3]
 
     if args.command == "run":
@@ -93,10 +99,15 @@ def main() -> int:
         return 0
 
     if args.command == "discover-web":
-        result = run_web_discovery(
-            repo_root=repo_root,
-            output_dir=Path(args.output_dir) if args.output_dir else None,
-        )
+        output_dir = Path(args.output_dir) if args.output_dir else repo_root / "data" / "web-discovery"
+        try:
+            result = run_web_discovery(repo_root=repo_root, output_dir=output_dir)
+        except Exception as exc:
+            if not args.allow_failure_report:
+                raise
+            report_path = write_discovery_failure_report(output_dir, error=exc)
+            print(f"Web discovery failed but wrote report: report={report_path} error={exc}")
+            return 0
         print(
             f"Web discovery complete: candidates={len(result.evaluated_candidates)} "
             f"accepted_for_review={len(result.accepted_candidates)} "

@@ -112,7 +112,7 @@ def load_discovery_runtime_config(
     return DiscoveryRuntimeConfig(
         api_key=env.get("ANTHROPIC_API_KEY") or None,
         model=model or DEFAULT_MODEL,
-        timeout_seconds=_parse_int(env.get("WEB_DISCOVERY_TIMEOUT_SECONDS"), "WEB_DISCOVERY_TIMEOUT_SECONDS", default=60, minimum=1),
+        timeout_seconds=_parse_int(env.get("WEB_DISCOVERY_TIMEOUT_SECONDS"), "WEB_DISCOVERY_TIMEOUT_SECONDS", default=180, minimum=1),
         max_tokens=_parse_int(env.get("WEB_DISCOVERY_MAX_TOKENS"), "WEB_DISCOVERY_MAX_TOKENS", default=2500, minimum=1),
         max_search_uses=_parse_int(
             env.get("WEB_DISCOVERY_MAX_SEARCH_USES"),
