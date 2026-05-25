@@ -7,7 +7,7 @@ import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from all3_radar.discovery.models import (
@@ -92,6 +92,18 @@ def _pack_to_prompt_payload(pack: DiscoveryQueryPack) -> dict[str, Any]:
     }
 
 
+def _freshness_window_label(*, generated_at: datetime, freshness_days: int) -> str:
+    start = (generated_at - timedelta(days=freshness_days)).date().isoformat()
+    end = generated_at.date().isoformat()
+    return f"{start} through {end}"
+
+
+def _fresh_query(query: str, *, generated_at: datetime, freshness_days: int) -> str:
+    start = (generated_at - timedelta(days=freshness_days)).date().isoformat()
+    month_label = generated_at.strftime("%B %Y")
+    return f"{query} after:{start} {month_label}"
+
+
 def build_discovery_prompt(
     *,
     query_packs: tuple[DiscoveryQueryPack, ...],
@@ -100,18 +112,31 @@ def build_discovery_prompt(
     generated_at: datetime | None = None,
 ) -> str:
     generated_at = generated_at or datetime.now(timezone.utc)
+    window_label = _freshness_window_label(generated_at=generated_at, freshness_days=freshness_days)
+    pack_payloads = []
+    for pack in query_packs:
+        pack_payload = _pack_to_prompt_payload(pack)
+        pack_payload["fresh_queries"] = [
+            _fresh_query(query, generated_at=generated_at, freshness_days=freshness_days)
+            for query in pack.queries
+        ]
+        pack_payloads.append(pack_payload)
     payload = {
         "generated_at_utc": generated_at.isoformat(),
         "freshness_days": freshness_days,
+        "freshness_window": window_label,
         "max_candidates": max_candidates,
-        "query_packs": [_pack_to_prompt_payload(pack) for pack in query_packs],
+        "query_packs": pack_payloads,
     }
     return (
         "You are a daily web-discovery analyst for All3's News Radar. "
         "Use web search to find fresh, concrete news outside the bot's fixed source list. "
         "Do not write a digest. Do not invent URLs, dates, numbers, or source names. "
         "Only return articles published within freshness_days of generated_at_utc. "
+        f"For this run, the freshness window is {window_label}. "
         "If no article in a query pack is fresh enough, return no candidate for that pack instead of substituting older relevant material. "
+        "Use the provided fresh_queries or equivalent searches with explicit date filters. "
+        "Try to cover each query pack before spending multiple searches on the same pack. "
         "Do not return older articles, reports, guides, rankings, top-10 lists, evergreen resource pages, or market-overview pages. "
         "Return candidates only when the article has a concrete operational, market, deployment, capacity, adoption, funding, "
         "productivity, policy, or delivery-system signal relevant to All3. "
