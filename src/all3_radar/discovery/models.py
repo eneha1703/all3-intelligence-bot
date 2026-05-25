@@ -77,6 +77,7 @@ class EvaluatedDiscoveryCandidate:
     candidate: DiscoveryCandidate
     dedupe: DiscoveryDedupeResult
     accepted_for_review: bool
+    rejection_reason: str | None = None
 
 
 @dataclass(frozen=True)

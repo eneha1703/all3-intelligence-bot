@@ -83,7 +83,7 @@ def build_discovery_report(result: DiscoveryRunResult) -> str:
         for index, evaluated in enumerate(skipped, start=1):
             candidate = evaluated.candidate
             dedupe = evaluated.dedupe
-            reason = dedupe.reason or "not accepted"
+            reason = evaluated.rejection_reason or dedupe.reason or "not accepted"
             if dedupe.match is not None:
                 reason = f"{reason}; matched {dedupe.match.table_name}"
                 if dedupe.match.title:

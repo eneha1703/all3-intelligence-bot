@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import replace
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Protocol
 
@@ -41,8 +41,85 @@ def _canonicalize_url(url: str) -> str:
     return normalized
 
 
-def _candidate_is_accepted(candidate: DiscoveryCandidate, dedupe: DiscoveryDedupeResult) -> bool:
-    return not dedupe.seen and candidate.confidence in {"medium", "high"}
+EVERGREEN_TITLE_MARKERS = (
+    "top 10",
+    "top ten",
+    "report 2026",
+    "guide",
+    "market overview",
+    "applications",
+    "trends 2026",
+    "what is",
+)
+
+
+def _looks_like_evergreen_content(candidate: DiscoveryCandidate) -> bool:
+    title = candidate.title.lower()
+    url = candidate.url.lower()
+    return any(marker in title for marker in EVERGREEN_TITLE_MARKERS) or any(
+        marker.replace(" ", "-") in url for marker in EVERGREEN_TITLE_MARKERS
+    )
+
+
+def _parse_candidate_date(value: str | None, *, now: datetime) -> datetime | None:
+    if not value:
+        return None
+    normalized = value.strip()
+    lowered = normalized.lower()
+    if lowered == "today":
+        return now
+    if lowered == "yesterday":
+        return now - timedelta(days=1)
+    if lowered.endswith("days ago"):
+        try:
+            return now - timedelta(days=int(lowered.split()[0]))
+        except (ValueError, IndexError):
+            return None
+    if lowered.endswith("day ago"):
+        return now - timedelta(days=1)
+    if "week ago" in lowered or "weeks ago" in lowered or "month ago" in lowered or "months ago" in lowered:
+        return None
+    for date_format in ("%Y-%m-%d", "%B %d, %Y", "%b %d, %Y", "%d %B %Y", "%d %b %Y"):
+        try:
+            parsed = datetime.strptime(normalized, date_format)
+            return parsed.replace(tzinfo=timezone.utc)
+        except ValueError:
+            continue
+    return None
+
+
+def _freshness_rejection_reason(
+    candidate: DiscoveryCandidate,
+    *,
+    freshness_days: int,
+    now: datetime,
+) -> str | None:
+    parsed = _parse_candidate_date(candidate.published_date, now=now)
+    if parsed is None:
+        return "missing_or_unparseable_published_date"
+    cutoff = now - timedelta(days=freshness_days)
+    if parsed < cutoff:
+        return "outside_freshness_window"
+    return None
+
+
+def _candidate_rejection_reason(
+    candidate: DiscoveryCandidate,
+    dedupe: DiscoveryDedupeResult,
+    *,
+    freshness_days: int,
+    now: datetime,
+) -> str | None:
+    if dedupe.seen:
+        return dedupe.reason or "already_seen_in_bot_history"
+    if candidate.confidence not in {"medium", "high"}:
+        return "low_confidence"
+    freshness_reason = _freshness_rejection_reason(candidate, freshness_days=freshness_days, now=now)
+    if freshness_reason:
+        return freshness_reason
+    if _looks_like_evergreen_content(candidate):
+        return "evergreen_or_report_like_content"
+    return None
 
 
 class WebDiscoveryService:
@@ -68,7 +145,7 @@ class WebDiscoveryService:
             freshness_days=self.discovery_config.freshness_days,
         )
         generated_at = datetime.now(timezone.utc)
-        evaluated = self._evaluate_candidates(client_result.candidates)
+        evaluated = self._evaluate_candidates(client_result.candidates, generated_at=generated_at)
         accepted = tuple(item for item in evaluated if item.accepted_for_review)[: self.runtime_config.max_new_candidates]
         result = DiscoveryRunResult(
             generated_at=generated_at,
@@ -96,6 +173,8 @@ class WebDiscoveryService:
     def _evaluate_candidates(
         self,
         candidates: tuple[DiscoveryCandidate, ...],
+        *,
+        generated_at: datetime,
     ) -> tuple[EvaluatedDiscoveryCandidate, ...]:
         evaluated: list[EvaluatedDiscoveryCandidate] = []
         seen_in_response: set[str] = set()
@@ -117,11 +196,18 @@ class WebDiscoveryService:
                     reason="already_seen_in_bot_history" if existing is not None else None,
                     match=existing,
                 )
+            rejection_reason = _candidate_rejection_reason(
+                candidate,
+                dedupe,
+                freshness_days=self.discovery_config.freshness_days,
+                now=generated_at,
+            )
             evaluated.append(
                 EvaluatedDiscoveryCandidate(
                     candidate=candidate,
                     dedupe=dedupe,
-                    accepted_for_review=_candidate_is_accepted(candidate, dedupe),
+                    accepted_for_review=rejection_reason is None,
+                    rejection_reason=rejection_reason,
                 )
             )
         return tuple(evaluated)

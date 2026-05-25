@@ -42,6 +42,28 @@ class _FakeDiscoveryClient:
                     confidence="medium",
                 ),
                 DiscoveryCandidate(
+                    title="Old construction robot deployment",
+                    url="https://example.com/old-robot",
+                    source_name="Example",
+                    published_date="March 19, 2026",
+                    summary="Old deployment item.",
+                    query_pack_id="test_pack",
+                    matched_signal="active deployment",
+                    why_relevant="Relevant but stale.",
+                    confidence="high",
+                ),
+                DiscoveryCandidate(
+                    title="Top 10 construction robotics",
+                    url="https://example.com/top-10-construction-robotics",
+                    source_name="Example",
+                    published_date="2026-05-25",
+                    summary="Evergreen ranking page.",
+                    query_pack_id="test_pack",
+                    matched_signal="active deployment",
+                    why_relevant="Evergreen page should be skipped.",
+                    confidence="medium",
+                ),
+                DiscoveryCandidate(
                     title="Borderline low-confidence item",
                     url="https://example.com/low-confidence",
                     source_name="Example",
@@ -151,13 +173,16 @@ def test_web_discovery_service_dedupes_against_bot_history_and_writes_reports(tm
     ).run(output_dir=tmp_path / "reports")
 
     assert result.web_search_requests == 3
-    assert len(result.evaluated_candidates) == 3
+    assert len(result.evaluated_candidates) == 5
     assert [item.candidate.title for item in result.accepted_candidates] == ["New construction robot deployment"]
     seen_candidate = result.evaluated_candidates[0]
     assert seen_candidate.dedupe.seen is True
     assert seen_candidate.dedupe.reason == "already_seen_in_bot_history"
     assert seen_candidate.dedupe.match is not None
     assert seen_candidate.dedupe.match.table_name == "normalized_items"
+    assert result.evaluated_candidates[2].rejection_reason == "outside_freshness_window"
+    assert result.evaluated_candidates[3].rejection_reason == "evergreen_or_report_like_content"
+    assert result.evaluated_candidates[4].rejection_reason == "low_confidence"
     assert result.report_markdown_path is not None
     assert result.report_json_path is not None
     report_text = Path(result.report_markdown_path).read_text(encoding="utf-8")

@@ -42,6 +42,7 @@ query_packs:
       - humanoid PR without deployment
       - broad future-of-construction opinion pieces
       - construction software with no physical automation angle
+      - reports, guides, top-10 lists, application pages, or evergreen resource pages
     queries:
       - "\"construction robotics\" deployment contractor productivity 2026"
       - "\"autonomous drilling\" construction site deployment data center 2026"
@@ -111,6 +112,7 @@ query_packs:
       - research-only prototypes
       - humanoid videos with no customer or use case
       - generic AI software with no physical-world deployment
+      - reports, rankings, guides, explainers, or evergreen resource pages
     queries:
       - "\"physical AI\" industrial robotics deployment factory 2026"
       - "\"industrial robotics\" \"AI\" deployment customer manufacturing 2026"
