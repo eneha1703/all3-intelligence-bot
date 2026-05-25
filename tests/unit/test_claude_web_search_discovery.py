@@ -38,6 +38,8 @@ def test_build_discovery_prompt_contains_editorial_brief() -> None:
     assert "Only return articles published within freshness_days" in prompt
     assert "return no candidate for that pack instead of substituting older relevant material" in prompt
     assert "Do not return older articles, reports, guides, rankings, top-10 lists" in prompt
+    assert "Start your response with { and end it with }" in prompt
+    assert "Do not include citations, commentary, source lists, or any text outside the JSON object" in prompt
     assert "Do not write a digest" in prompt
     assert "construction_robotics_deployment" in prompt
     assert "generic demos" in prompt

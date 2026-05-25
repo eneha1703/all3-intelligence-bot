@@ -125,6 +125,8 @@ def build_discovery_prompt(
         "Use confidence=high only when the article clearly matches the pack and appears fresh. "
         "Use confidence=medium when relevant but not yet proven strong. Use confidence=low for borderline items. "
         "Output only one JSON object. Do not use markdown or code fences. "
+        "Start your response with { and end it with }. "
+        "Do not include citations, commentary, source lists, or any text outside the JSON object. "
         "Use this exact schema: "
         '{"candidates":[{"title":string,"url":string,"source_name":string|null,"published_date":string|null,'
         '"summary":string|null,"query_pack_id":string,"matched_signal":string|null,'
@@ -239,7 +241,12 @@ class ClaudeWebDiscoveryClient:
             raise ClaudeWebDiscoveryUnavailableError(f"Claude web discovery request failed: {exc}") from exc
 
         text = self._extract_text(body)
-        parsed = _extract_json_object(text)
+        try:
+            parsed = _extract_json_object(text)
+        except ClaudeWebDiscoveryUnavailableError as exc:
+            raise ClaudeWebDiscoveryUnavailableError(
+                f"{exc} Raw response preview: {text[:1000]}"
+            ) from exc
         candidates = _parse_candidates(parsed, {pack.id for pack in query_packs})
         usage = body.get("usage") if isinstance(body.get("usage"), dict) else {}
         server_tool_use = usage.get("server_tool_use") if isinstance(usage.get("server_tool_use"), dict) else {}

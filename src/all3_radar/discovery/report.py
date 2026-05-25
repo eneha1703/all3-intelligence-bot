@@ -118,6 +118,7 @@ def write_discovery_failure_report(output_dir: Path, *, error: BaseException) ->
     generated_at = datetime.now(timezone.utc)
     stamp = generated_at.strftime("%Y%m%dT%H%M%SZ")
     markdown_path = output_dir / f"web-discovery-failed-{stamp}.md"
+    error_text = str(error)
     markdown_path.write_text(
         "\n".join(
             [
@@ -125,7 +126,7 @@ def write_discovery_failure_report(output_dir: Path, *, error: BaseException) ->
                 "",
                 f"Generated at: `{generated_at.isoformat()}`",
                 f"Error type: `{type(error).__name__}`",
-                f"Error: `{str(error)}`",
+                f"Error: `{error_text}`",
                 "",
                 "The discovery provider did not return a usable response. No candidates were ingested or sent.",
                 "Retry manually with a smaller `max_search_uses` value or a higher `WEB_DISCOVERY_TIMEOUT_SECONDS`.",
