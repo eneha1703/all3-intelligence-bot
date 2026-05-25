@@ -80,7 +80,15 @@ def _parse_candidate_date(value: str | None, *, now: datetime) -> datetime | Non
         return now - timedelta(days=1)
     if "week ago" in lowered or "weeks ago" in lowered or "month ago" in lowered or "months ago" in lowered:
         return None
-    for date_format in ("%Y-%m-%d", "%B %d, %Y", "%b %d, %Y", "%d %B %Y", "%d %b %Y"):
+    for date_format in (
+        "%Y-%m-%d",
+        "%B %d, %Y",
+        "%b %d, %Y",
+        "%d %B %Y",
+        "%d %b %Y",
+        "%a, %d %b %Y %H:%M:%S %Z",
+        "%a, %d %B %Y %H:%M:%S %Z",
+    ):
         try:
             parsed = datetime.strptime(normalized, date_format)
             return parsed.replace(tzinfo=timezone.utc)

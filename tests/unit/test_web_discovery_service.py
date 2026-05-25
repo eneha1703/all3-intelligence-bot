@@ -8,7 +8,7 @@ from all3_radar.discovery.models import (
     DiscoveryQueryPack,
     DiscoveryRuntimeConfig,
 )
-from all3_radar.discovery.service import WebDiscoveryService
+from all3_radar.discovery.service import WebDiscoveryService, _freshness_rejection_reason
 from all3_radar.domain.enums import PipelineName, SourceKind, SourceLayer
 from all3_radar.domain.models import CollectedRawItem, NormalizedItem, SourceDefinition
 from all3_radar.storage.db import initialize_database
@@ -190,3 +190,26 @@ def test_web_discovery_service_dedupes_against_bot_history_and_writes_reports(tm
     assert "Daily Web Discovery Report" in report_text
     assert "New construction robot deployment" in report_text
     assert "Already seen robotics story" in report_text
+
+
+def test_freshness_parser_accepts_rfc2822_style_dates() -> None:
+    candidate = DiscoveryCandidate(
+        title="Fresh Tavily result",
+        url="https://example.com/fresh-rfc2822",
+        source_name="Example",
+        published_date="Mon, 25 May 2026 07:29:24 GMT",
+        summary="Fresh result in RSS-style datetime format.",
+        query_pack_id="test_pack",
+        matched_signal="deployment",
+        why_relevant="Fresh and concrete.",
+        confidence="high",
+    )
+
+    assert (
+        _freshness_rejection_reason(
+            candidate,
+            freshness_days=2,
+            now=datetime(2026, 5, 25, 20, 15, 41, tzinfo=timezone.utc),
+        )
+        is None
+    )
