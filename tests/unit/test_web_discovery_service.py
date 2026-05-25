@@ -74,6 +74,39 @@ class _FakeDiscoveryClient:
                     why_relevant=None,
                     confidence="low",
                 ),
+                DiscoveryCandidate(
+                    title="Edge engineering enables physical AI in vehicles",
+                    url="https://letsdatascience.com/news/edge-engineering-enables-physical-ai-in-vehicles-2ff1a390",
+                    source_name="Let's Data Science",
+                    published_date="Mon, 25 May 2026 07:29:24 GMT",
+                    summary="Automotive manufacturers are advancing ADAS and in-cabin AI with Tier 1 suppliers.",
+                    query_pack_id="industrial_robotics_physical_ai",
+                    matched_signal="named industrial customer, plant, site, or partner",
+                    why_relevant="Automotive deployment discussion without a plant or factory deployment signal.",
+                    confidence="medium",
+                ),
+                DiscoveryCandidate(
+                    title="Physical AI doubles capacity in Tennessee sorting facility",
+                    url="https://example.com/sortera-facility",
+                    source_name="Robot Report",
+                    published_date="Sun, 24 May 2026 12:25:35 GMT",
+                    summary="Industrial facility deployment with named site and capacity gain.",
+                    query_pack_id="industrial_robotics_physical_ai",
+                    matched_signal="factory, warehouse, construction, infrastructure, or industrial deployment",
+                    why_relevant="Concrete industrial deployment at a named facility.",
+                    confidence="high",
+                ),
+                DiscoveryCandidate(
+                    title="Physical AI doubles capacity at Tennessee sorting facility",
+                    url="https://example.com/sortera-facility-duplicate",
+                    source_name="Another Outlet",
+                    published_date="Sun, 24 May 2026 13:10:00 GMT",
+                    summary="Near-duplicate cross-post of the same facility story.",
+                    query_pack_id="industrial_robotics_physical_ai",
+                    matched_signal="factory, warehouse, construction, infrastructure, or industrial deployment",
+                    why_relevant="Same underlying deployment event reported by another outlet.",
+                    confidence="medium",
+                ),
             ),
             raw_response_text='{"candidates":[]}',
             web_search_requests=3,
@@ -174,8 +207,11 @@ def test_web_discovery_service_dedupes_against_bot_history_and_writes_reports(tm
     ).run(output_dir=tmp_path / "reports")
 
     assert result.web_search_requests == 3
-    assert len(result.evaluated_candidates) == 5
-    assert [item.candidate.title for item in result.accepted_candidates] == ["New construction robot deployment"]
+    assert len(result.evaluated_candidates) == 8
+    assert [item.candidate.title for item in result.accepted_candidates] == [
+        "New construction robot deployment",
+        "Physical AI doubles capacity in Tennessee sorting facility",
+    ]
     seen_candidate = result.evaluated_candidates[0]
     assert seen_candidate.dedupe.seen is True
     assert seen_candidate.dedupe.reason == "already_seen_in_bot_history"
@@ -184,6 +220,8 @@ def test_web_discovery_service_dedupes_against_bot_history_and_writes_reports(tm
     assert result.evaluated_candidates[2].rejection_reason == "outside_freshness_window"
     assert result.evaluated_candidates[3].rejection_reason == "evergreen_or_report_like_content"
     assert result.evaluated_candidates[4].rejection_reason == "low_confidence"
+    assert result.evaluated_candidates[5].rejection_reason == "low_signal_source_or_partner_content"
+    assert result.evaluated_candidates[7].rejection_reason == "duplicate_in_discovery_response_cluster"
     assert result.report_markdown_path is not None
     assert result.report_json_path is not None
     report_text = Path(result.report_markdown_path).read_text(encoding="utf-8")

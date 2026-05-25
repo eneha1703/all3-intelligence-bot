@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from difflib import SequenceMatcher
 from pathlib import Path
 from typing import Protocol
 
@@ -53,6 +54,34 @@ EVERGREEN_TITLE_MARKERS = (
     "what is",
 )
 
+LOW_SIGNAL_SOURCE_MARKERS = (
+    "partner-content",
+    "sponsored",
+    "advertorial",
+    "medium.com",
+    "letsdatascience.com",
+)
+
+AUTOMOTIVE_PHYSICAL_AI_MARKERS = (
+    "vehicle",
+    "vehicles",
+    "automotive",
+    "adas",
+    "in-cabin",
+    "driver assistance",
+)
+
+DEPLOYMENT_REALITY_MARKERS = (
+    "factory",
+    "plant",
+    "warehouse",
+    "site",
+    "facility",
+    "construction",
+    "industrial",
+    "production",
+)
+
 
 def _looks_like_evergreen_content(candidate: DiscoveryCandidate) -> bool:
     title = candidate.title.lower()
@@ -60,6 +89,56 @@ def _looks_like_evergreen_content(candidate: DiscoveryCandidate) -> bool:
     return any(marker in title for marker in EVERGREEN_TITLE_MARKERS) or any(
         marker.replace(" ", "-") in url for marker in EVERGREEN_TITLE_MARKERS
     )
+
+
+def _looks_like_low_signal_source(candidate: DiscoveryCandidate) -> bool:
+    haystacks = (
+        candidate.url.lower(),
+        (candidate.source_name or "").lower(),
+        candidate.title.lower(),
+    )
+    return any(marker in haystack for haystack in haystacks for marker in LOW_SIGNAL_SOURCE_MARKERS)
+
+
+def _looks_like_vehicle_ai_story_without_real_deployment(candidate: DiscoveryCandidate) -> bool:
+    if candidate.query_pack_id != "industrial_robotics_physical_ai":
+        return False
+    text = " ".join(
+        part
+        for part in (
+            candidate.title,
+            candidate.summary or "",
+            candidate.why_relevant or "",
+            candidate.matched_signal or "",
+        )
+    ).lower()
+    has_automotive_marker = any(marker in text for marker in AUTOMOTIVE_PHYSICAL_AI_MARKERS)
+    has_real_deployment_marker = any(marker in text for marker in DEPLOYMENT_REALITY_MARKERS)
+    return has_automotive_marker and not has_real_deployment_marker
+
+
+def _normalized_title_signature(title: str) -> str:
+    filtered = "".join(ch.lower() if ch.isalnum() or ch.isspace() else " " for ch in title)
+    tokens = [token for token in filtered.split() if len(token) > 2]
+    return " ".join(tokens)
+
+
+def _looks_like_near_duplicate_story(left: DiscoveryCandidate, right: DiscoveryCandidate) -> bool:
+    if left.query_pack_id != right.query_pack_id:
+        return False
+    left_signature = _normalized_title_signature(left.title)
+    right_signature = _normalized_title_signature(right.title)
+    if not left_signature or not right_signature:
+        return False
+    similarity = SequenceMatcher(None, left_signature, right_signature).ratio()
+    if similarity >= 0.78:
+        return True
+    left_tokens = set(left_signature.split())
+    right_tokens = set(right_signature.split())
+    if not left_tokens or not right_tokens:
+        return False
+    overlap = len(left_tokens & right_tokens) / min(len(left_tokens), len(right_tokens))
+    return overlap >= 0.8
 
 
 def _parse_candidate_date(value: str | None, *, now: datetime) -> datetime | None:
@@ -128,6 +207,10 @@ def _candidate_rejection_reason(
         return freshness_reason
     if _looks_like_evergreen_content(candidate):
         return "evergreen_or_report_like_content"
+    if _looks_like_low_signal_source(candidate):
+        return "low_signal_source_or_partner_content"
+    if _looks_like_vehicle_ai_story_without_real_deployment(candidate):
+        return "automotive_or_vehicle_ai_without_factory_deployment"
     return None
 
 
@@ -187,6 +270,7 @@ class WebDiscoveryService:
     ) -> tuple[EvaluatedDiscoveryCandidate, ...]:
         evaluated: list[EvaluatedDiscoveryCandidate] = []
         seen_in_response: set[str] = set()
+        accepted_candidates: list[DiscoveryCandidate] = []
         for candidate in candidates:
             canonical_url = _canonicalize_url(candidate.url)
             if canonical_url in seen_in_response:
@@ -211,6 +295,13 @@ class WebDiscoveryService:
                 freshness_days=self.discovery_config.freshness_days,
                 now=generated_at,
             )
+            if rejection_reason is None:
+                duplicate_match = next(
+                    (accepted for accepted in accepted_candidates if _looks_like_near_duplicate_story(accepted, candidate)),
+                    None,
+                )
+                if duplicate_match is not None:
+                    rejection_reason = "duplicate_in_discovery_response_cluster"
             evaluated.append(
                 EvaluatedDiscoveryCandidate(
                     candidate=candidate,
@@ -219,6 +310,8 @@ class WebDiscoveryService:
                     rejection_reason=rejection_reason,
                 )
             )
+            if rejection_reason is None:
+                accepted_candidates.append(candidate)
         return tuple(evaluated)
 
 

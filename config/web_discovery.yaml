@@ -112,9 +112,10 @@ query_packs:
       - research-only prototypes
       - humanoid videos with no customer or use case
       - generic AI software with no physical-world deployment
+      - vehicle, ADAS, or in-cabin AI stories without named factory, warehouse, site, or production deployment
       - reports, rankings, guides, explainers, or evergreen resource pages
     queries:
       - "\"physical AI\" industrial robotics deployment factory 2026"
       - "\"industrial robotics\" \"AI\" deployment customer manufacturing 2026"
       - "\"sim-to-real\" robotics factory deployment integration 2026"
-      - "\"humanoid robot\" factory deployment customer production 2026"
+      - "\"warehouse robotics\" OR \"factory robotics\" \"physical AI\" deployment 2026"
