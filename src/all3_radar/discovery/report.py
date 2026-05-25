@@ -99,7 +99,7 @@ def build_discovery_report(result: DiscoveryRunResult) -> str:
     else:
         lines.append("No skipped candidates.")
 
-    lines.extend(["", "## Raw Claude Response", "", "```json", result.raw_response_text.strip(), "```", ""])
+    lines.extend(["", "## Raw Discovery Response", "", "```json", result.raw_response_text.strip(), "```", ""])
     return "\n".join(lines)
 
 

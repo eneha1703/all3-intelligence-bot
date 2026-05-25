@@ -1,6 +1,6 @@
 # Daily Web Discovery
 
-Daily web discovery is a report-only layer for finding off-source news candidates through Claude web search.
+Daily web discovery is a report-only layer for finding off-source news candidates through Tavily search plus Claude review.
 
 It is intentionally separate from the hourly radar pipeline:
 
@@ -13,6 +13,7 @@ It is intentionally separate from the hourly radar pipeline:
 
 ```powershell
 $env:ANTHROPIC_API_KEY="..."
+$env:TAVILY_API_KEY="..."
 $env:DATABASE_PATH="data/all3_radar.db"
 $env:WEB_DISCOVERY_MAX_SEARCH_USES="8"
 python -m all3_radar.app.radar_cli discover-web
@@ -37,9 +38,22 @@ WEB_DISCOVERY_MAX_CANDIDATES=20
 WEB_DISCOVERY_MAX_NEW_CANDIDATES=12
 WEB_DISCOVERY_TIMEOUT_SECONDS=180
 WEB_DISCOVERY_MAX_TOKENS=2500
+WEB_DISCOVERY_TAVILY_SEARCH_DEPTH=basic
+WEB_DISCOVERY_TAVILY_INCLUDE_RAW_CONTENT=true
 ```
 
-At Anthropic's published web-search price of `$10 / 1,000 searches`, eight searches per day is about `$2.40/month` before token costs.
+Recommended secrets:
+
+```text
+ANTHROPIC_API_KEY
+TAVILY_API_KEY
+```
+
+The default mode is:
+
+- Tavily finds fresh candidate URLs within the freshness window.
+- Claude reviews only the fetched results instead of searching the web itself.
+- The bot still dedupes against the live radar database before anything is accepted for review.
 
 The default freshness window is 2 days for daily discovery. This covers indexing delays and time zones without repeatedly dragging week-old evergreen material into daily runs.
 

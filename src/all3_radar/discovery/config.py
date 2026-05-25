@@ -10,6 +10,7 @@ from all3_radar.config.loader import load_yaml
 from all3_radar.discovery.models import DiscoveryConfig, DiscoveryQueryPack, DiscoveryRuntimeConfig
 
 DEFAULT_MODEL = "claude-sonnet-4-20250514"
+VALID_DISCOVERY_PROVIDERS = {"claude_web_search", "tavily_search"}
 
 
 def _parse_bool(value: Any, *, default: bool = False) -> bool:
@@ -82,9 +83,12 @@ def load_discovery_config(path: Path) -> DiscoveryConfig:
     query_packs = tuple(_parse_query_pack(raw_pack) for raw_pack in payload.get("query_packs", []))
     if not query_packs:
         raise ValueError("Web discovery config must include at least one query pack.")
+    provider = str(payload.get("provider") or "tavily_search").strip()
+    if provider not in VALID_DISCOVERY_PROVIDERS:
+        raise ValueError(f"Unsupported web discovery provider: {provider}")
     return DiscoveryConfig(
         enabled=_parse_bool(payload.get("enabled"), default=True),
-        provider=str(payload.get("provider") or "claude_web_search"),
+        provider=provider,
         freshness_days=_parse_int(payload.get("freshness_days"), "freshness_days", default=3, minimum=1),
         max_search_uses=_parse_int(payload.get("max_search_uses"), "max_search_uses", default=8, minimum=1),
         max_candidates_returned=_parse_int(
@@ -109,8 +113,15 @@ def load_discovery_runtime_config(
         or env.get("CLAUDE_FINAL_CARD_MODEL")
         or DEFAULT_MODEL
     ).strip()
+    tavily_search_depth = _require_non_empty(
+        env.get("WEB_DISCOVERY_TAVILY_SEARCH_DEPTH") or "basic",
+        "WEB_DISCOVERY_TAVILY_SEARCH_DEPTH",
+    ).lower()
+    if tavily_search_depth not in {"basic", "advanced"}:
+        raise ValueError(f"WEB_DISCOVERY_TAVILY_SEARCH_DEPTH must be basic or advanced, got: {tavily_search_depth}")
     return DiscoveryRuntimeConfig(
         api_key=env.get("ANTHROPIC_API_KEY") or None,
+        search_api_key=env.get("TAVILY_API_KEY") or None,
         model=model or DEFAULT_MODEL,
         timeout_seconds=_parse_int(env.get("WEB_DISCOVERY_TIMEOUT_SECONDS"), "WEB_DISCOVERY_TIMEOUT_SECONDS", default=180, minimum=1),
         max_tokens=_parse_int(env.get("WEB_DISCOVERY_MAX_TOKENS"), "WEB_DISCOVERY_MAX_TOKENS", default=2500, minimum=1),
@@ -132,5 +143,7 @@ def load_discovery_runtime_config(
             default=discovery_config.max_new_candidates,
             minimum=1,
         ),
+        tavily_search_depth=tavily_search_depth,
+        tavily_include_raw_content=_parse_bool(env.get("WEB_DISCOVERY_TAVILY_INCLUDE_RAW_CONTENT"), default=True),
         blocked_domains=_parse_string_tuple(env.get("WEB_DISCOVERY_BLOCKED_DOMAINS")),
     )

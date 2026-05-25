@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
       DATABASE_PATH: data/all3_radar.db
       WEB_DISCOVERY_MODEL: ${{ vars.WEB_DISCOVERY_MODEL }}
       WEB_DISCOVERY_MAX_SEARCH_USES: ${{ github.event.inputs.max_search_uses || vars.WEB_DISCOVERY_MAX_SEARCH_USES || '8' }}
@@ -27,6 +28,8 @@ jobs:
       WEB_DISCOVERY_MAX_NEW_CANDIDATES: ${{ vars.WEB_DISCOVERY_MAX_NEW_CANDIDATES || '12' }}
       WEB_DISCOVERY_TIMEOUT_SECONDS: ${{ vars.WEB_DISCOVERY_TIMEOUT_SECONDS || '180' }}
       WEB_DISCOVERY_MAX_TOKENS: ${{ vars.WEB_DISCOVERY_MAX_TOKENS || '2500' }}
+      WEB_DISCOVERY_TAVILY_SEARCH_DEPTH: ${{ vars.WEB_DISCOVERY_TAVILY_SEARCH_DEPTH || 'basic' }}
+      WEB_DISCOVERY_TAVILY_INCLUDE_RAW_CONTENT: ${{ vars.WEB_DISCOVERY_TAVILY_INCLUDE_RAW_CONTENT || 'true' }}
 
     steps:
       - uses: actions/checkout@v4

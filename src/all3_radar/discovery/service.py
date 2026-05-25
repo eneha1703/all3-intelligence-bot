@@ -20,6 +20,7 @@ from all3_radar.discovery.models import (
     EvaluatedDiscoveryCandidate,
 )
 from all3_radar.discovery.report import write_discovery_outputs
+from all3_radar.discovery.tavily_search import TavilyWebDiscoveryClient
 from all3_radar.pipeline.normalize import normalize_url
 from all3_radar.storage.repositories import RadarRepository
 
@@ -223,7 +224,12 @@ def run_web_discovery(repo_root: Path, *, output_dir: Path | None = None) -> Dis
     discovery_config = load_discovery_config(repo_root / "config" / "web_discovery.yaml")
     runtime_config = load_discovery_runtime_config(discovery_config)
     repository = RadarRepository(settings.app.database_path)
-    client = ClaudeWebDiscoveryClient(runtime_config)
+    if discovery_config.provider == "claude_web_search":
+        client = ClaudeWebDiscoveryClient(runtime_config)
+    elif discovery_config.provider == "tavily_search":
+        client = TavilyWebDiscoveryClient(runtime_config)
+    else:
+        raise RuntimeError(f"Unsupported web discovery provider: {discovery_config.provider}")
     return WebDiscoveryService(
         repository=repository,
         discovery_config=discovery_config,

@@ -84,7 +84,7 @@ class _FakeDiscoveryClient:
 def _config() -> DiscoveryConfig:
     return DiscoveryConfig(
         enabled=True,
-        provider="claude_web_search",
+        provider="tavily_search",
         freshness_days=3,
         max_search_uses=8,
         max_candidates_returned=20,
@@ -105,6 +105,7 @@ def _config() -> DiscoveryConfig:
 def _runtime() -> DiscoveryRuntimeConfig:
     return DiscoveryRuntimeConfig(
         api_key="test",
+        search_api_key="search-test",
         model="claude-test",
         timeout_seconds=10,
         max_tokens=1000,

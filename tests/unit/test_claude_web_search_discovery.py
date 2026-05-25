@@ -87,6 +87,7 @@ def test_claude_web_discovery_client_parses_candidates_and_sends_web_search_tool
     client = ClaudeWebDiscoveryClient(
         DiscoveryRuntimeConfig(
             api_key="test-key",
+            search_api_key=None,
             model="claude-test",
             timeout_seconds=12,
             max_tokens=900,

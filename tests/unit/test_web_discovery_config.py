@@ -8,7 +8,7 @@ def test_load_web_discovery_config_query_packs() -> None:
     config = load_discovery_config(repo_root / "config" / "web_discovery.yaml")
 
     assert config.enabled is True
-    assert config.provider == "claude_web_search"
+    assert config.provider == "tavily_search"
     assert config.freshness_days == 2
     assert config.max_search_uses == 8
     assert len(config.query_packs) >= 5
@@ -27,21 +27,27 @@ def test_load_web_discovery_runtime_env_overrides() -> None:
         config,
         env={
             "ANTHROPIC_API_KEY": "test-key",
+            "TAVILY_API_KEY": "tavily-key",
             "WEB_DISCOVERY_MODEL": "claude-test",
             "WEB_DISCOVERY_MAX_SEARCH_USES": "4",
             "WEB_DISCOVERY_MAX_CANDIDATES": "11",
             "WEB_DISCOVERY_MAX_NEW_CANDIDATES": "6",
             "WEB_DISCOVERY_TIMEOUT_SECONDS": "33",
             "WEB_DISCOVERY_MAX_TOKENS": "1234",
+            "WEB_DISCOVERY_TAVILY_SEARCH_DEPTH": "advanced",
+            "WEB_DISCOVERY_TAVILY_INCLUDE_RAW_CONTENT": "false",
             "WEB_DISCOVERY_BLOCKED_DOMAINS": "example.com, spam.test",
         },
     )
 
     assert runtime.api_key == "test-key"
+    assert runtime.search_api_key == "tavily-key"
     assert runtime.model == "claude-test"
     assert runtime.max_search_uses == 4
     assert runtime.max_candidates_returned == 11
     assert runtime.max_new_candidates == 6
     assert runtime.timeout_seconds == 33
     assert runtime.max_tokens == 1234
+    assert runtime.tavily_search_depth == "advanced"
+    assert runtime.tavily_include_raw_content is False
     assert runtime.blocked_domains == ("example.com", "spam.test")

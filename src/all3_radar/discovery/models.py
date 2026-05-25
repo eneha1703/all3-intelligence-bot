@@ -32,12 +32,15 @@ class DiscoveryConfig:
 @dataclass(frozen=True)
 class DiscoveryRuntimeConfig:
     api_key: str | None
+    search_api_key: str | None
     model: str
     timeout_seconds: int
     max_tokens: int
     max_search_uses: int
     max_candidates_returned: int
     max_new_candidates: int
+    tavily_search_depth: str = "basic"
+    tavily_include_raw_content: bool = True
     blocked_domains: tuple[str, ...] = ()
 
 
