@@ -36,6 +36,7 @@ def test_build_discovery_prompt_contains_editorial_brief() -> None:
     assert "daily web-discovery analyst" in prompt
     assert "Treat the query packs as editorial search briefs" in prompt
     assert "Only return articles published within freshness_days" in prompt
+    assert "return no candidate for that pack instead of substituting older relevant material" in prompt
     assert "Do not return older articles, reports, guides, rankings, top-10 lists" in prompt
     assert "Do not write a digest" in prompt
     assert "construction_robotics_deployment" in prompt

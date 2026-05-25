@@ -9,6 +9,7 @@ def test_load_web_discovery_config_query_packs() -> None:
 
     assert config.enabled is True
     assert config.provider == "claude_web_search"
+    assert config.freshness_days == 2
     assert config.max_search_uses == 8
     assert len(config.query_packs) >= 5
     pack_ids = {pack.id for pack in config.query_packs}

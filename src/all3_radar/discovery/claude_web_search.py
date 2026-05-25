@@ -111,6 +111,7 @@ def build_discovery_prompt(
         "Use web search to find fresh, concrete news outside the bot's fixed source list. "
         "Do not write a digest. Do not invent URLs, dates, numbers, or source names. "
         "Only return articles published within freshness_days of generated_at_utc. "
+        "If no article in a query pack is fresh enough, return no candidate for that pack instead of substituting older relevant material. "
         "Do not return older articles, reports, guides, rankings, top-10 lists, evergreen resource pages, or market-overview pages. "
         "Return candidates only when the article has a concrete operational, market, deployment, capacity, adoption, funding, "
         "productivity, policy, or delivery-system signal relevant to All3. "

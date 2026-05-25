@@ -1,6 +1,6 @@
 enabled: true
 provider: claude_web_search
-freshness_days: 3
+freshness_days: 2
 max_search_uses: 8
 max_candidates_returned: 20
 max_new_candidates: 12

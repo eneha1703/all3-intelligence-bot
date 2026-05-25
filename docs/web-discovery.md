@@ -41,6 +41,8 @@ WEB_DISCOVERY_MAX_TOKENS=2500
 
 At Anthropic's published web-search price of `$10 / 1,000 searches`, eight searches per day is about `$2.40/month` before token costs.
 
+The default freshness window is 2 days for daily discovery. This covers indexing delays and time zones without repeatedly dragging week-old evergreen material into daily runs.
+
 ## Query Packs
 
 Editorial search briefs live in `config/web_discovery.yaml`.
