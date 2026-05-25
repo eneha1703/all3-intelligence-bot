@@ -20,6 +20,7 @@ from all3_radar.domain.models import (
     SourceDefinition,
     StoredNormalizedItem,
 )
+from all3_radar.discovery.models import SeenUrlMatch
 from all3_radar.pipeline.deployment_event_key import (
     DeploymentSemanticKey,
     deployment_key_from_text,
@@ -859,6 +860,96 @@ class RadarRepository:
                 (url, url),
             ).fetchone()
         return bool(row)
+
+    def find_seen_url(self, canonical_url: str) -> SeenUrlMatch | None:
+        """Return where a URL has already appeared in bot history, if anywhere."""
+        url_variants = sorted({canonical_url, canonical_url.rstrip("/")})
+        placeholders = ",".join("?" for _ in url_variants)
+        with connect(self.database_path) as connection:
+            row = connection.execute(
+                f"""
+                SELECT 'normalized_items' AS table_name,
+                       canonical_url AS matched_url,
+                       id AS item_id,
+                       title AS title
+                FROM normalized_items
+                WHERE canonical_url IN ({placeholders})
+                ORDER BY collected_ts DESC
+                LIMIT 1
+                """,
+                tuple(url_variants),
+            ).fetchone()
+            if row is not None:
+                return SeenUrlMatch(
+                    table_name=str(row["table_name"]),
+                    matched_url=str(row["matched_url"]),
+                    item_id=str(row["item_id"]),
+                    title=str(row["title"]) if row["title"] else None,
+                )
+
+            row = connection.execute(
+                f"""
+                SELECT 'raw_items' AS table_name,
+                       url AS matched_url,
+                       id AS item_id,
+                       title AS title
+                FROM raw_items
+                WHERE url IN ({placeholders})
+                ORDER BY collected_ts DESC
+                LIMIT 1
+                """,
+                tuple(url_variants),
+            ).fetchone()
+            if row is not None:
+                return SeenUrlMatch(
+                    table_name=str(row["table_name"]),
+                    matched_url=str(row["matched_url"]),
+                    item_id=str(row["item_id"]),
+                    title=str(row["title"]) if row["title"] else None,
+                )
+
+            row = connection.execute(
+                f"""
+                SELECT 'telegram_group_messages' AS table_name,
+                       message_url AS matched_url,
+                       id AS item_id,
+                       COALESCE(message_text, message_caption) AS title
+                FROM telegram_group_messages
+                WHERE message_url IN ({placeholders})
+                ORDER BY message_ts DESC
+                LIMIT 1
+                """,
+                tuple(url_variants),
+            ).fetchone()
+            if row is not None:
+                return SeenUrlMatch(
+                    table_name=str(row["table_name"]),
+                    matched_url=str(row["matched_url"]),
+                    item_id=str(row["item_id"]),
+                    title=str(row["title"])[:180] if row["title"] else None,
+                )
+
+            row = connection.execute(
+                f"""
+                SELECT 'telegram_group_message_links' AS table_name,
+                       url AS matched_url,
+                       id AS item_id,
+                       NULL AS title
+                FROM telegram_group_message_links
+                WHERE url IN ({placeholders})
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                tuple(url_variants),
+            ).fetchone()
+            if row is not None:
+                return SeenUrlMatch(
+                    table_name=str(row["table_name"]),
+                    matched_url=str(row["matched_url"]),
+                    item_id=str(row["item_id"]),
+                    title=None,
+                )
+        return None
 
     def load_recent_group_post_candidates(self, *, lookback_days: int = 14, limit: int = 30) -> list[dict[str, Any]]:
         with connect(self.database_path) as connection:

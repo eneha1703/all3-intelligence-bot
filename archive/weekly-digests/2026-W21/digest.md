@@ -1,0 +1,16 @@
+Top 5 News Highlights | 15-21 May 2026 | Week 21
+
+1. <b>Australia's timber sector is losing ground in the segment now driving housing growth</b>
+Mid-rise approvals jumped more than 70% in 2025, adding 7,800 dwellings to Australia's national pipeline — the same volume uplift as freestanding houses and townhouses combined. Yet structural timber consumption fell 1.1% across the same year, with LVL imports up 26% and light gauge steel taking share in mid-rise. The products exist; the integrated delivery solution does not. <a href="https://woodcentral.com.au/just-look-up-mid-rise-surge-marks-timber-frames-inflection-point/">Link</a>
+
+2. <b>August Robotics bets on data centers as the entry point for construction automation</b>
+The USD 30M Series B will expand production and open new facilities in Europe and Australia, but the sharper detail is where the robots are already working: autonomous drilling systems developed with DeWalt are deployed at large-scale data center projects across the US and Europe. Data centers are repeatable, schedule-sensitive, and tolerant of new methods — a more tractable wedge than general construction. <a href="https://theaiinsider.tech/2026/05/21/august-robotics-raises-30m-in-series-b-funding-for-autonomous-construction-robotics/">Link</a>
+
+3. <b>Hyundai is turning its own factories into the proving ground for humanoid scale</b>
+Hyundai Motor Group plans to deploy more than 25,000 Atlas robots across Hyundai and Kia plants, targeting 30,000 units of annual production capacity by 2028, with US factory deployments beginning in Georgia that year. No detailed rollout timeline or plant-by-plant allocation has been disclosed, so the commitment is real but the operational proof is still ahead. <a href="https://interestingengineering.com/ai-robotics/hyundai-25000-atlas-humanoid-robots-us-plants">Link</a>
+
+4. <b>Figure AI's 24-hour warehouse run is a cleaner proof than a demo, not yet a commercial one</b>
+Figure AI's humanoids sorted more than 30,000 packages autonomously over 24 hours with zero reported failures — on a closed conveyor loop cycling the same packages repeatedly. Sustained uptime on a fixed task is a meaningful step past staged demos, but it is a long way from the variable conditions of a live logistics centre. <a href="https://www.businessinsider.com/figure-ai-turned-a-humanoid-sorting-packages-must-see-tv-2026-5">Link</a>
+
+5. <b>FANUC and NVIDIA close the gap between simulation and factory floor</b>
+The expanded integration links NVIDIA Isaac Sim directly with FANUC's ROBOGUIDE software so that robot trajectories and cycle times stay identical between virtual and physical environments. FANUC also upgraded its human-avoidance system on NVIDIA's Jetson Thor platform, gaining more than 7.5 times the compute of the previous setup. Closing the sim-to-real gap reduces the on-site tuning time that currently makes complex automation deployments slow and expensive to validate. <a href="https://interestingengineering.com/ai-robotics/fanuc-nvidia-sim-to-real-digital-twins">Link</a>

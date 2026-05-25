@@ -1,0 +1,79 @@
+name: Daily Web Discovery
+
+on:
+  workflow_dispatch:
+    inputs:
+      max_search_uses:
+        description: "Optional cap for Claude web searches in this run"
+        required: false
+        type: string
+  schedule:
+    - cron: "17 7 * * *"
+
+concurrency:
+  group: web-discovery-${{ github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    if: github.event_name == 'workflow_dispatch' || vars.WEB_DISCOVERY_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      DATABASE_PATH: data/all3_radar.db
+      WEB_DISCOVERY_MODEL: ${{ vars.WEB_DISCOVERY_MODEL }}
+      WEB_DISCOVERY_MAX_SEARCH_USES: ${{ github.event.inputs.max_search_uses || vars.WEB_DISCOVERY_MAX_SEARCH_USES || '8' }}
+      WEB_DISCOVERY_MAX_CANDIDATES: ${{ vars.WEB_DISCOVERY_MAX_CANDIDATES || '20' }}
+      WEB_DISCOVERY_MAX_NEW_CANDIDATES: ${{ vars.WEB_DISCOVERY_MAX_NEW_CANDIDATES || '12' }}
+      WEB_DISCOVERY_TIMEOUT_SECONDS: ${{ vars.WEB_DISCOVERY_TIMEOUT_SECONDS || '60' }}
+      WEB_DISCOVERY_MAX_TOKENS: ${{ vars.WEB_DISCOVERY_MAX_TOKENS || '2500' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log trigger context
+        run: |
+          echo "event_name=${{ github.event_name }}"
+          echo "ref_name=${{ github.ref_name }}"
+          echo "run_id=${{ github.run_id }}"
+          echo "run_attempt=${{ github.run_attempt }}"
+          date -u
+
+      - name: Ensure data directory exists
+        run: mkdir -p data
+
+      - name: Restore Bot 1 state
+        id: restore-radar-db
+        uses: actions/cache/restore@v4
+        with:
+          path: data/all3_radar.db
+          key: radar-db-${{ github.ref_name }}-${{ github.run_id }}
+          restore-keys: |
+            radar-db-${{ github.ref_name }}-
+
+      - name: Require restored DB for dedupe
+        run: |
+          if [ ! -f data/all3_radar.db ]; then
+            echo "Bot 1 DB was not restored. Web discovery refuses to run without history dedupe."
+            exit 1
+          fi
+          ls -lh data/all3_radar.db
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -e .[dev]
+
+      - name: Run web discovery
+        run: python -m all3_radar.app.radar_cli discover-web
+
+      - name: Upload web discovery report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-discovery-${{ github.run_id }}
+          path: data/web-discovery/*
+          if-no-files-found: ignore
+          retention-days: 14

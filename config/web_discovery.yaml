@@ -1,0 +1,118 @@
+enabled: true
+provider: claude_web_search
+freshness_days: 3
+max_search_uses: 8
+max_candidates_returned: 20
+max_new_candidates: 12
+query_packs:
+  - id: competitor_activity
+    name: Competitor activity
+    goal: Find material news about known competitor-like companies, not generic profiles.
+    max_results: 5
+    include_signals:
+      - funding round or strategic financing
+      - major customer, contract, or deployment
+      - factory, capacity, or geographic expansion
+      - product launch tied to housing, construction, robotics, prefab, modular, timber, or automation
+      - acquisition, shutdown, insolvency, or restructuring
+    exclude_signals:
+      - old company profiles
+      - hiring posts
+      - awards
+      - marketing pages without a concrete event
+      - generic investment commentary
+    queries:
+      - "\"Kewazo\" OR \"Gropyus\" OR \"Nokera\" construction robotics prefab funding deployment 2026"
+      - "\"AUAR\" OR \"Monumental\" OR \"Reframe Systems\" housing construction robotics factory 2026"
+      - "\"Factory_OS\" OR \"Assembly OSM\" OR \"Autovol\" modular housing factory contract 2026"
+
+  - id: construction_robotics_deployment
+    name: Construction robotics deployment
+    goal: Find construction robotics stories with real deployment, customer adoption, measurable productivity gain, or workflow-specific automation.
+    max_results: 5
+    include_signals:
+      - active deployment on live construction sites
+      - named contractor, developer, customer, or project type
+      - measurable labor, time, quality, or safety gain
+      - repeatable workflow such as drilling, layout, trenching, piling, inspection, scanning, grading, or material handling
+      - data-center or infrastructure construction where robotics or automation is central
+    exclude_signals:
+      - generic robot demos
+      - university prototypes
+      - humanoid PR without deployment
+      - broad future-of-construction opinion pieces
+      - construction software with no physical automation angle
+    queries:
+      - "\"construction robotics\" deployment contractor productivity 2026"
+      - "\"autonomous drilling\" construction site deployment data center 2026"
+      - "\"construction robot\" labour saving workflow deployment contractor"
+      - "\"robotic layout\" OR \"robotic drilling\" construction deployment customer"
+
+  - id: industrialized_housing_systems
+    name: Industrialized housing systems
+    goal: Find market-share, capacity, import, code, or delivery-system signals around timber, prefab, modular, offsite and mid-rise housing.
+    max_results: 5
+    include_signals:
+      - prefab or modular imports rising because domestic delivery capacity is constrained
+      - timber, LVL, light gauge steel, concrete, or other systems gaining or losing share in mid-rise housing
+      - factory capacity expansion for housing delivery
+      - public or institutional housing procurement using offsite or industrialized construction
+      - developer switching construction systems for speed, cost, predictability, or labor availability
+      - building-code or approval changes affecting mid-rise timber, prefab, modular, or offsite adoption
+    exclude_signals:
+      - custom single-family homes
+      - architecture awards
+      - generic sustainability stories
+      - material price-only stories
+      - design inspiration or top-10 prefab home lists
+    queries:
+      - "\"mid-rise housing\" timber steel concrete \"market share\" construction 2026"
+      - "\"prefabricated housing\" imports capacity \"housing delivery\" 2026"
+      - "\"offsite construction\" factory capacity housing delivery developer"
+      - "\"modular housing\" public housing contract factory capacity 2026"
+
+  - id: housing_delivery_bottlenecks
+    name: Housing delivery bottlenecks
+    goal: Find evidence that housing demand, permits, approvals, or targets are diverging from actual delivery capacity.
+    max_results: 5
+    include_signals:
+      - permits or approvals rising while completions lag
+      - approval-to-completion delays
+      - construction insolvencies, labor shortages, or material bottlenecks affecting housing delivery
+      - planning reform tied to actual delivery speed or mid-rise/multifamily capacity
+      - public housing delivery model changes that affect procurement, speed, cost, or capacity
+      - quantified housing pipeline, completions, starts, permits, or productivity data
+    exclude_signals:
+      - house price-only stories
+      - mortgage-rate stories
+      - rent-only stories
+      - political promises without a delivery mechanism
+      - local zoning disputes with no capacity or delivery-system angle
+    queries:
+      - "\"building permits\" completions lag construction capacity housing 2026"
+      - "\"housing completions\" construction productivity labour shortage 2026"
+      - "\"planning reform\" mid-rise housing construction delivery 2026"
+      - "\"housing target\" approvals completions construction capacity 2026"
+
+  - id: industrial_robotics_physical_ai
+    name: Industrial robotics and physical AI
+    goal: Find robotics or physical AI stories that show movement toward real industrial deployment, not demos.
+    max_results: 5
+    include_signals:
+      - factory, warehouse, construction, infrastructure, or industrial deployment
+      - named industrial customer, plant, site, or partner
+      - production scaling or manufacturing capacity
+      - integration cost reduction, faster commissioning, or sim-to-real deployment tooling
+      - payback period, uptime, labor, throughput, or reliability evidence
+      - robotics data, training infrastructure, or physical-world AI systems tied to deployment
+    exclude_signals:
+      - consumer robots
+      - toy demos
+      - research-only prototypes
+      - humanoid videos with no customer or use case
+      - generic AI software with no physical-world deployment
+    queries:
+      - "\"physical AI\" industrial robotics deployment factory 2026"
+      - "\"industrial robotics\" \"AI\" deployment customer manufacturing 2026"
+      - "\"sim-to-real\" robotics factory deployment integration 2026"
+      - "\"humanoid robot\" factory deployment customer production 2026"

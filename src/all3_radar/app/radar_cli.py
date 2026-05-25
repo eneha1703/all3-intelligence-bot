@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 
 from all3_radar.config.loader import load_settings
+from all3_radar.discovery.service import run_web_discovery
 from all3_radar.pipeline.radar_service import run_radar
 from all3_radar.pipeline.replay_service import replay_radar_window
 from all3_radar.storage.repositories import RadarRepository
@@ -22,6 +23,15 @@ def build_parser() -> argparse.ArgumentParser:
     run_parser = subparsers.add_parser("run", help="Run the direct-source collection pipeline")
     run_parser.add_argument("--dry-run", action="store_true", help="Collect and persist without any downstream sending")
     run_parser.add_argument("--source", help="Run a single source id for debugging")
+
+    discovery_parser = subparsers.add_parser(
+        "discover-web",
+        help="Run daily web discovery in report-only mode",
+    )
+    discovery_parser.add_argument(
+        "--output-dir",
+        help="Directory for markdown and JSON discovery reports. Defaults to data/web-discovery.",
+    )
 
     replay_parser = subparsers.add_parser("replay-window", help="Replay a historical published-date window")
     replay_parser.add_argument("--start-date", required=True, help="Replay window start date in YYYY-MM-DD")
@@ -79,6 +89,19 @@ def main() -> int:
             f"stale={result.stale_items} missing_published_ts={result.missing_published_ts} "
             f"canonical_events={result.canonical_events} shortlisted={result.shortlisted_items} "
             f"sent={result.sent_items} failed_sources={result.failed_sources}"
+        )
+        return 0
+
+    if args.command == "discover-web":
+        result = run_web_discovery(
+            repo_root=repo_root,
+            output_dir=Path(args.output_dir) if args.output_dir else None,
+        )
+        print(
+            f"Web discovery complete: candidates={len(result.evaluated_candidates)} "
+            f"accepted_for_review={len(result.accepted_candidates)} "
+            f"web_searches={result.web_search_requests}/{result.max_search_uses} "
+            f"report={result.report_markdown_path}"
         )
         return 0
 
