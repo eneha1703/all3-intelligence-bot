@@ -81,6 +81,7 @@ query_packs:
       - approval-to-completion delays
       - construction insolvencies, labor shortages, or material bottlenecks affecting housing delivery
       - planning reform tied to actual delivery speed or mid-rise/multifamily capacity
+      - construction-code, elevator, material, or inspection-rule changes that directly affect building cost, speed, or delivery capacity
       - public housing delivery model changes that affect procurement, speed, cost, or capacity
       - quantified housing pipeline, completions, starts, permits, or productivity data
     exclude_signals:
@@ -89,6 +90,7 @@ query_packs:
       - rent-only stories
       - political promises without a delivery mechanism
       - local zoning disputes with no capacity or delivery-system angle
+      - campaign, mayoral, city-council, or land-use process stories without a concrete construction-code, approval, delivery-capacity, prefab, modular, timber, offsite, or productivity signal
     queries:
       - "\"building permits\" completions lag construction capacity housing 2026"
       - "\"housing completions\" construction productivity labour shortage 2026"

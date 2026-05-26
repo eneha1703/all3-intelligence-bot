@@ -6,6 +6,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from difflib import SequenceMatcher
 from pathlib import Path
+import re
 from typing import Protocol
 
 from all3_radar.config.loader import load_settings
@@ -62,6 +63,15 @@ LOW_SIGNAL_SOURCE_MARKERS = (
     "letsdatascience.com",
 )
 
+PRESS_RELEASE_SOURCE_MARKERS = (
+    "pr newswire",
+    "business wire",
+    "globe newswire",
+    "globenewswire",
+    "stock titan",
+    "ein presswire",
+)
+
 AUTOMOTIVE_PHYSICAL_AI_MARKERS = (
     "vehicle",
     "vehicles",
@@ -82,6 +92,95 @@ DEPLOYMENT_REALITY_MARKERS = (
     "production",
 )
 
+HOUSING_POLICY_PACK_IDS = {
+    "housing_delivery_bottlenecks",
+    "industrialized_housing_systems",
+}
+
+HOUSING_POLICY_MARKERS = (
+    "mayor",
+    "campaign",
+    "candidate",
+    "city council",
+    "zoning",
+    "land use",
+    "rezoning",
+    "neighborhood",
+    "neighbourhood",
+    "affordable housing plan",
+    "housing plan",
+)
+
+HOUSING_DELIVERY_SYSTEM_MARKERS = (
+    "approval",
+    "approvals",
+    "permit",
+    "permits",
+    "completion",
+    "completions",
+    "construction code",
+    "code reform",
+    "building code",
+    "building safety regulator",
+    "gateway",
+    "planning period",
+    "planning delay",
+    "delivery capacity",
+    "construction productivity",
+    "construction system",
+    "prefab",
+    "prefabricated",
+    "modular",
+    "offsite",
+    "timber",
+    "mass timber",
+    "lvl",
+    "light gauge steel",
+    "non-traditional materials",
+    "elevator",
+    "factory capacity",
+)
+
+STORY_STOPWORDS = {
+    "about",
+    "across",
+    "after",
+    "again",
+    "also",
+    "amid",
+    "and",
+    "are",
+    "around",
+    "build",
+    "building",
+    "builds",
+    "can",
+    "city",
+    "construction",
+    "could",
+    "deliver",
+    "delivery",
+    "from",
+    "has",
+    "have",
+    "housing",
+    "into",
+    "its",
+    "more",
+    "new",
+    "news",
+    "old",
+    "plan",
+    "push",
+    "says",
+    "the",
+    "their",
+    "this",
+    "through",
+    "toward",
+    "with",
+}
+
 
 def _looks_like_evergreen_content(candidate: DiscoveryCandidate) -> bool:
     title = candidate.title.lower()
@@ -98,6 +197,15 @@ def _looks_like_low_signal_source(candidate: DiscoveryCandidate) -> bool:
         candidate.title.lower(),
     )
     return any(marker in haystack for haystack in haystacks for marker in LOW_SIGNAL_SOURCE_MARKERS)
+
+
+def looks_like_press_release_rehost(candidate: DiscoveryCandidate) -> bool:
+    haystacks = (
+        candidate.url.lower(),
+        (candidate.source_name or "").lower(),
+        candidate.title.lower(),
+    )
+    return any(marker in haystack for haystack in haystacks for marker in PRESS_RELEASE_SOURCE_MARKERS)
 
 
 def _looks_like_vehicle_ai_story_without_real_deployment(candidate: DiscoveryCandidate) -> bool:
@@ -117,14 +225,52 @@ def _looks_like_vehicle_ai_story_without_real_deployment(candidate: DiscoveryCan
     return has_automotive_marker and not has_real_deployment_marker
 
 
+def _candidate_text(candidate: DiscoveryCandidate) -> str:
+    return " ".join(
+        part
+        for part in (
+            candidate.title,
+            candidate.summary or "",
+            candidate.why_relevant or "",
+            candidate.matched_signal or "",
+        )
+        if part
+    )
+
+
+def _looks_like_housing_policy_without_delivery_system(candidate: DiscoveryCandidate) -> bool:
+    if candidate.query_pack_id not in HOUSING_POLICY_PACK_IDS:
+        return False
+    text = _candidate_text(candidate).lower()
+    has_policy_marker = any(marker in text for marker in HOUSING_POLICY_MARKERS)
+    has_delivery_system_marker = any(marker in text for marker in HOUSING_DELIVERY_SYSTEM_MARKERS)
+    return has_policy_marker and not has_delivery_system_marker
+
+
 def _normalized_title_signature(title: str) -> str:
     filtered = "".join(ch.lower() if ch.isalnum() or ch.isspace() else " " for ch in title)
     tokens = [token for token in filtered.split() if len(token) > 2]
     return " ".join(tokens)
 
 
+def _story_tokens(candidate: DiscoveryCandidate) -> set[str]:
+    text = _candidate_text(candidate).lower()
+    normalized = re.sub(r"[^a-z0-9]+", " ", text)
+    return {
+        token
+        for token in normalized.split()
+        if len(token) > 2 and token not in STORY_STOPWORDS and not token.isdigit()
+    }
+
+
+def _related_query_packs(left: DiscoveryCandidate, right: DiscoveryCandidate) -> bool:
+    if left.query_pack_id == right.query_pack_id:
+        return True
+    return left.query_pack_id in HOUSING_POLICY_PACK_IDS and right.query_pack_id in HOUSING_POLICY_PACK_IDS
+
+
 def _looks_like_near_duplicate_story(left: DiscoveryCandidate, right: DiscoveryCandidate) -> bool:
-    if left.query_pack_id != right.query_pack_id:
+    if not _related_query_packs(left, right):
         return False
     left_signature = _normalized_title_signature(left.title)
     right_signature = _normalized_title_signature(right.title)
@@ -135,10 +281,21 @@ def _looks_like_near_duplicate_story(left: DiscoveryCandidate, right: DiscoveryC
         return True
     left_tokens = set(left_signature.split())
     right_tokens = set(right_signature.split())
-    if not left_tokens or not right_tokens:
+    if left_tokens and right_tokens:
+        overlap = len(left_tokens & right_tokens) / min(len(left_tokens), len(right_tokens))
+        if overlap >= 0.8:
+            return True
+
+    left_story_tokens = _story_tokens(left)
+    right_story_tokens = _story_tokens(right)
+    if not left_story_tokens or not right_story_tokens:
         return False
-    overlap = len(left_tokens & right_tokens) / min(len(left_tokens), len(right_tokens))
-    return overlap >= 0.8
+    story_overlap = len(left_story_tokens & right_story_tokens) / min(len(left_story_tokens), len(right_story_tokens))
+    shared_tokens = left_story_tokens & right_story_tokens
+    if story_overlap >= 0.62 and len(shared_tokens) >= 5:
+        return True
+    housing_story_markers = {"mamdani", "zoning", "rezoning", "affordable", "nyc", "code", "codes"}
+    return bool(shared_tokens & housing_story_markers) and len(shared_tokens) >= 4
 
 
 def _parse_candidate_date(value: str | None, *, now: datetime) -> datetime | None:
@@ -211,6 +368,8 @@ def _candidate_rejection_reason(
         return "low_signal_source_or_partner_content"
     if _looks_like_vehicle_ai_story_without_real_deployment(candidate):
         return "automotive_or_vehicle_ai_without_factory_deployment"
+    if _looks_like_housing_policy_without_delivery_system(candidate):
+        return "housing_policy_without_delivery_system_signal"
     return None
 
 

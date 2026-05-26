@@ -11,6 +11,14 @@ from typing import Any
 from all3_radar.discovery.models import DiscoveryRunResult, EvaluatedDiscoveryCandidate
 
 SEARCH_COST_USD = 0.01
+PRESS_RELEASE_SOURCE_MARKERS = (
+    "pr newswire",
+    "business wire",
+    "globe newswire",
+    "globenewswire",
+    "stock titan",
+    "ein presswire",
+)
 
 
 def _json_default(value: Any) -> Any:
@@ -25,6 +33,16 @@ def _safe(value: str | None) -> str:
     return (value or "").replace("\n", " ").strip()
 
 
+def _looks_like_press_release_rehost(evaluated: EvaluatedDiscoveryCandidate) -> bool:
+    candidate = evaluated.candidate
+    haystacks = (
+        candidate.url.lower(),
+        (candidate.source_name or "").lower(),
+        candidate.title.lower(),
+    )
+    return any(marker in haystack for haystack in haystacks for marker in PRESS_RELEASE_SOURCE_MARKERS)
+
+
 def _candidate_line(index: int, evaluated: EvaluatedDiscoveryCandidate) -> str:
     candidate = evaluated.candidate
     line = f"{index}. [{candidate.title}]({candidate.url})"
@@ -36,7 +54,28 @@ def _candidate_line(index: int, evaluated: EvaluatedDiscoveryCandidate) -> str:
         details.append(f"source={candidate.source_name}")
     if candidate.published_date:
         details.append(f"published={candidate.published_date}")
+    if _looks_like_press_release_rehost(evaluated):
+        details.append("source_quality=`press_release_rehost`")
     return f"{line}\n   " + " | ".join(details)
+
+
+def _candidate_priority(evaluated: EvaluatedDiscoveryCandidate) -> str:
+    candidate = evaluated.candidate
+    if candidate.confidence == "high" and not _looks_like_press_release_rehost(evaluated):
+        return "likely_post"
+    if _looks_like_press_release_rehost(evaluated):
+        return "verify_primary_source"
+    return "watch_only"
+
+
+def _rejection_counts(result: DiscoveryRunResult) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in result.evaluated_candidates:
+        if item.accepted_for_review:
+            continue
+        reason = item.rejection_reason or item.dedupe.reason or "not_accepted"
+        counts[reason] = counts.get(reason, 0) + 1
+    return dict(sorted(counts.items(), key=lambda pair: (-pair[1], pair[0])))
 
 
 def build_discovery_report(result: DiscoveryRunResult) -> str:
@@ -52,9 +91,42 @@ def build_discovery_report(result: DiscoveryRunResult) -> str:
         f"Candidates returned: `{len(result.evaluated_candidates)}`",
         f"New candidates accepted for review: `{len(result.accepted_candidates)}`",
         "",
-        "## Query Packs",
+        "## Executive Summary",
         "",
     ]
+    if result.accepted_candidates:
+        for index, evaluated in enumerate(result.accepted_candidates, start=1):
+            candidate = evaluated.candidate
+            lines.append(
+                f"- `{_candidate_priority(evaluated)}` [{candidate.title}]({candidate.url}) "
+                f"({candidate.source_name or 'unknown source'}, confidence=`{candidate.confidence}`)"
+            )
+    else:
+        lines.append("- No candidates passed freshness, dedupe, source-quality, and scope gates.")
+    rejection_counts = _rejection_counts(result)
+    if rejection_counts:
+        lines.extend(
+            [
+                "",
+                "Skipped/rejected counts:",
+                "",
+            ]
+        )
+        for reason, count in rejection_counts.items():
+            lines.append(f"- `{reason}`: `{count}`")
+    lines.extend(
+        [
+            "",
+            "Review guidance:",
+            "",
+            "- `likely_post`: strongest manual-review candidate.",
+            "- `verify_primary_source`: potentially useful, but source is a press-release rehost; prefer a primary or trade-source URL before posting.",
+            "- `watch_only`: relevant enough to monitor, but weaker or medium-confidence.",
+            "",
+            "## Query Packs",
+            "",
+        ]
+    )
     for pack in result.query_packs:
         lines.extend(
             [
