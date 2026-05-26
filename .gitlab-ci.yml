@@ -23,13 +23,20 @@ cache:
 tests:
   extends: .python_job
   stage: test
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: never
+    - when: on_success
   script:
     - python -m pytest
 
 radar_dry_run:
   extends: .python_job
   stage: verify
-  when: manual
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULED_JOB == "radar_dry_run"'
+      when: on_success
+    - when: manual
   script:
     - mkdir -p data
     - python -m all3_radar.app.admin_cli db init
@@ -43,7 +50,10 @@ radar_dry_run:
 web_discovery_report:
   extends: .python_job
   stage: verify
-  when: manual
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULED_JOB == "web_discovery_report"'
+      when: on_success
+    - when: manual
   variables:
     WEB_DISCOVERY_OUTPUT_DIR: "data/web-discovery"
   script:
