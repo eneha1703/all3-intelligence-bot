@@ -12,6 +12,32 @@ from typing import Any
 WHITESPACE_RE = re.compile(r"\s+")
 SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
 RAW_URL_RE = re.compile(r"https?://\S+")
+PRESS_RELEASE_SOURCE_MARKERS = (
+    "pr newswire",
+    "business wire",
+    "globe newswire",
+    "globenewswire",
+    "stocktitan",
+    "stock titan",
+    "ein presswire",
+)
+TABLOID_SOURCE_MARKERS = (
+    "new york post",
+    "the sun",
+    "daily mail",
+    "mirror",
+)
+MOJIBAKE_REPLACEMENTS = (
+    ("ВЈ", "GBP "),
+    ("вЂ”", "-"),
+    ("вЂ“", "-"),
+    ("вЂ™", "'"),
+    ("вЂ˜", "'"),
+    ("вЂњ", '"'),
+    ("вЂќ", '"'),
+    ("Â£", "GBP "),
+    ("\u00a0", " "),
+)
 
 
 def _load_payload(path: Path) -> dict[str, Any]:
@@ -31,7 +57,10 @@ def _find_latest_json(input_dir: Path) -> Path:
 
 
 def _compact_text(value: str | None) -> str:
-    return WHITESPACE_RE.sub(" ", value or "").strip()
+    text = value or ""
+    for source, replacement in MOJIBAKE_REPLACEMENTS:
+        text = text.replace(source, replacement)
+    return WHITESPACE_RE.sub(" ", text).strip()
 
 
 def _summary_for_card(summary: str | None, *, max_sentences: int = 2, max_chars: int = 560) -> str:
@@ -51,8 +80,10 @@ def _priority(candidate: dict[str, Any]) -> str:
     source_name = str(candidate.get("source_name") or "").lower()
     url = str(candidate.get("url") or "").lower()
     confidence = str(candidate.get("confidence") or "").lower()
-    if any(marker in source_name or marker in url for marker in ("pr newswire", "business wire", "globe newswire", "globenewswire", "stocktitan", "stock titan")):
+    if any(marker in source_name or marker in url for marker in PRESS_RELEASE_SOURCE_MARKERS):
         return "verify_primary_source"
+    if any(marker in source_name or marker in url for marker in TABLOID_SOURCE_MARKERS):
+        return "watch_only"
     if confidence == "high":
         return "likely_post"
     return "watch_only"

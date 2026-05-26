@@ -19,6 +19,12 @@ PRESS_RELEASE_SOURCE_MARKERS = (
     "stock titan",
     "ein presswire",
 )
+TABLOID_SOURCE_MARKERS = (
+    "new york post",
+    "the sun",
+    "daily mail",
+    "mirror",
+)
 
 
 def _json_default(value: Any) -> Any:
@@ -43,6 +49,16 @@ def _looks_like_press_release_rehost(evaluated: EvaluatedDiscoveryCandidate) -> 
     return any(marker in haystack for haystack in haystacks for marker in PRESS_RELEASE_SOURCE_MARKERS)
 
 
+def _looks_like_tabloid_source(evaluated: EvaluatedDiscoveryCandidate) -> bool:
+    candidate = evaluated.candidate
+    haystacks = (
+        candidate.url.lower(),
+        (candidate.source_name or "").lower(),
+        candidate.title.lower(),
+    )
+    return any(marker in haystack for haystack in haystacks for marker in TABLOID_SOURCE_MARKERS)
+
+
 def _candidate_line(index: int, evaluated: EvaluatedDiscoveryCandidate) -> str:
     candidate = evaluated.candidate
     line = f"{index}. [{candidate.title}]({candidate.url})"
@@ -56,15 +72,19 @@ def _candidate_line(index: int, evaluated: EvaluatedDiscoveryCandidate) -> str:
         details.append(f"published={candidate.published_date}")
     if _looks_like_press_release_rehost(evaluated):
         details.append("source_quality=`press_release_rehost`")
+    elif _looks_like_tabloid_source(evaluated):
+        details.append("source_quality=`tabloid_verify_better_source`")
     return f"{line}\n   " + " | ".join(details)
 
 
 def _candidate_priority(evaluated: EvaluatedDiscoveryCandidate) -> str:
     candidate = evaluated.candidate
-    if candidate.confidence == "high" and not _looks_like_press_release_rehost(evaluated):
-        return "likely_post"
     if _looks_like_press_release_rehost(evaluated):
         return "verify_primary_source"
+    if _looks_like_tabloid_source(evaluated):
+        return "watch_only"
+    if candidate.confidence == "high":
+        return "likely_post"
     return "watch_only"
 
 
@@ -121,7 +141,7 @@ def build_discovery_report(result: DiscoveryRunResult) -> str:
             "",
             "- `likely_post`: strongest manual-review candidate.",
             "- `verify_primary_source`: potentially useful, but source is a press-release rehost; prefer a primary or trade-source URL before posting.",
-            "- `watch_only`: relevant enough to monitor, but weaker or medium-confidence.",
+            "- `watch_only`: relevant enough to monitor, but weaker, medium-confidence, or from a source that should be upgraded before posting.",
             "",
             "## Query Packs",
             "",

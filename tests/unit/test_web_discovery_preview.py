@@ -41,6 +41,15 @@ def test_build_preview_markdown_renders_telegram_html_cards(tmp_path: Path) -> N
                     "summary": "A supplier announced an industrial AI partnership for factory edge systems.",
                 }
             },
+            {
+                "candidate": {
+                    "title": "NYC reviews construction codes",
+                    "url": "https://nypost.com/news/example",
+                    "source_name": "New York Post",
+                    "confidence": "high",
+                    "summary": "NYC reported GBP-sensitive reform details with a broken symbol ВЈ163.7m and a broken dash вЂ” both should be cleaned.",
+                }
+            },
         ],
     }
 
@@ -49,6 +58,10 @@ def test_build_preview_markdown_renders_telegram_html_cards(tmp_path: Path) -> N
     assert "Web Discovery Telegram Preview" in markdown
     assert "Candidate 1: likely_post" in markdown
     assert "Candidate 2: verify_primary_source" in markdown
+    assert "Candidate 3: watch_only" in markdown
     assert "<b>Robot maker opens factory</b>" in markdown
     assert '<a href="https://example.com/factory">Link</a>' in markdown
     assert "A third sentence should not be included" not in markdown
+    assert "ВЈ" not in markdown
+    assert "вЂ”" not in markdown
+    assert "GBP 163.7m" in markdown

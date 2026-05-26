@@ -109,8 +109,8 @@ class _FakeDiscoveryClient:
                 ),
                 DiscoveryCandidate(
                     title="NYC reviews old construction codes to push more building",
-                    url="https://example.com/nyc-code-reform",
-                    source_name="Example City News",
+                    url="https://nypost.com/2026/05/25/us-news/nyc-code-reform",
+                    source_name="New York Post",
                     published_date="2026-05-25",
                     summary=(
                         "NYC launched a construction-code reform task force to cut approval timelines, "
@@ -291,6 +291,7 @@ def test_web_discovery_service_dedupes_against_bot_history_and_writes_reports(tm
     assert "Already seen robotics story" in report_text
     assert "source_quality=`press_release_rehost`" in report_text
     assert "`verify_primary_source`" in report_text
+    assert "source_quality=`tabloid_verify_better_source`" in report_text
 
 
 def test_freshness_parser_accepts_rfc2822_style_dates() -> None:
