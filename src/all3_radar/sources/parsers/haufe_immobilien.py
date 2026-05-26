@@ -57,6 +57,8 @@ BOILERPLATE_TERMS = (
     "werben",
     "datenschutz",
 )
+MAX_SNIPPET_CHARS = 900
+MAX_SNIPPET_PARAGRAPHS = 3
 
 
 class _HaufeListingParser(HTMLParser):
@@ -133,7 +135,8 @@ def parse_haufe_published_ts(value: str) -> datetime | None:
     return None
 
 
-def _extract_first_meaningful_paragraph(article_html: str) -> str | None:
+def _extract_meaningful_paragraphs(article_html: str) -> list[str]:
+    paragraphs: list[str] = []
     for match in PARAGRAPH_RE.findall(article_html):
         text = _clean_text(re.sub(r"<[^>]+>", " ", match))
         if not text:
@@ -141,8 +144,36 @@ def _extract_first_meaningful_paragraph(article_html: str) -> str | None:
         lowered = text.lower()
         if any(term in lowered for term in BOILERPLATE_TERMS):
             continue
-        return text
-    return None
+        if text in paragraphs:
+            continue
+        paragraphs.append(text)
+    return paragraphs
+
+
+def _build_article_excerpt(description: str | None, article_html: str) -> str | None:
+    parts: list[str] = []
+    if description:
+        parts.append(description)
+
+    for paragraph in _extract_meaningful_paragraphs(article_html):
+        if any(paragraph in existing or existing in paragraph for existing in parts):
+            continue
+        candidate_parts = [*parts, paragraph]
+        candidate = " ".join(candidate_parts).strip()
+        if len(candidate) > MAX_SNIPPET_CHARS and parts:
+            break
+        parts.append(paragraph)
+        if len(parts) >= MAX_SNIPPET_PARAGRAPHS:
+            break
+
+    if not parts:
+        return None
+
+    snippet = " ".join(parts).strip()
+    if len(snippet) <= MAX_SNIPPET_CHARS:
+        return snippet
+    truncated = snippet[: MAX_SNIPPET_CHARS + 1].rsplit(" ", 1)[0].rstrip(" ,;:-")
+    return truncated or snippet[:MAX_SNIPPET_CHARS].rstrip(" ,;:-")
 
 
 def _extract_article_urls(listing_html: str, base_url: str) -> list[str]:
@@ -182,11 +213,8 @@ def parse_haufe_article(article_html: str) -> ParsedHaufeArticle:
     if published_ts is None:
         published_ts = parse_haufe_published_ts(article_html)
 
-    snippet = (
-        _clean_text(meta.get("description"))
-        or _clean_text(meta.get("og:description"))
-        or _extract_first_meaningful_paragraph(article_html)
-    )
+    description = _clean_text(meta.get("description")) or _clean_text(meta.get("og:description"))
+    snippet = _build_article_excerpt(description, article_html)
     return ParsedHaufeArticle(title=title, published_ts=published_ts, snippet=snippet)
 
 

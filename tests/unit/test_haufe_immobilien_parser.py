@@ -47,6 +47,32 @@ def test_parse_haufe_article_extracts_meta_title_and_german_date() -> None:
     assert "Immobilienfinanzierungen" in (parsed.snippet or "")
 
 
+def test_parse_haufe_article_builds_richer_excerpt_from_body_paragraphs() -> None:
+    article_html = """
+    <html>
+      <head>
+        <meta property="og:title" content="Wohnungsbau-Statistik: Negativrekord bei Fertigstellungen" />
+        <meta name="description" content="Statistisches Bundesamt: 2025 wurden so wenig neue Wohnungen fertiggestellt wie seit 2012 nicht." />
+      </head>
+      <body>
+        <time datetime="22. Mai 2026"></time>
+        <p>Statistisches Bundesamt: 2025 wurden so wenig neue Wohnungen fertiggestellt wie seit 2012 nicht.</p>
+        <p>Nach Angaben von Colliers dauert es inzwischen mehr als zwei Jahre von der Genehmigung bis zur Fertigstellung.</p>
+        <p>Die Analyse verweist damit zugleich auf ein Mengenproblem und auf eine laenger gewordene Durchlaufzeit im Wohnungsbau.</p>
+      </body>
+    </html>
+    """
+
+    parsed = parse_haufe_article(article_html)
+
+    assert parsed.snippet is not None
+    assert "mehr als zwei Jahre" in parsed.snippet
+    assert "Genehmigung bis zur Fertigstellung" in parsed.snippet
+    assert parsed.snippet.startswith(
+        "Statistisches Bundesamt: 2025 wurden so wenig neue Wohnungen fertiggestellt wie seit 2012 nicht."
+    )
+
+
 def test_parse_haufe_listing_collects_article_pages_from_multiple_listings() -> None:
     home_listing = """
     <html><body>

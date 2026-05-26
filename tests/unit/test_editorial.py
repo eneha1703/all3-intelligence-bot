@@ -134,6 +134,28 @@ def test_editorial_shaping_keeps_uk_housing_market_signal() -> None:
     assert editorial.flags["telegram_worthy"] is True
 
 
+def test_editorial_shaping_keeps_haufe_completion_and_permit_timing_story() -> None:
+    item = _make_item(
+        "Wohnungsbau-Statistik: Negativrekord bei Fertigstellungen",
+        (
+            "Statistisches Bundesamt: 2025 wurden so wenig neue Wohnungen fertiggestellt wie seit 2012 nicht. "
+            "Nach Angaben von Colliers dauert es inzwischen mehr als zwei Jahre von der Genehmigung bis zur Fertigstellung."
+        ),
+        source_id="haufe_immobilien_listing",
+    )
+    item = StoredNormalizedItem(
+        **{**item.__dict__, "metadata": {"market_scope": "germany_housing_market", "broad_feed": True}}
+    )
+    decision = _make_decision(housing_market_signal=True)
+
+    editorial = evaluate_send_stage_editorial(item, decision)
+
+    assert editorial.allow_send is True
+    assert editorial.reason is None
+    assert editorial.flags["housing_market_alert_signal"] is True
+    assert editorial.flags["telegram_worthy"] is True
+
+
 def test_editorial_shaping_keeps_uk_construction_market_signal() -> None:
     item = _make_item(
         "UK construction activity falls as infrastructure starts weaken",

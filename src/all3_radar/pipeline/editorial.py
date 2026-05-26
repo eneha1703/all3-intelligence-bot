@@ -229,6 +229,12 @@ HOUSING_MARKET_CONTEXT_TERMS = (
     "building permits",
     "housing approvals",
     "energieeffizienz",
+    "fertigstellungen",
+    "fertiggestellt",
+    "completions",
+    "completion",
+    "genehmigung",
+    "genehmigungen",
 )
 HOUSING_MARKET_QUANTIFIED_TERMS = (
     "%",
@@ -246,6 +252,17 @@ HOUSING_MARKET_QUANTIFIED_TERMS = (
     "decrease",
     "rise",
     "fall",
+    "month",
+    "months",
+    "monat",
+    "monate",
+    "year",
+    "years",
+    "jahr",
+    "jahre",
+    "26 monate",
+    "two years",
+    "more than two years",
 )
 UK_CONSTRUCTION_MARKET_CONTEXT_TERMS = (
     "construction activity",
