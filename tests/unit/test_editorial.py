@@ -347,6 +347,25 @@ def test_editorial_shaping_keeps_wood_central_timber_project_delivery_signal() -
     assert editorial.flags["telegram_worthy"] is True
 
 
+def test_editorial_shaping_keeps_wood_central_timber_strategic_shift_signal() -> None:
+    item = _make_item(
+        "Mass Timber Could Gain New Ground as Architects Turn From Glass",
+        (
+            "Architects are moving away from glass curtain walling as climate urgency and embodied carbon "
+            "concerns push demand toward brick, concrete and engineered timber in more durable buildings."
+        ),
+        source_id="wood_central_api",
+    )
+    decision = _make_decision(timber_strategic_signal=True)
+
+    editorial = evaluate_send_stage_editorial(item, decision)
+
+    assert editorial.allow_send is True
+    assert editorial.reason is None
+    assert editorial.flags["timber_strategic_alert_signal"] is True
+    assert editorial.flags["telegram_worthy"] is True
+
+
 def test_editorial_shaping_keeps_macro_statistics_without_construction_signal_blocked() -> None:
     item = _make_item(
         "Consumer prices in Germany rise 0.2% in April 2026",

@@ -6,6 +6,7 @@ from all3_radar.pipeline.radar_service import (
     CurrentRunContext,
     _is_allowed_medium_claude_editorial_promotion,
     _should_fallback_after_claude_final_card_rejection,
+    _should_fallback_to_protected_market_signal_after_final_card_invalid_output,
     _should_fallback_to_editorial_promotion_after_final_card_invalid_output,
     _should_drop_after_claude_final_card_error,
     _should_protect_from_high_confidence_claude_editorial_rejection,
@@ -274,3 +275,18 @@ def test_editorial_promotion_can_fallback_after_final_card_invalid_output() -> N
     )
 
     assert _should_fallback_to_editorial_promotion_after_final_card_invalid_output(context) is True
+
+
+def test_official_statistics_story_can_fallback_after_final_card_invalid_output() -> None:
+    context = _make_context(
+        title="Auftragseingang im Bauhauptgewerbe im Mai 2026: +7,3 % zum Vormonat",
+        preview=(
+            "Der reale Auftragseingang im Bauhauptgewerbe ist im Mai 2026 gegenuber April 2026 gestiegen."
+        ),
+        source_id="destatis_press_listing",
+        metadata={"market_scope": "germany_housing_market", "origin_language": "de"},
+        event_flags={"construction_statistics_signal": True},
+        score=63,
+    )
+
+    assert _should_fallback_to_protected_market_signal_after_final_card_invalid_output(context) is True

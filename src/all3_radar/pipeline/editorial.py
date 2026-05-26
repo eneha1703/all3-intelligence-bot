@@ -481,6 +481,34 @@ WOOD_CENTRAL_PROJECT_DELIVERY_TERMS = (
     "rezoning application",
     "units",
 )
+WOOD_CENTRAL_STRATEGIC_SHIFT_TERMS = (
+    "glass",
+    "curtain wall",
+    "curtain walling",
+    "masonry",
+    "brick",
+    "concrete",
+    "rammed earth",
+    "hybrid construction",
+    "engineered timber",
+    "embodied carbon",
+    "thermal mass",
+)
+WOOD_CENTRAL_STRATEGIC_CONTEXT_TERMS = (
+    "architect",
+    "architects",
+    "architectural",
+    "adoption",
+    "demand",
+    "growth",
+    "climate urgency",
+    "designed to last",
+    "durable architecture",
+    "opening the way",
+    "opening the door",
+    "material shift",
+    "age with grace",
+)
 WHITESPACE_RE = re.compile(r"\s+")
 
 
@@ -606,6 +634,12 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
             or re.search(r"\b\d+\s*units?\b", haystack) is not None
         )
     )
+    timber_strategic_alert_signal = (
+        item.source_id == "wood_central_api"
+        and event_flags.get("timber_strategic_signal", False)
+        and _contains_any(haystack, WOOD_CENTRAL_STRATEGIC_SHIFT_TERMS)
+        and _contains_any(haystack, WOOD_CENTRAL_STRATEGIC_CONTEXT_TERMS)
+    )
     strategic_industrial_ai_alert_signal = (
         bool(item.metadata.get("broad_feed"))
         and event_flags.get("strategic_ai_major_deal_signal", False)
@@ -693,6 +727,7 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         or timber_economics_alert_signal
         or timber_performance_alert_signal
         or timber_project_delivery_signal
+        or timber_strategic_alert_signal
         or strategic_industrial_ai_alert_signal
         or strategic_capability_acquisition_alert_signal
         or robot_ai_training_infrastructure_signal
@@ -723,6 +758,7 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         "timber_economics_alert_signal": timber_economics_alert_signal,
         "timber_performance_alert_signal": timber_performance_alert_signal,
         "timber_project_delivery_signal": timber_project_delivery_signal,
+        "timber_strategic_alert_signal": timber_strategic_alert_signal,
         "strategic_industrial_ai_alert_signal": strategic_industrial_ai_alert_signal,
         "strategic_capability_acquisition_alert_signal": strategic_capability_acquisition_alert_signal,
         "robot_ai_training_infrastructure_signal": robot_ai_training_infrastructure_signal,

@@ -2817,6 +2817,102 @@ def test_claude_final_card_invalid_output_is_not_sent(
     assert signals["claude_final_card_outcome"] == "rejected_invalid_output"
 
 
+def test_destatis_official_statistics_invalid_output_falls_back_to_send(
+    monkeypatch, tmp_path
+) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "radar_destatis_invalid_output_fallback.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+    monkeypatch.setenv("CLAUDE_FINAL_CARD_ENABLED", "true")
+
+    now = datetime.now(timezone.utc)
+    feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Auftragseingang im Bauhauptgewerbe im Mai 2026: +7,3 % zum Vormonat</title>
+    <link>https://example.com/destatis-construction-orders</link>
+    <description>Der reale Auftragseingang im Bauhauptgewerbe ist im Mai 2026 gegenuber April 2026 gestiegen.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=1))}</pubDate>
+    <guid>a1</guid>
+  </item>
+</channel></rss>"""
+
+    registry = SourceRegistry(
+        (
+            SourceDefinition(
+                id="destatis_press_listing",
+                name="Destatis Press",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://example.com/destatis.xml",
+                priority=100,
+                tags=("policy", "statistics"),
+                extra_config={"origin_language": "de", "delivery_language": "en", "market_scope": "germany_housing_market"},
+            ),
+        )
+    )
+
+    class FakeGeminiClient:
+        is_available = True
+
+        def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
+            return (
+                "Destatis says construction orders rose 7.3% month on month in May 2026.",
+                None,
+            )
+
+    class FakeTelegramSender:
+        def __init__(self) -> None:
+            self.sent_cards = []
+
+        def send_card(self, card):
+            self.sent_cards.append(card)
+            return [
+                TelegramDelivery(
+                    chat_id="123",
+                    status="sent",
+                    telegram_message_id="msg-1",
+                    error_text=None,
+                    payload_text=card.text,
+                )
+            ]
+
+    class FakeClaudeClient:
+        is_available = True
+
+        def generate_final_card(self, **kwargs):
+            raise ClaudeFinalCardUnavailableError("Claude final-card response summary ended in an incomplete fragment.")
+
+    def fake_fetch_text(url: str) -> str:
+        assert url == "https://example.com/destatis.xml"
+        return feed
+
+    fake_sender = FakeTelegramSender()
+    service = RadarService(
+        repo_root=repo_root,
+        registry=registry,
+        fetch_text_fn=fake_fetch_text,
+        gemini_client=FakeGeminiClient(),
+        claude_final_card_client=FakeClaudeClient(),
+        telegram_sender=fake_sender,
+    )
+
+    result = service.run(dry_run=False)
+
+    assert result.sent_items == 1
+    assert len(fake_sender.sent_cards) == 1
+    send_status, skip_reason, signals, _ = _load_radar_decision_for_title(
+        db_path, "Auftragseingang im Bauhauptgewerbe im Mai 2026: +7,3 % zum Vormonat"
+    )
+    assert send_status == "sent"
+    assert skip_reason is None
+    assert signals["claude_final_card_outcome"] == "fallback_protected_market_signal_invalid_output"
+
+
 def test_claude_final_card_failure_falls_back_to_deterministic_send_and_cap(
     monkeypatch, tmp_path
 ) -> None:

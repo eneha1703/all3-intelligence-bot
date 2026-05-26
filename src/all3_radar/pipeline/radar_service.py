@@ -596,9 +596,23 @@ def _should_fallback_to_editorial_promotion_after_final_card_invalid_output(
     if not context.final_headline or not context.final_summary_text:
         return False
     editorial_flags = context.decision.signals.get("editorial_flags", {})
-    if not isinstance(editorial_flags, dict):
-        return False
+    if not isinstance(editorial_flags, dict) or not editorial_flags:
+        editorial_flags = evaluate_send_stage_editorial(context.item, context.decision).flags
     return bool(editorial_flags.get("telegram_worthy", False))
+
+
+def _should_fallback_to_protected_market_signal_after_final_card_invalid_output(
+    context: CurrentRunContext,
+) -> bool:
+    if context.decision is None:
+        return False
+    editorial_flags = context.decision.signals.get("editorial_flags", {})
+    if not isinstance(editorial_flags, dict) or not editorial_flags:
+        editorial_flags = evaluate_send_stage_editorial(context.item, context.decision).flags
+    return bool(
+        editorial_flags.get("official_construction_market_signal", False)
+        or editorial_flags.get("housing_market_alert_signal", False)
+    )
 
 
 def _settings_snapshot(settings: object) -> dict:
@@ -1603,6 +1617,21 @@ class RadarService:
                                 )
                                 LOGGER.warning(
                                     "Claude final-card invalid output fallback to editorial promotion: item=%s reason=%s",
+                                    context.item.normalized_item_id,
+                                    reason,
+                                )
+                                filtered_sendable_contexts.append(context)
+                                continue
+                            if _should_fallback_to_protected_market_signal_after_final_card_invalid_output(context):
+                                increment_stage_counter("claude_final_card_fallback")
+                                _with_context_signals(
+                                    context,
+                                    claude_final_card_reviewed=True,
+                                    claude_final_card_outcome="fallback_protected_market_signal_invalid_output",
+                                    claude_final_card_reason=reason,
+                                )
+                                LOGGER.warning(
+                                    "Claude final-card invalid output protected fallback: item=%s reason=%s",
                                     context.item.normalized_item_id,
                                     reason,
                                 )
