@@ -18,3 +18,5 @@ data/runtime/
 data/radar-run-audit-*.md
 data/web-discovery/
 archive/runtime-state/
+archive/server-migration/
+tmp_gitlab_state_helper_test/
