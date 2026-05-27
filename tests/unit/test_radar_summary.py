@@ -78,6 +78,26 @@ class _GermanEchoTranslationGemini:
         return title, summary
 
 
+class _GermanPolicyTranslationGemini:
+    is_available = True
+
+    def rewrite_delivery_card(
+        self,
+        *,
+        title: str,
+        summary: str,
+        source_language: str,
+        target_language: str = "English",
+    ) -> tuple[str, str]:
+        return (
+            "Baugesetzbuch: Upgrade im Kabinett beschlossen",
+            (
+                "Baugesetzbuch-Novelle: Das Kabinett hat am 27.5.2026 den Entwurf "
+                "fuer ein Gesetz zur Modernisierung des Staedtebau- und Raumordnungsrechts beschlossen."
+            ),
+        )
+
+
 def test_summarize_candidate_prefers_denser_fallback_over_thin_gemini() -> None:
     item = _make_item(
         "ABB Robotics launches PoWa cobot family targeting industrial tasks",
@@ -236,6 +256,38 @@ def test_maybe_translate_delivery_card_uses_local_housing_policy_fallback_withou
     assert summary is not None
     assert "Germany's cabinet approved a draft reform of planning law" in summary
     assert "Bundestag" in summary
+
+
+def test_maybe_translate_delivery_card_rejects_untranslated_housing_policy_output() -> None:
+    item = _make_item(
+        "Baugesetzbuch: Upgrade im Kabinett beschlossen",
+        (
+            "Das Kabinett hat am 27.5.2026 den Entwurf fuer ein Gesetz zur Modernisierung "
+            "des Staedtebau- und Raumordnungsrechts beschlossen. Das BauGB-Upgrade gibt "
+            "dem Wohnungsbau Vorrang."
+        ),
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "source_id": "haufe_immobilien_listing",
+            "metadata": {"origin_language": "de", "delivery_language": "en", "market_scope": "germany_housing_market"},
+        }
+    )
+
+    headline, summary, translated, reason = maybe_translate_delivery_card(
+        item=item,
+        headline=item.title,
+        summary_text=item.text_preview,
+        gemini_client=_GermanPolicyTranslationGemini(),
+    )
+
+    assert translated is True
+    assert reason is None
+    assert headline == "German cabinet approves BauGB reform draft to speed housing construction"
+    assert summary is not None
+    assert "Germany's cabinet approved a draft reform of planning law" in summary
+    assert "Das Kabinett" not in summary
 
 
 def test_maybe_translate_delivery_card_blocks_untranslated_german_without_fallback() -> None:
