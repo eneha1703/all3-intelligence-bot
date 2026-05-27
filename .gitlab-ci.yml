@@ -23,6 +23,8 @@ cache:
   variables:
     DATABASE_PATH: "data/all3_radar.db"
     STATE_SEED_ZIP: ".gitlab/state-seed/radar-state-snapshot-26436397276.zip"
+    STATE_PACKAGE_NAME: "radar-state"
+    STATE_PACKAGE_FILE: "all3-radar-state.zip"
     ALLOW_COLLECTED_AT_FALLBACK: "false"
     GOOGLE_COMPETITOR_CHECK_ENABLED: "true"
     GOOGLE_COMPETITOR_SEND_ENABLED: "false"
@@ -66,8 +68,10 @@ cache:
   before_script:
     - python -m pip install --upgrade pip
     - python -m pip install --no-build-isolation -e .[dev]
-    - python scripts/gitlab_ci_state.py restore --seed-zip "$STATE_SEED_ZIP" --database "$DATABASE_PATH"
+    - python scripts/gitlab_ci_state.py restore --seed-zip "$STATE_SEED_ZIP" --database "$DATABASE_PATH" --gitlab-api-url "$CI_API_V4_URL" --gitlab-project-id "$CI_PROJECT_ID" --gitlab-package-name "$STATE_PACKAGE_NAME" --gitlab-package-file "$STATE_PACKAGE_FILE" --gitlab-job-token "$CI_JOB_TOKEN"
     - python -m all3_radar.app.admin_cli db init
+  after_script:
+    - python scripts/gitlab_ci_state.py snapshot --database "$DATABASE_PATH" --output-dir data/state-snapshot --label "radar-state-snapshot-$CI_PIPELINE_ID-$CI_JOB_ID" --gitlab-api-url "$CI_API_V4_URL" --gitlab-project-id "$CI_PROJECT_ID" --gitlab-package-name "$STATE_PACKAGE_NAME" --gitlab-package-version "$CI_PIPELINE_ID-$CI_JOB_ID" --gitlab-package-file "$STATE_PACKAGE_FILE" --gitlab-job-token "$CI_JOB_TOKEN"
 
 tests:
   extends: .python_job
@@ -89,11 +93,13 @@ radar:
     - when: manual
   script:
     - python -m all3_radar.app.radar_cli run
+    - python scripts/gitlab_ci_state.py snapshot --database "$DATABASE_PATH" --output-dir data/state-snapshot --label "radar-state-snapshot-$CI_PIPELINE_ID-$CI_JOB_ID" --gitlab-api-url "$CI_API_V4_URL" --gitlab-project-id "$CI_PROJECT_ID" --gitlab-package-name "$STATE_PACKAGE_NAME" --gitlab-package-version "$CI_PIPELINE_ID-$CI_JOB_ID" --gitlab-package-file "$STATE_PACKAGE_FILE" --gitlab-job-token "$CI_JOB_TOKEN"
   artifacts:
     when: always
     expire_in: 7 days
     paths:
       - data/radar-run-audit-*.md
+      - data/state-snapshot/
 
 radar_dry_run:
   extends: .stateful_job
@@ -110,6 +116,7 @@ radar_dry_run:
     expire_in: 7 days
     paths:
       - data/radar-run-audit-*.md
+      - data/state-snapshot/
 
 telegram_shortlist_poll:
   extends: .stateful_job
