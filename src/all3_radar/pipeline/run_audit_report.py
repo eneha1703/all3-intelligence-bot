@@ -64,9 +64,15 @@ def render_run_audit_markdown(
     failed_source_rows = [row for row in source_audit_rows if row.get("status") != "ok"]
     stage_timings = stage_timings or {}
     stage_counters = stage_counters or {}
-    commit_sha = os.getenv("GITHUB_SHA") or "not available"
+    commit_sha = os.getenv("CI_COMMIT_SHA") or os.getenv("GITHUB_SHA") or "not available"
+    ci_pipeline_id = os.getenv("CI_PIPELINE_ID")
+    ci_job_id = os.getenv("CI_JOB_ID")
     github_run_id = os.getenv("GITHUB_RUN_ID")
-    artifact_reference = f"radar-db-{github_run_id}" if github_run_id else "not available"
+    artifact_reference = (
+        f"gitlab-pipeline-{ci_pipeline_id}-job-{ci_job_id}"
+        if ci_pipeline_id and ci_job_id
+        else (f"radar-db-{github_run_id}" if github_run_id else "not available")
+    )
 
     lines = [
         "# News Radar Run Audit",

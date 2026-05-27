@@ -166,3 +166,31 @@ def test_render_run_audit_markdown_includes_summary_skip_counts_and_sent_items(m
     assert "| source-f | Source F | failed: timeout | 0 | 9.876 |" in markdown
     assert "| source-a | 4 | 1.234 |" in markdown
     assert "| source-f | 0 | 9.876 |" in markdown
+
+
+def test_render_run_audit_markdown_uses_gitlab_commit_and_job_reference(monkeypatch) -> None:
+    monkeypatch.delenv("GITHUB_SHA", raising=False)
+    monkeypatch.delenv("GITHUB_RUN_ID", raising=False)
+    monkeypatch.setenv("CI_COMMIT_SHA", "gitlab-sha")
+    monkeypatch.setenv("CI_PIPELINE_ID", "123")
+    monkeypatch.setenv("CI_JOB_ID", "456")
+    result = RadarRunResult(
+        run_id="run-2",
+        selected_sources=1,
+        collected_items=0,
+        normalized_items=0,
+        fresh_items=0,
+        stale_items=0,
+        missing_published_ts=0,
+        unsupported_sources=0,
+        canonical_events=0,
+        shortlisted_items=0,
+        sent_items=0,
+        skipped_send_items=0,
+        failed_sources=0,
+    )
+
+    markdown = render_run_audit_markdown(result, [])
+
+    assert "- commit_sha: `gitlab-sha`" in markdown
+    assert "- db_artifact_reference: `gitlab-pipeline-123-job-456`" in markdown
