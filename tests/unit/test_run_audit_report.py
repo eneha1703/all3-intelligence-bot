@@ -3,6 +3,9 @@ from all3_radar.pipeline.run_audit_report import render_run_audit_markdown
 
 
 def test_render_run_audit_markdown_includes_summary_skip_counts_and_sent_items(monkeypatch) -> None:
+    monkeypatch.delenv("CI_COMMIT_SHA", raising=False)
+    monkeypatch.delenv("CI_PIPELINE_ID", raising=False)
+    monkeypatch.delenv("CI_JOB_ID", raising=False)
     monkeypatch.setenv("GITHUB_SHA", "abc123")
     monkeypatch.setenv("GITHUB_RUN_ID", "999")
     result = RadarRunResult(
