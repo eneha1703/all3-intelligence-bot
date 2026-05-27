@@ -626,6 +626,30 @@ def _should_fallback_to_protected_market_signal_after_final_card_invalid_output(
     )
 
 
+def _should_override_claude_duplicate_review_for_timber_follow_up(
+    context: CurrentRunContext,
+    matched_row: dict[str, object] | None,
+    age_days: int,
+) -> bool:
+    if context.decision is None or matched_row is None:
+        return False
+    event_flags = context.decision.signals.get("event_flags", {})
+    if not isinstance(event_flags, dict):
+        return False
+    if context.item.source_id != "wood_central_api":
+        return False
+    if not event_flags.get("timber_mid_rise_housing_signal", False):
+        return False
+    matched_url = str(matched_row.get("url") or "").strip()
+    if not matched_url or matched_url == context.item.canonical_url:
+        return False
+    matched_title = str(matched_row.get("title") or "").strip().lower()
+    current_title = context.item.title.strip().lower()
+    if matched_title == current_title:
+        return False
+    return age_days >= 7
+
+
 def _to_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
@@ -1944,6 +1968,12 @@ class RadarService:
                                 should_skip_duplicate = True
                             elif 7 < age_days <= 14 and duplicate_review.confidence == "high":
                                 should_skip_duplicate = True
+                            if should_skip_duplicate and _should_override_claude_duplicate_review_for_timber_follow_up(
+                                context,
+                                matched_row,
+                                age_days,
+                            ):
+                                should_skip_duplicate = False
 
                         if should_skip_duplicate:
                             skipped_send_count += 1
