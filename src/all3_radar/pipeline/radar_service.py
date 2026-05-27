@@ -1025,6 +1025,7 @@ class RadarService:
                     already_shared_manual_group_url = self.repository.has_manual_group_post_for_url(
                         context.item.canonical_url
                     )
+                    already_shared_group_url = self.repository.has_group_post_for_url(context.item.canonical_url)
                     context.decision = rank_item(
                         item=context.item,
                         competitor_count=competitor_count,
@@ -1035,7 +1036,7 @@ class RadarService:
                     deployment_match = None
                     manual_group_funding_match = None
                     manual_group_deployment_match = None
-                    if not already_sent_event and not already_sent_url and not already_shared_manual_group_url:
+                    if not already_sent_event and not already_sent_url and not already_shared_group_url:
                         semantic_funding_key = funding_key_from_candidate(context.item, context.decision)
                         if semantic_funding_key is not None:
                             funding_match = self.repository.find_sent_alert_for_same_funding_event(semantic_funding_key)
@@ -1098,7 +1099,7 @@ class RadarService:
                     context.already_sent = (
                         already_sent_event
                         or already_sent_url
-                        or already_shared_manual_group_url
+                        or already_shared_group_url
                         or funding_match is not None
                         or deployment_match is not None
                         or manual_group_funding_match is not None
@@ -1110,7 +1111,7 @@ class RadarService:
                             skip_reason = "already_sent_canonical_event"
                         elif already_sent_url:
                             skip_reason = "already_sent_story_url"
-                        elif already_shared_manual_group_url:
+                        elif already_shared_group_url:
                             skip_reason = "already_shared_in_group_story_url"
                         elif deployment_match is not None:
                             skip_reason = "already_sent_same_deployment_event"
@@ -1130,7 +1131,8 @@ class RadarService:
                                 "already_sent_story_url": already_sent_url,
                                 "already_sent_same_funding_event": funding_match is not None,
                                 "already_sent_same_deployment_event": deployment_match is not None,
-                                "already_shared_in_group_story_url": already_shared_manual_group_url,
+                                "already_shared_in_group_story_url": already_shared_group_url,
+                                "already_shared_manual_group_story_url": already_shared_manual_group_url,
                                 "already_shared_in_group_same_funding_event": manual_group_funding_match is not None,
                                 "already_shared_in_group_same_deployment_event": (
                                     manual_group_deployment_match is not None

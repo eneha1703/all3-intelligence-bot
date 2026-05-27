@@ -64,6 +64,20 @@ class _UnavailableTranslationGemini:
     is_available = False
 
 
+class _GermanEchoTranslationGemini:
+    is_available = True
+
+    def rewrite_delivery_card(
+        self,
+        *,
+        title: str,
+        summary: str,
+        source_language: str,
+        target_language: str = "English",
+    ) -> tuple[str, str]:
+        return title, summary
+
+
 def test_summarize_candidate_prefers_denser_fallback_over_thin_gemini() -> None:
     item = _make_item(
         "ABB Robotics launches PoWa cobot family targeting industrial tasks",
@@ -159,6 +173,37 @@ def test_maybe_translate_delivery_card_uses_local_english_housing_fallback_witho
     assert summary is not None
     assert "Germany completed 206,600 homes in 2025" in summary
     assert "45,400 fewer" in summary
+
+
+def test_maybe_translate_delivery_card_rejects_german_echo_and_uses_local_fallback() -> None:
+    item = _make_item(
+        "Wohnungsbau-Statistik: Negativrekord bei Fertigstellungen",
+        (
+            "Statistisches Bundesamt: 2025 wurden so wenig neue Wohnungen fertiggestellt wie seit 2012 nicht. "
+            "206.600 gebaute Wohnungen im Jahr 2025 sind 45.400 Einheiten weniger als im Vorjahr."
+        ),
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "source_id": "haufe_immobilien_listing",
+            "metadata": {"origin_language": "de", "delivery_language": "en"},
+        }
+    )
+
+    headline, summary, translated, reason = maybe_translate_delivery_card(
+        item=item,
+        headline=item.title,
+        summary_text=item.text_preview,
+        gemini_client=_GermanEchoTranslationGemini(),
+    )
+
+    assert translated is True
+    assert reason is None
+    assert headline == "German housing completions hit lowest level since 2012"
+    assert summary is not None
+    assert "Germany completed 206,600 homes in 2025" in summary
+    assert "Wohnungen" not in summary
 
 
 def test_maybe_translate_delivery_card_blocks_untranslated_german_without_fallback() -> None:

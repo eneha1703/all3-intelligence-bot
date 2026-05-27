@@ -39,6 +39,26 @@ GERMAN_MONTHS_EN = {
 }
 GERMAN_LARGE_NUMBER_RE = re.compile(r"\b\d{1,3}(?:[.\s]\d{3})+\b")
 GERMAN_PERCENT_RE = re.compile(r"([+-]?\d+(?:[,.]\d+)?)\s*(?:%|\bprozent\b)", re.IGNORECASE)
+GERMAN_TEXT_MARKERS = (
+    " statisches bundesamt",
+    " baugenehmigung",
+    " baugenehmigungen",
+    " bauhauptgewerbe",
+    " fertigstellung",
+    " fertigstellungen",
+    " fertiggestellt",
+    " gegen\u00fcber",
+    " weniger ",
+    " mehr ",
+    " monat",
+    " monate",
+    " vorjahr",
+    " vormonat",
+    " wohnung",
+    " wohnungen",
+    " wurde ",
+    " wurden ",
+)
 
 
 def _sentence_count(text: str | None) -> int:
@@ -189,6 +209,13 @@ def _local_german_housing_delivery_fallback(
     return None
 
 
+def _looks_untranslated_german(text: str) -> bool:
+    normalized = f" {text.lower()} "
+    marker_count = sum(1 for marker in GERMAN_TEXT_MARKERS if marker in normalized)
+    has_german_char = any(character in normalized for character in ("\u00e4", "\u00f6", "\u00fc", "\u00df"))
+    return marker_count >= 2 or (has_german_char and marker_count >= 1)
+
+
 def maybe_translate_delivery_card(
     *,
     item: StoredNormalizedItem,
@@ -227,6 +254,10 @@ def maybe_translate_delivery_card(
         if local_fallback is not None:
             return local_fallback[0], local_fallback[1], True, None
         return headline, None, False, "translation_invalid"
+    if _looks_untranslated_german(f"{translated_headline} {translated_summary}"):
+        if local_fallback is not None:
+            return local_fallback[0], local_fallback[1], True, None
+        return headline, None, False, "translation_untranslated_output"
     return translated_headline.strip(), translated_summary, True, None
 
 

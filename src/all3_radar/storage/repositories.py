@@ -845,19 +845,27 @@ class RadarRepository:
         return bool(row)
 
     def has_manual_group_post_for_url(self, url: str) -> bool:
+        return self.has_group_post_for_url(url, sent_by_bot=False)
+
+    def has_group_post_for_url(self, url: str, *, sent_by_bot: bool | None = None) -> bool:
+        sent_by_bot_filter = ""
+        params: list[Any] = [url, url]
+        if sent_by_bot is not None:
+            sent_by_bot_filter = "AND gm.sent_by_bot = ?"
+            params.append(1 if sent_by_bot else 0)
         with connect(self.database_path) as connection:
             row = connection.execute(
-                """
+                f"""
                 SELECT 1
                 FROM telegram_group_messages gm
                 LEFT JOIN telegram_group_message_links gml
                   ON gml.chat_id = gm.chat_id
                  AND gml.telegram_message_id = gm.telegram_message_id
-                WHERE gm.sent_by_bot = 0
-                  AND (gm.message_url = ? OR gml.url = ?)
+                WHERE (gm.message_url = ? OR gml.url = ?)
+                  {sent_by_bot_filter}
                 LIMIT 1
                 """,
-                (url, url),
+                tuple(params),
             ).fetchone()
         return bool(row)
 

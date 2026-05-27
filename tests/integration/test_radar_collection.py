@@ -1252,6 +1252,111 @@ def test_radar_does_not_send_same_funding_event_when_manual_group_post_already_e
     assert "Manual group funding-memory suppression" in caplog.text
 
 
+def test_radar_does_not_resend_url_already_seen_in_bot_group_messages(monkeypatch, tmp_path) -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    db_path = tmp_path / "radar_bot_group_url_memory.db"
+    monkeypatch.setenv("DATABASE_PATH", str(db_path))
+
+    now = datetime.now(timezone.utc)
+    story_url = "https://example.com/haufe-housing-completions"
+    feed = f"""<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0"><channel>
+  <item>
+    <title>Wohnungsbau-Statistik: Negativrekord bei Fertigstellungen</title>
+    <link>{story_url}</link>
+    <description>Statistisches Bundesamt: 2025 wurden so wenig neue Wohnungen fertiggestellt wie seit 2012 nicht. 206.600 gebaute Wohnungen sind 45.400 Einheiten weniger als im Vorjahr.</description>
+    <pubDate>{format_datetime(now - timedelta(hours=1))}</pubDate>
+    <guid>haufe-repeat</guid>
+  </item>
+</channel></rss>"""
+
+    registry = SourceRegistry(
+        (
+            SourceDefinition(
+                id="haufe_repeat_feed",
+                name="Haufe Repeat Feed",
+                kind=SourceKind.RSS,
+                layer=SourceLayer.DIRECT,
+                is_direct_source=True,
+                is_wrapper=False,
+                enabled=True,
+                parser="generic_rss",
+                url="https://example.com/haufe-repeat.xml",
+                priority=100,
+                tags=("housing", "construction"),
+            ),
+        )
+    )
+
+    class FakeGeminiClient:
+        is_available = True
+
+        def generate_summary(self, title: str, preview: str | None, borderline: bool = False) -> tuple[str, str | None]:
+            return ("Germany completed fewer homes in 2025, adding pressure to housing delivery.", None)
+
+    class FakeTelegramSender:
+        def __init__(self) -> None:
+            self.sent_cards = []
+
+        def send_card(self, card):
+            self.sent_cards.append(card)
+            return [
+                TelegramDelivery(
+                    chat_id="123",
+                    status="sent",
+                    telegram_message_id="msg-1",
+                    error_text=None,
+                    payload_text=card.text,
+                )
+            ]
+
+    def fake_fetch_text(url: str) -> str:
+        assert url == "https://example.com/haufe-repeat.xml"
+        return feed
+
+    fake_sender = FakeTelegramSender()
+    service = RadarService(
+        repo_root=repo_root,
+        registry=registry,
+        fetch_text_fn=fake_fetch_text,
+        gemini_client=FakeGeminiClient(),
+        telegram_sender=fake_sender,
+    )
+    service.repository.upsert_telegram_group_message(
+        chat_id="-1003766785618",
+        telegram_message_id="108",
+        sent_by_bot=True,
+        sender_user_id="bot",
+        sender_chat_id="",
+        message_ts=(now - timedelta(minutes=30)).isoformat(),
+        message_text="Previously sent bot card",
+        message_caption=None,
+        message_urls=(story_url,),
+        has_links=True,
+        normalized_item_id=None,
+        canonical_event_id=None,
+        raw_update={"message": {"text": "Previously sent bot card"}},
+    )
+
+    result = service.run(dry_run=False)
+
+    assert result.sent_items == 0
+    assert fake_sender.sent_cards == []
+
+    with sqlite3.connect(db_path) as connection:
+        decision_row = connection.execute(
+            """
+            SELECT rd.send_status, rd.skip_reason
+            FROM radar_decisions rd
+            JOIN normalized_items ni ON ni.id = rd.normalized_item_id
+            WHERE ni.title = ?
+            """,
+            ("Wohnungsbau-Statistik: Negativrekord bei Fertigstellungen",),
+        ).fetchone()
+
+    assert decision_row == ("skip", "already_shared_in_group_story_url")
+
+
 def test_radar_claude_duplicate_review_suppresses_recent_group_repeat(
     monkeypatch, tmp_path, caplog
 ) -> None:
