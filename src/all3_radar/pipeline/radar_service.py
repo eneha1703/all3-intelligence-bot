@@ -55,7 +55,11 @@ from all3_radar.summarization.claude_editorial_review_client import (
     ClaudeEditorialReviewUnavailableError,
 )
 from all3_radar.summarization.claude_duplicate_review_client import ClaudeDuplicateReviewClient
-from all3_radar.summarization.radar_summary import maybe_translate_delivery_card, summarize_candidate
+from all3_radar.summarization.radar_summary import (
+    maybe_translate_delivery_card,
+    should_translate_delivery,
+    summarize_candidate,
+)
 
 LOGGER = logging.getLogger(__name__)
 KNOWN_CLAUDE_EDITORIAL_FALLBACK_REASONS = {
@@ -2004,6 +2008,23 @@ class RadarService:
                             delivery_translation_applied=False,
                             delivery_translation_reason=translation_reason,
                         )
+                        if should_translate_delivery(context.item):
+                            context.decision = RankedDecision(
+                                relevance_status=context.decision.relevance_status,
+                                send_status="skip",
+                                skip_reason="delivery_translation_failed",
+                                score=context.decision.score,
+                                signals=context.decision.signals,
+                                is_shortlisted=context.decision.is_shortlisted,
+                                is_borderline=context.decision.is_borderline,
+                            )
+                            skipped_send_count += 1
+                            LOGGER.info(
+                                "Send skip: item=%s reason=delivery_translation_failed detail=%s",
+                                context.item.normalized_item_id,
+                                translation_reason,
+                            )
+                            continue
                 card = build_news_card(
                     headline=headline,
                     summary_text=summary_text,

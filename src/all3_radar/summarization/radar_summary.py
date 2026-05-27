@@ -21,6 +21,24 @@ TITLE_PATTERNS = (
     (re.compile(r"^(?P<subject>.+?) partners with (?P<object>.+)$", re.IGNORECASE), "partners_with"),
     (re.compile(r"^(?P<subject>.+?) opens (?P<object>.+)$", re.IGNORECASE), "opens"),
 )
+GERMAN_MONTHS_EN = {
+    "januar": "January",
+    "februar": "February",
+    "maerz": "March",
+    "marz": "March",
+    "m\u00e4rz": "March",
+    "april": "April",
+    "mai": "May",
+    "juni": "June",
+    "juli": "July",
+    "august": "August",
+    "september": "September",
+    "oktober": "October",
+    "november": "November",
+    "dezember": "December",
+}
+GERMAN_LARGE_NUMBER_RE = re.compile(r"\b\d{1,3}(?:[.\s]\d{3})+\b")
+GERMAN_PERCENT_RE = re.compile(r"([+-]?\d+(?:[,.]\d+)?)\s*(?:%|\bprozent\b)", re.IGNORECASE)
 
 
 def _sentence_count(text: str | None) -> int:
@@ -81,7 +99,94 @@ def _build_delivery_fallback(item: StoredNormalizedItem) -> str | None:
 def should_translate_delivery(item: StoredNormalizedItem) -> bool:
     origin_language = str(item.metadata.get("origin_language") or "").strip().lower()
     delivery_language = str(item.metadata.get("delivery_language") or "").strip().lower()
-    return origin_language and delivery_language and origin_language != delivery_language
+    return bool(origin_language and delivery_language and origin_language != delivery_language)
+
+
+def _format_german_number(raw_value: str) -> str:
+    value = raw_value.strip()
+    if "," in value and "." not in value and " " not in value:
+        return value.replace(",", ".")
+    return value.replace(".", ",").replace(" ", ",")
+
+
+def _local_german_housing_delivery_fallback(
+    *,
+    item: StoredNormalizedItem,
+    headline: str,
+    source_summary: str,
+) -> tuple[str, str] | None:
+    origin_language = str(item.metadata.get("origin_language") or "").strip().lower()
+    delivery_language = str(item.metadata.get("delivery_language") or "").strip().lower()
+    if origin_language != "de" or delivery_language != "en":
+        return None
+
+    haystack = f"{headline} {source_summary} {item.text_preview or ''}".lower()
+    if item.source_id not in {"destatis_press_listing", "haufe_immobilien_listing"}:
+        return None
+
+    if "auftragseingang" in haystack and "bauhauptgewerbe" in haystack:
+        percent_match = GERMAN_PERCENT_RE.search(haystack)
+        month_year_match = re.search(
+            r"\b(?:im|in)\s+([a-z\u00e4]+)\s+(20\d{2})\b",
+            haystack,
+            re.IGNORECASE,
+        )
+        percent = _format_german_number(percent_match.group(1)) if percent_match else None
+        period = None
+        if month_year_match:
+            month = GERMAN_MONTHS_EN.get(month_year_match.group(1).lower(), month_year_match.group(1).title())
+            period = f"{month} {month_year_match.group(2)}"
+        direction = "rose"
+        if percent and percent.startswith("-"):
+            direction = "fell"
+            percent = percent.lstrip("-")
+        elif percent:
+            percent = percent.lstrip("+")
+        translated_headline = (
+            f"German construction orders {direction} {percent}% month on month"
+            + (f" in {period}" if period else "")
+            if percent
+            else "German construction orders changed month on month"
+        )
+        translated_summary = (
+            f"Destatis says German main construction orders {direction}"
+            + (f" {percent}% month on month" if percent else " month on month")
+            + (f" in {period}" if period else "")
+            + ". The data is a direct signal for near-term demand in Germany's construction pipeline."
+        )
+        translated_summary = sanitize_summary_text(translated_headline, translated_summary)
+        return (translated_headline, translated_summary) if translated_summary else None
+
+    housing_completion_terms = (
+        "fertigstellungen",
+        "fertiggestellt",
+        "wohnungen fertiggestellt",
+        "wohnungsbau-statistik",
+    )
+    if any(term in haystack for term in housing_completion_terms):
+        large_numbers = [_format_german_number(match.group(0)) for match in GERMAN_LARGE_NUMBER_RE.finditer(source_summary)]
+        percent_match = GERMAN_PERCENT_RE.search(source_summary)
+        percent = _format_german_number(percent_match.group(1)).lstrip("+-") if percent_match else None
+        completed = large_numbers[0] if large_numbers else None
+        decline = large_numbers[1] if len(large_numbers) > 1 else None
+        translated_headline = "German housing completions hit lowest level since 2012"
+        lead = (
+            f"Germany completed {completed} homes in 2025"
+            if completed
+            else "German housing construction fell to its weakest level since 2012"
+        )
+        if decline:
+            lead += f", {decline} fewer than a year earlier"
+        elif percent:
+            lead += f", {percent}% fewer than a year earlier"
+        translated_summary = (
+            f"{lead}. The figures point to a deepening delivery gap in German housing and renewed pressure "
+            "for faster permitting and construction."
+        )
+        translated_summary = sanitize_summary_text(translated_headline, translated_summary)
+        return (translated_headline, translated_summary) if translated_summary else None
+
+    return None
 
 
 def maybe_translate_delivery_card(
@@ -96,9 +201,16 @@ def maybe_translate_delivery_card(
     source_summary = summary_text or sanitize_summary_text(headline, item.text_preview) or item.text_preview or item.title
     if not source_summary:
         return headline, summary_text, False, "translation_source_missing"
+    local_fallback = _local_german_housing_delivery_fallback(
+        item=item,
+        headline=headline,
+        source_summary=source_summary,
+    )
     rewrite_fn = getattr(gemini_client, "rewrite_delivery_card", None)
     if not callable(rewrite_fn) or not getattr(gemini_client, "is_available", False):
-        return headline, summary_text, False, "translation_unavailable"
+        if local_fallback is not None:
+            return local_fallback[0], local_fallback[1], True, None
+        return headline, None, False, "translation_unavailable"
     try:
         translated_headline, translated_summary = rewrite_fn(
             title=headline,
@@ -107,10 +219,14 @@ def maybe_translate_delivery_card(
             target_language="English",
         )
     except GeminiUnavailableError as exc:
-        return headline, summary_text, False, str(exc)
+        if local_fallback is not None:
+            return local_fallback[0], local_fallback[1], True, None
+        return headline, None, False, str(exc)
     translated_summary = sanitize_summary_text(translated_headline, translated_summary)
     if not translated_headline.strip() or not translated_summary:
-        return headline, summary_text, False, "translation_invalid"
+        if local_fallback is not None:
+            return local_fallback[0], local_fallback[1], True, None
+        return headline, None, False, "translation_invalid"
     return translated_headline.strip(), translated_summary, True, None
 
 

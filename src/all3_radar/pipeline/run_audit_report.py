@@ -20,6 +20,7 @@ _DUPLICATE_SKIP_REASONS = (
 )
 
 _SEND_PROBLEM_SKIP_REASONS = (
+    "delivery_translation_failed",
     "weak_or_empty_telegram_card",
     "telegram_send_failed",
 )

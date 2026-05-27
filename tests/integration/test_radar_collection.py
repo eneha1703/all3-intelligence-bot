@@ -2905,6 +2905,8 @@ def test_destatis_official_statistics_invalid_output_falls_back_to_send(
 
     assert result.sent_items == 1
     assert len(fake_sender.sent_cards) == 1
+    assert "German construction orders rose 7.3% month on month in May 2026" in fake_sender.sent_cards[0].text
+    assert "Auftragseingang im Bauhauptgewerbe" not in fake_sender.sent_cards[0].text
     send_status, skip_reason, signals, _ = _load_radar_decision_for_title(
         db_path, "Auftragseingang im Bauhauptgewerbe im Mai 2026: +7,3 % zum Vormonat"
     )
