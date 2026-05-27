@@ -65,6 +65,56 @@ def test_listing_adapter_retries_transient_listing_fetch(monkeypatch) -> None:
     assert len(items) == 2
 
 
+def test_listing_adapter_falls_back_to_secondary_haufe_listing_when_primary_fails(monkeypatch) -> None:
+    source = SourceDefinition(
+        id="haufe_immobilien_listing",
+        name="Haufe Immobilien",
+        kind=SourceKind.LISTING,
+        layer=SourceLayer.DIRECT,
+        is_direct_source=True,
+        is_wrapper=False,
+        enabled=True,
+        parser="haufe_immobilien",
+        url="https://www.haufe.de/immobilien/",
+        priority=60,
+        tags=("construction", "germany"),
+        extra_config={
+            "listing_urls": ("https://www.haufe.de/immobilien/entwicklung-vermarktung/marktanalysen/",),
+            "article_limit": 10,
+        },
+    )
+    secondary_listing = """
+    <html><body>
+      <a href="/immobilien/entwicklung-vermarktung/marktanalysen/good-story_84324_222222.html">Good</a>
+    </body></html>
+    """
+    article_url = "https://www.haufe.de/immobilien/entwicklung-vermarktung/marktanalysen/good-story_84324_222222.html"
+    article_html = """
+    <html><head>
+      <meta property="og:title" content="Wohnungsbedarf bleibt hoch" />
+      <meta property="article:published_time" content="2026-05-06T09:00:00+00:00" />
+      <meta name="description" content="Neue Analyse zeigt weiter hohen Wohnungsbedarf." />
+    </head></html>
+    """
+
+    def fake_fetch(url: str) -> str:
+        if url == "https://www.haufe.de/immobilien/":
+            raise HTTPError(url, 503, "Service Temporarily Unavailable", hdrs=None, fp=None)
+        if url == "https://www.haufe.de/immobilien/entwicklung-vermarktung/marktanalysen/":
+            return secondary_listing
+        if url == article_url:
+            return article_html
+        raise AssertionError(f"Unexpected fetch URL: {url}")
+
+    monkeypatch.setattr("all3_radar.sources.listing.time.sleep", lambda _seconds: None)
+
+    adapter = ListingSourceAdapter(fetch_text_fn=fake_fetch)
+    items = adapter.collect(source, datetime(2026, 5, 6, tzinfo=timezone.utc))
+
+    assert len(items) == 1
+    assert items[0].url == article_url
+
+
 def test_listing_adapter_falls_back_to_secondary_construction_news_listing() -> None:
     source = SourceDefinition(
         id="construction_news_intelligence_listing",

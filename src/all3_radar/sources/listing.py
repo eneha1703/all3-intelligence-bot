@@ -58,15 +58,18 @@ class ListingSourceAdapter:
     def collect(self, source: SourceDefinition, collected_at: datetime) -> list[CollectedRawItem]:
         effective_source = source
         listing_text: str | None = None
+        candidate_urls = [source.url, *tuple(str(url) for url in source.extra_config.get("listing_urls", ()))]
 
-        if source.parser == "construction_news_intelligence":
-            candidate_urls = [source.url, *tuple(str(url) for url in source.extra_config.get("listing_urls", ()))]
+        if len(candidate_urls) > 1:
             last_error: Exception | None = None
+            failed_urls: list[str] = []
             for candidate_url in candidate_urls:
                 try:
                     listing_text = self._fetch(candidate_url)
-                    if candidate_url != source.url:
-                        remaining_urls = tuple(url for url in candidate_urls if url != candidate_url)
+                    if candidate_url != source.url or failed_urls:
+                        remaining_urls = tuple(
+                            url for url in candidate_urls if url != candidate_url and url not in failed_urls
+                        )
                         effective_source = replace(
                             source,
                             url=candidate_url,
@@ -75,6 +78,7 @@ class ListingSourceAdapter:
                     break
                 except Exception as exc:
                     last_error = exc
+                    failed_urls.append(candidate_url)
                     LOGGER.warning(
                         "Listing fetch failed: source=%s url=%s reason=%s",
                         source.id,
