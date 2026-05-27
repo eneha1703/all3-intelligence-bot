@@ -24,7 +24,8 @@ BROKEN_DECIMAL_RE = re.compile(r"(?<=\d)\.\s+(?=\d)")
 SENTENCE_SPLIT_RE = re.compile(r"(?<=[.!?])\s+(?=[A-Z0-9<])")
 ORPHANED_TRAILING_MODIFIER_RE = re.compile(
     r"\b(?:with|including|such as|as|for|to|from|into|by|on|in|under|over)\s+"
-    r"(?:a|an|the|its|their|this|that|new|broader|explicit|major|first|second)\.$",
+    r"(?:(?:a|an|the|its|their|this|that)\s+)?"
+    r"(?:new|broader|explicit|major|first|second)\.$",
     re.IGNORECASE,
 )
 MAX_TITLE_LENGTH = 110
