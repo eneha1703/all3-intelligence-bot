@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from all3_radar.domain.enums import SourceKind, SourceLayer
 from all3_radar.domain.models import RankedDecision, SourceDefinition, StoredNormalizedItem
@@ -10,6 +10,7 @@ from all3_radar.pipeline.radar_service import (
     _should_fallback_to_editorial_promotion_after_final_card_invalid_output,
     _should_drop_after_claude_final_card_error,
     _should_protect_from_high_confidence_claude_editorial_rejection,
+    _should_recover_stale_protected_market_signal,
     _should_skip_claude_final_card,
 )
 from all3_radar.summarization.claude_editorial_review_client import ClaudeEditorialReviewResult
@@ -24,8 +25,11 @@ def _make_context(
     event_flags: dict,
     editorial_flags: dict | None = None,
     score: int = 52,
+    published_delta: timedelta | None = None,
+    skip_reason: str | None = None,
 ) -> CurrentRunContext:
     now = datetime.now(timezone.utc)
+    published_ts = now - published_delta if published_delta is not None else now
     item = StoredNormalizedItem(
         normalized_item_id="item-1",
         raw_item_id="raw-1",
@@ -34,7 +38,7 @@ def _make_context(
         domain="example.com",
         title=title,
         text_preview=preview,
-        published_ts=now,
+        published_ts=published_ts,
         collected_ts=now,
         layer=SourceLayer.DIRECT,
         is_wrapper=False,
@@ -42,9 +46,9 @@ def _make_context(
         metadata=metadata,
     )
     decision = RankedDecision(
-        relevance_status="keep",
-        send_status="stored_only",
-        skip_reason=None,
+        relevance_status="drop" if skip_reason is not None else "keep",
+        send_status="skip" if skip_reason is not None else "stored_only",
+        skip_reason=skip_reason,
         score=score,
         signals={
             "competitor_count": 0,
@@ -307,3 +311,48 @@ def test_official_statistics_story_can_fallback_after_final_card_invalid_output(
     )
 
     assert _should_fallback_to_protected_market_signal_after_final_card_invalid_output(context) is True
+
+
+def test_recent_stale_destatis_housing_statistics_story_gets_recovery_lane() -> None:
+    context = _make_context(
+        title="18,0 % weniger fertiggestellte Wohnungen im Jahr 2025",
+        preview="Im Jahr 2025 wurden in Deutschland 251 900 Wohnungen fertiggestellt.",
+        source_id="destatis_press_listing",
+        metadata={"market_scope": "germany_housing_market", "origin_language": "de"},
+        event_flags={"construction_statistics_signal": True, "housing_market_signal": True},
+        score=63,
+        published_delta=timedelta(days=3),
+        skip_reason="freshness_failed",
+    )
+
+    assert _should_recover_stale_protected_market_signal(context) is True
+
+
+def test_old_stale_destatis_story_does_not_get_recovery_lane() -> None:
+    context = _make_context(
+        title="18,0 % weniger fertiggestellte Wohnungen im Jahr 2025",
+        preview="Im Jahr 2025 wurden in Deutschland 251 900 Wohnungen fertiggestellt.",
+        source_id="destatis_press_listing",
+        metadata={"market_scope": "germany_housing_market", "origin_language": "de"},
+        event_flags={"construction_statistics_signal": True, "housing_market_signal": True},
+        score=63,
+        published_delta=timedelta(days=10),
+        skip_reason="freshness_failed",
+    )
+
+    assert _should_recover_stale_protected_market_signal(context) is False
+
+
+def test_non_protected_stale_story_does_not_get_recovery_lane() -> None:
+    context = _make_context(
+        title="General business profile gets attention",
+        preview="A general business profile has no protected construction, housing or timber signal.",
+        source_id="business_feed",
+        metadata={"broad_feed": True},
+        event_flags={"funding_event": True},
+        score=45,
+        published_delta=timedelta(days=3),
+        skip_reason="freshness_failed",
+    )
+
+    assert _should_recover_stale_protected_market_signal(context) is False

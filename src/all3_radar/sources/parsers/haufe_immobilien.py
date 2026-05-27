@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import html
 import json
+import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -13,6 +14,8 @@ from urllib.parse import urljoin, urlparse
 from all3_radar.domain.models import CollectedRawItem, SourceDefinition
 from all3_radar.sources.base import FetchText
 from all3_radar.sources.rss import _clean_text, parse_published_timestamp
+
+LOGGER = logging.getLogger(__name__)
 
 ARTICLE_PATH_RE = re.compile(r"^/immobilien/[^?#]+_\d+_\d+\.html$")
 META_TAG_RE = re.compile(
@@ -227,7 +230,16 @@ def parse_haufe_immobilien_listing(
     listing_urls = [source.url, *tuple(str(url) for url in source.extra_config.get("listing_urls", ()))]
     article_urls: list[str] = []
     for listing_url in listing_urls:
-        current_html = listing_html if listing_url == source.url else fetch_text_fn(listing_url)
+        try:
+            current_html = listing_html if listing_url == source.url else fetch_text_fn(listing_url)
+        except Exception as exc:
+            LOGGER.warning(
+                "Haufe listing page fetch failed; skipping page: source=%s url=%s reason=%s",
+                source.id,
+                listing_url,
+                exc,
+            )
+            continue
         for article_url in _extract_article_urls(current_html, listing_url):
             if article_url not in article_urls:
                 article_urls.append(article_url)
@@ -235,8 +247,19 @@ def parse_haufe_immobilien_listing(
     article_limit = int(source.extra_config.get("article_limit", 20))
     items: list[CollectedRawItem] = []
     skipped_missing_dates = 0
+    skipped_fetch_failures = 0
     for article_url in article_urls[:article_limit]:
-        article_html = fetch_text_fn(article_url)
+        try:
+            article_html = fetch_text_fn(article_url)
+        except Exception as exc:
+            skipped_fetch_failures += 1
+            LOGGER.warning(
+                "Haufe article fetch failed; skipping article: source=%s url=%s reason=%s",
+                source.id,
+                article_url,
+                exc,
+            )
+            continue
         parsed = parse_haufe_article(article_html)
         if parsed.published_ts is None:
             skipped_missing_dates += 1
@@ -257,6 +280,8 @@ def parse_haufe_immobilien_listing(
         )
 
     if not items:
+        if skipped_fetch_failures:
+            raise ValueError("Haufe parser found article links but all usable article fetches failed")
         if skipped_missing_dates:
             raise ValueError("Haufe parser found article links but could not extract trustworthy published dates")
         raise ValueError("Haufe parser did not extract any usable article items")

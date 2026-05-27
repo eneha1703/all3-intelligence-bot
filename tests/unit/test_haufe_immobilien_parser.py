@@ -118,6 +118,38 @@ def test_parse_haufe_listing_collects_article_pages_from_multiple_listings() -> 
     assert any("DIFI" in item.title for item in items)
 
 
+def test_parse_haufe_listing_skips_failed_article_fetches() -> None:
+    listing_html = """
+    <html><body>
+      <a href="/immobilien/investment/broken-story_256_111111.html">Broken</a>
+      <a href="/immobilien/investment/good-story_256_222222.html">Good</a>
+    </body></html>
+    """
+    good_url = "https://www.haufe.de/immobilien/investment/good-story_256_222222.html"
+    article_html = """
+    <html><head>
+      <meta property="og:title" content="Wohnungsbau bleibt unter Druck" />
+      <meta property="article:published_time" content="2026-05-06T09:00:00+00:00" />
+      <meta name="description" content="Neue Zahlen zeigen weiter Druck im Wohnungsbau." />
+    </head></html>
+    """
+
+    def fake_fetch(url: str) -> str:
+        if url == good_url:
+            return article_html
+        raise RuntimeError("503")
+
+    items = parse_haufe_immobilien_listing(
+        listing_html=listing_html,
+        source=_haufe_source(),
+        collected_at=datetime(2026, 5, 6, tzinfo=timezone.utc),
+        fetch_text_fn=fake_fetch,
+    )
+
+    assert len(items) == 1
+    assert items[0].url == good_url
+
+
 def test_parse_haufe_listing_fails_without_trustworthy_dates() -> None:
     listing_html = """
     <html><body>

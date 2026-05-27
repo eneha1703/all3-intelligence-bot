@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import json
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from time import perf_counter
 
@@ -74,6 +74,7 @@ KNOWN_CLAUDE_EDITORIAL_FALLBACK_REASONS = {
     "protected_market_signal",
     "unknown",
 }
+STALE_PROTECTED_MARKET_RECOVERY_DAYS = 7
 
 
 @dataclass
@@ -617,6 +618,46 @@ def _should_fallback_to_protected_market_signal_after_final_card_invalid_output(
     )
 
 
+def _to_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value.astimezone(timezone.utc)
+
+
+def _should_recover_stale_protected_market_signal(context: CurrentRunContext) -> bool:
+    if context.decision is None or context.decision.skip_reason != "freshness_failed":
+        return False
+    if context.item.published_ts is None:
+        return False
+
+    published_ts = _to_utc(context.item.published_ts)
+    collected_ts = _to_utc(context.item.collected_ts)
+    age = collected_ts - published_ts
+    if age < timedelta(0) or age > timedelta(days=STALE_PROTECTED_MARKET_RECOVERY_DAYS):
+        return False
+
+    event_flags = context.decision.signals.get("event_flags", {})
+    if not isinstance(event_flags, dict):
+        return False
+
+    if context.item.source_id == "destatis_press_listing":
+        return bool(
+            event_flags.get("construction_statistics_signal", False)
+            or event_flags.get("housing_market_signal", False)
+        )
+    if context.item.source_id == "haufe_immobilien_listing":
+        return bool(event_flags.get("housing_market_signal", False))
+    if context.item.source_id == "wood_central_api":
+        return bool(
+            event_flags.get("timber_strategic_signal", False)
+            or event_flags.get("adaptive_reuse_housing_delivery_signal", False)
+            or event_flags.get("robotic_timber_fabrication_signal", False)
+        )
+    if context.item.source_id == "construction_news_intelligence_listing":
+        return bool(event_flags.get("construction_news_intelligence_signal", False))
+    return False
+
+
 def _settings_snapshot(settings: object) -> dict:
     snapshot = asdict(settings)
     snapshot["app"]["database_path"] = str(snapshot["app"]["database_path"])
@@ -1127,6 +1168,24 @@ class RadarService:
                             },
                             is_shortlisted=False,
                             is_borderline=False,
+                        )
+                    elif _should_recover_stale_protected_market_signal(context):
+                        recovery_thresholds = ranking_rules["thresholds"]
+                        shortlist_min_score = recovery_thresholds["shortlist_min_score"]
+                        increment_stage_counter("freshness_recovery_protected_market_signal")
+                        context.decision = RankedDecision(
+                            relevance_status="keep",
+                            send_status="stored_only",
+                            skip_reason=None,
+                            score=context.decision.score,
+                            signals={
+                                **context.decision.signals,
+                                "freshness_recovery": True,
+                                "freshness_recovery_reason": "protected_market_signal_recent_stale",
+                                "freshness_recovery_window_days": STALE_PROTECTED_MARKET_RECOVERY_DAYS,
+                            },
+                            is_shortlisted=context.decision.score >= shortlist_min_score,
+                            is_borderline=context.decision.score >= max(0, shortlist_min_score - 6),
                         )
 
                 LOGGER.info(
