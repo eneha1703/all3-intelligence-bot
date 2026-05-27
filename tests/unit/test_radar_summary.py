@@ -206,6 +206,38 @@ def test_maybe_translate_delivery_card_rejects_german_echo_and_uses_local_fallba
     assert "Wohnungen" not in summary
 
 
+def test_maybe_translate_delivery_card_uses_local_housing_policy_fallback_without_gemini() -> None:
+    item = _make_item(
+        "Baugesetzbuch: Upgrade im Kabinett beschlossen",
+        (
+            "Das Kabinett hat am 27.5.2026 den Entwurf fuer ein Gesetz zur Modernisierung "
+            "des Staedtebau- und Raumordnungsrechts beschlossen. Das BauGB-Upgrade gibt "
+            "dem Wohnungsbau Vorrang."
+        ),
+    )
+    item = StoredNormalizedItem(
+        **{
+            **item.__dict__,
+            "source_id": "haufe_immobilien_listing",
+            "metadata": {"origin_language": "de", "delivery_language": "en", "market_scope": "germany_housing_market"},
+        }
+    )
+
+    headline, summary, translated, reason = maybe_translate_delivery_card(
+        item=item,
+        headline=item.title,
+        summary_text=item.text_preview,
+        gemini_client=_UnavailableTranslationGemini(),
+    )
+
+    assert translated is True
+    assert reason is None
+    assert headline == "German cabinet approves BauGB reform draft to speed housing construction"
+    assert summary is not None
+    assert "Germany's cabinet approved a draft reform of planning law" in summary
+    assert "Bundestag" in summary
+
+
 def test_maybe_translate_delivery_card_blocks_untranslated_german_without_fallback() -> None:
     item = _make_item(
         "Mietrecht und WEG-Recht: Grillen im Mehrfamilienhaus",

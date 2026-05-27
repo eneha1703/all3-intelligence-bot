@@ -117,6 +117,29 @@ def test_editorial_shaping_keeps_destatis_construction_market_signal() -> None:
     assert editorial.flags["telegram_worthy"] is True
 
 
+def test_editorial_shaping_keeps_destatis_housing_completion_signal() -> None:
+    item = _make_item(
+        "18,0 % weniger fertiggestellte Wohnungen im Jahr 2025",
+        (
+            "Im Jahr 2025 wurden in Deutschland 206 600 Wohnungen gebaut. "
+            "Das waren 18,0 % oder 45 400 Wohnungen weniger als im Vorjahr."
+        ),
+        source_id="destatis_press_listing",
+    )
+    item = StoredNormalizedItem(
+        **{**item.__dict__, "metadata": {"market_scope": "germany_housing_market", "origin_language": "de"}}
+    )
+    decision = _make_decision(construction_statistics_signal=True, housing_market_signal=True)
+
+    editorial = evaluate_send_stage_editorial(item, decision)
+
+    assert editorial.allow_send is True
+    assert editorial.reason is None
+    assert editorial.flags["official_construction_market_signal"] is True
+    assert editorial.flags["housing_market_alert_signal"] is True
+    assert editorial.flags["telegram_worthy"] is True
+
+
 def test_editorial_shaping_keeps_uk_housing_market_signal() -> None:
     item = _make_item(
         "UK housing shortage deepens as completions fall and rents rise",
