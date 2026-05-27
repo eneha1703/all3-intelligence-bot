@@ -24,6 +24,17 @@ _SEND_PROBLEM_SKIP_REASONS = (
     "telegram_send_failed",
 )
 
+_KEY_SOURCE_IDS = (
+    "destatis_press_listing",
+    "haufe_immobilien_listing",
+    "wood_central_api",
+    "construction_news_intelligence_listing",
+    "construction_briefing_rss",
+    "humanoid_robotics_technology_listing",
+)
+
+_MAX_TOP_DECISION_ROWS = 40
+
 
 def render_run_audit_markdown(
     result: RadarRunResult,
@@ -37,6 +48,18 @@ def render_run_audit_markdown(
         row["skip_reason"] for row in decision_rows if row.get("skip_reason")
     )
     sent_rows = [row for row in decision_rows if row.get("send_status") == "sent"]
+    claude_editorial_rows = [
+        row
+        for row in decision_rows
+        if _decode_signals(row.get("signals_json")).get("claude_editorial_reviewed") is True
+    ]
+    key_source_rows = [row for row in decision_rows if row.get("source_id") in _KEY_SOURCE_IDS]
+    top_non_sent_rows = [
+        row
+        for row in decision_rows
+        if row.get("send_status") != "sent"
+        and (row.get("score") is not None and int(row.get("score") or 0) > 0)
+    ][:_MAX_TOP_DECISION_ROWS]
     source_audit_rows = source_audit_rows or []
     failed_source_rows = [row for row in source_audit_rows if row.get("status") != "ok"]
     stage_timings = stage_timings or {}
@@ -171,6 +194,51 @@ def render_run_audit_markdown(
     lines.extend(
         [
             "",
+            "## Claude Editorial Reviewed Items",
+            "",
+            "| Title | Source | Score | Status | Skip Reason | Claude Outcome | Confidence | Claude Reason | Event Flags | Canonical URL |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    if claude_editorial_rows:
+        for row in claude_editorial_rows:
+            lines.append(_render_decision_row(row))
+    else:
+        lines.append("| none | none | none | none | none | none | none | none | none | none |")
+
+    lines.extend(
+        [
+            "",
+            "## Top Non-Sent Decisions",
+            "",
+            "| Title | Source | Score | Status | Skip Reason | Claude Outcome | Confidence | Claude Reason | Event Flags | Canonical URL |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    if top_non_sent_rows:
+        for row in top_non_sent_rows:
+            lines.append(_render_decision_row(row))
+    else:
+        lines.append("| none | none | none | none | none | none | none | none | none | none |")
+
+    lines.extend(
+        [
+            "",
+            "## Key Source Decisions",
+            "",
+            "| Title | Source | Score | Status | Skip Reason | Claude Outcome | Confidence | Claude Reason | Event Flags | Canonical URL |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    if key_source_rows:
+        for row in key_source_rows:
+            lines.append(_render_decision_row(row))
+    else:
+        lines.append("| none | none | none | none | none | none | none | none | none | none |")
+
+    lines.extend(
+        [
+            "",
             "## Source Failures",
             "",
             "| Source ID | Source Name | Status/Error | Items Collected | Duration Seconds |",
@@ -251,3 +319,37 @@ def _decode_signals(value: Any) -> dict[str, Any]:
     except json.JSONDecodeError:
         return {}
     return payload if isinstance(payload, dict) else {}
+
+
+def _render_decision_row(row: dict[str, Any]) -> str:
+    signals = _decode_signals(row.get("signals_json"))
+    return (
+        f"| {_sanitize_cell(row.get('title'))} "
+        f"| {_sanitize_cell(row.get('source_id'))} "
+        f"| {_sanitize_cell(row.get('score'))} "
+        f"| {_sanitize_cell(row.get('send_status'))} "
+        f"| {_sanitize_cell(row.get('skip_reason'))} "
+        f"| {_sanitize_cell(signals.get('claude_editorial_outcome'))} "
+        f"| {_sanitize_cell(signals.get('claude_editorial_confidence'))} "
+        f"| {_sanitize_cell(_decision_reason(signals))} "
+        f"| {_sanitize_cell(_event_flags_summary(signals))} "
+        f"| {_sanitize_cell(row.get('canonical_url'))} |"
+    )
+
+
+def _decision_reason(signals: dict[str, Any]) -> str:
+    return str(
+        signals.get("claude_editorial_reason")
+        or signals.get("claude_editorial_reject_reason")
+        or signals.get("claude_editorial_not_reviewed_reason")
+        or signals.get("claude_final_card_reason")
+        or ""
+    )
+
+
+def _event_flags_summary(signals: dict[str, Any]) -> str:
+    event_flags = signals.get("event_flags", {})
+    if not isinstance(event_flags, dict):
+        return ""
+    enabled_flags = sorted(str(key) for key, value in event_flags.items() if value is True)
+    return ", ".join(enabled_flags)

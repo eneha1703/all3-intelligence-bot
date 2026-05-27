@@ -1923,6 +1923,7 @@ class RadarRepository:
                   ni.source_id,
                   ni.canonical_url,
                   ri.url AS raw_url,
+                  ni.text_preview,
                   ni.published_ts,
                   rd.score,
                   rd.freshness_status,

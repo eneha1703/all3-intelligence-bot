@@ -53,6 +53,7 @@ def test_render_run_audit_markdown_includes_summary_skip_counts_and_sent_items(m
             "title": "Suppressed funding duplicate",
             "source_id": "source-c",
             "canonical_url": "https://example.com/c",
+            "score": 64,
             "send_status": "skip",
             "skip_reason": "already_sent_same_funding_event",
             "summary_text": "",
@@ -71,10 +72,27 @@ def test_render_run_audit_markdown_includes_summary_skip_counts_and_sent_items(m
             "title": "Weak card",
             "source_id": "source-e",
             "canonical_url": "https://example.com/e",
+            "score": 58,
             "send_status": "skip",
             "skip_reason": "weak_or_empty_telegram_card",
             "summary_text": "",
             "signals_json": "{}",
+        },
+        {
+            "title": "Wohnungsbau-Statistik: Negativrekord bei Fertigstellungen",
+            "source_id": "haufe_immobilien_listing",
+            "canonical_url": "https://example.com/haufe",
+            "score": 57,
+            "send_status": "stored_only",
+            "skip_reason": "claude_editorial_rejected",
+            "summary_text": "",
+            "signals_json": (
+                '{"claude_editorial_reviewed":true,'
+                '"claude_editorial_outcome":"rejected",'
+                '"claude_editorial_confidence":"high",'
+                '"claude_editorial_reason":"too_thin",'
+                '"event_flags":{"housing_market_signal":true}}'
+            ),
         },
     ]
     source_audit_rows = [
@@ -136,6 +154,15 @@ def test_render_run_audit_markdown_includes_summary_skip_counts_and_sent_items(m
     ) in markdown
     assert "| Story A | Story A final summary. |" in markdown
     assert "| Story B | Story B fallback summary. |" in markdown
+    assert "## Claude Editorial Reviewed Items" in markdown
+    assert (
+        "| Wohnungsbau-Statistik: Negativrekord bei Fertigstellungen | haufe_immobilien_listing | "
+        "57 | stored_only | claude_editorial_rejected | rejected | high | too_thin | housing_market_signal | "
+        "https://example.com/haufe |"
+    ) in markdown
+    assert "## Top Non-Sent Decisions" in markdown
+    assert "| Weak card | source-e | 58 | skip | weak_or_empty_telegram_card |" in markdown
+    assert "## Key Source Decisions" in markdown
     assert "| source-f | Source F | failed: timeout | 0 | 9.876 |" in markdown
     assert "| source-a | 4 | 1.234 |" in markdown
     assert "| source-f | 0 | 9.876 |" in markdown

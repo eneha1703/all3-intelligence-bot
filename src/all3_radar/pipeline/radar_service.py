@@ -559,6 +559,7 @@ def _should_protect_from_high_confidence_claude_editorial_rejection(context: Cur
         editorial_flags.get("official_construction_market_signal", False)
         or editorial_flags.get("housing_market_alert_signal", False)
         or editorial_flags.get("timber_project_delivery_signal", False)
+        or editorial_flags.get("timber_strategic_alert_signal", False)
         or _is_protected_uk_housing_framework_story(context)
     )
 
@@ -612,6 +613,7 @@ def _should_fallback_to_protected_market_signal_after_final_card_invalid_output(
     return bool(
         editorial_flags.get("official_construction_market_signal", False)
         or editorial_flags.get("housing_market_alert_signal", False)
+        or editorial_flags.get("timber_strategic_alert_signal", False)
     )
 
 

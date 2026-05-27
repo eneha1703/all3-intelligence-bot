@@ -135,6 +135,23 @@ def test_high_confidence_claude_editorial_rejection_is_protected_for_timber_proj
     assert _should_protect_from_high_confidence_claude_editorial_rejection(context) is True
 
 
+def test_high_confidence_claude_editorial_rejection_is_protected_for_timber_strategic_shift_story() -> None:
+    context = _make_context(
+        title="Mass timber architects turn from glass as developers revisit facade materials",
+        preview=(
+            "Architects are shifting away from glass and concrete toward mass timber, with developers weighing "
+            "material choices, embodied carbon and commercial adoption."
+        ),
+        source_id="wood_central_api",
+        metadata={},
+        event_flags={"timber_strategic_signal": True},
+        score=51,
+    )
+
+    assert _should_protect_from_high_confidence_claude_editorial_rejection(context) is True
+    assert _should_fallback_to_protected_market_signal_after_final_card_invalid_output(context) is True
+
+
 def test_uk_market_story_is_not_forced_to_skip_claude_final_card() -> None:
     context = _make_context(
         title="Fusion21 opens bidding for £350m repairs framework",
