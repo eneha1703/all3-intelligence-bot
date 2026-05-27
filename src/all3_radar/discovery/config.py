@@ -106,7 +106,7 @@ def load_discovery_runtime_config(
     discovery_config: DiscoveryConfig,
     env: Mapping[str, str] | None = None,
 ) -> DiscoveryRuntimeConfig:
-    env = env or os.environ
+    env = os.environ if env is None else env
     model = (
         env.get("WEB_DISCOVERY_MODEL")
         or env.get("CLAUDE_EDITORIAL_MODEL")

@@ -93,7 +93,7 @@ def _env_str_with_default(env: Mapping[str, str], env_name: str, default: str) -
 
 
 def load_settings(repo_root: Path, env: Mapping[str, str] | None = None) -> Settings:
-    env = env or os.environ
+    env = os.environ if env is None else env
     config = load_yaml(repo_root / "config" / "settings.yaml")
 
     app = dict(_require(config, "app"))

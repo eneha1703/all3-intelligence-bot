@@ -76,6 +76,13 @@ cache:
 tests:
   extends: .python_job
   stage: test
+  variables:
+    CLAUDE_DIGEST_ENABLED: "false"
+    CLAUDE_EDITORIAL_ENABLED: "false"
+    CLAUDE_FINAL_CARD_ENABLED: "false"
+    TELEGRAM_GROUP_CURATION_ENABLED: "false"
+    TELEGRAM_GROUP_MESSAGE_INGEST_ENABLED: "false"
+    TELEGRAM_REACTION_SHORTLIST_ENABLED: "false"
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
       when: never
