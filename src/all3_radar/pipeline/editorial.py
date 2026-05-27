@@ -669,6 +669,20 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         and _contains_any(haystack, WOOD_CENTRAL_STRATEGIC_SHIFT_TERMS)
         and _contains_any(haystack, WOOD_CENTRAL_STRATEGIC_CONTEXT_TERMS)
     )
+    timber_mid_rise_housing_signal = (
+        item.source_id == "wood_central_api"
+        and event_flags.get("timber_mid_rise_housing_signal", False)
+        and _contains_any(haystack, ("mid-rise", "mid rise"))
+        and _contains_any(haystack, ("housing", "residential", "apartment", "apartments", "multifamily", "multi-family"))
+    )
+    timber_institutional_adoption_signal = (
+        item.source_id == "wood_central_api"
+        and event_flags.get("timber_institutional_adoption_signal", False)
+        and _contains_any(
+            haystack,
+            ("fire station", "airport", "school", "college", "university", "civic", "public building", "terminal", "emergency services"),
+        )
+    )
     strategic_industrial_ai_alert_signal = (
         bool(item.metadata.get("broad_feed"))
         and event_flags.get("strategic_ai_major_deal_signal", False)
@@ -757,6 +771,8 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         or timber_performance_alert_signal
         or timber_project_delivery_signal
         or timber_strategic_alert_signal
+        or timber_mid_rise_housing_signal
+        or timber_institutional_adoption_signal
         or strategic_industrial_ai_alert_signal
         or strategic_capability_acquisition_alert_signal
         or robot_ai_training_infrastructure_signal
@@ -788,6 +804,8 @@ def evaluate_send_stage_editorial(item: StoredNormalizedItem, decision: RankedDe
         "timber_performance_alert_signal": timber_performance_alert_signal,
         "timber_project_delivery_signal": timber_project_delivery_signal,
         "timber_strategic_alert_signal": timber_strategic_alert_signal,
+        "timber_mid_rise_housing_signal": timber_mid_rise_housing_signal,
+        "timber_institutional_adoption_signal": timber_institutional_adoption_signal,
         "strategic_industrial_ai_alert_signal": strategic_industrial_ai_alert_signal,
         "strategic_capability_acquisition_alert_signal": strategic_capability_acquisition_alert_signal,
         "robot_ai_training_infrastructure_signal": robot_ai_training_infrastructure_signal,

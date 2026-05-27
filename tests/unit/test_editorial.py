@@ -411,6 +411,38 @@ def test_editorial_shaping_keeps_wood_central_timber_strategic_shift_signal() ->
     assert editorial.flags["telegram_worthy"] is True
 
 
+def test_editorial_shaping_keeps_wood_central_mid_rise_housing_signal() -> None:
+    item = _make_item(
+        "Engineered Wood Products Find Their Sweet Spot With Mid-Rise Housing",
+        "Engineered wood is finding a stronger route into mid-rise residential housing as delivery systems shift toward denser formats.",
+        source_id="wood_central_api",
+    )
+    decision = _make_decision(timber_mid_rise_housing_signal=True, timber_strategic_signal=True)
+
+    editorial = evaluate_send_stage_editorial(item, decision)
+
+    assert editorial.allow_send is True
+    assert editorial.reason is None
+    assert editorial.flags["timber_mid_rise_housing_signal"] is True
+    assert editorial.flags["telegram_worthy"] is True
+
+
+def test_editorial_shaping_keeps_wood_central_institutional_adoption_signal() -> None:
+    item = _make_item(
+        "Firefighters Turn to Timber for Award-Winning Hawke's Bay Station",
+        "The fire station is a public emergency-services building that uses timber in a non-trivial institutional setting.",
+        source_id="wood_central_api",
+    )
+    decision = _make_decision(timber_institutional_adoption_signal=True, timber_policy_signal=True)
+
+    editorial = evaluate_send_stage_editorial(item, decision)
+
+    assert editorial.allow_send is True
+    assert editorial.reason is None
+    assert editorial.flags["timber_institutional_adoption_signal"] is True
+    assert editorial.flags["telegram_worthy"] is True
+
+
 def test_editorial_shaping_keeps_macro_statistics_without_construction_signal_blocked() -> None:
     item = _make_item(
         "Consumer prices in Germany rise 0.2% in April 2026",

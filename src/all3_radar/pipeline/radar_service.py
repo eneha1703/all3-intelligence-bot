@@ -565,6 +565,8 @@ def _should_protect_from_high_confidence_claude_editorial_rejection(context: Cur
         or editorial_flags.get("housing_market_alert_signal", False)
         or editorial_flags.get("timber_project_delivery_signal", False)
         or editorial_flags.get("timber_strategic_alert_signal", False)
+        or editorial_flags.get("timber_mid_rise_housing_signal", False)
+        or editorial_flags.get("timber_institutional_adoption_signal", False)
         or _is_protected_uk_housing_framework_story(context)
     )
 
@@ -619,6 +621,8 @@ def _should_fallback_to_protected_market_signal_after_final_card_invalid_output(
         editorial_flags.get("official_construction_market_signal", False)
         or editorial_flags.get("housing_market_alert_signal", False)
         or editorial_flags.get("timber_strategic_alert_signal", False)
+        or editorial_flags.get("timber_mid_rise_housing_signal", False)
+        or editorial_flags.get("timber_institutional_adoption_signal", False)
     )
 
 
@@ -656,6 +660,8 @@ def _should_recover_stale_protected_market_signal(context: CurrentRunContext) ->
             event_flags.get("timber_strategic_signal", False)
             or event_flags.get("adaptive_reuse_housing_delivery_signal", False)
             or event_flags.get("robotic_timber_fabrication_signal", False)
+            or event_flags.get("timber_mid_rise_housing_signal", False)
+            or event_flags.get("timber_institutional_adoption_signal", False)
         )
     if context.item.source_id == "construction_news_intelligence_listing":
         return bool(event_flags.get("construction_news_intelligence_signal", False))

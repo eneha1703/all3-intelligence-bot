@@ -15,6 +15,8 @@ from all3_radar.pipeline.filters import (
     is_housing_market_signal,
     is_interesting_engineering_scope_signal,
     is_wood_central_timber_economics_signal,
+    is_wood_central_institutional_adoption_signal,
+    is_wood_central_mid_rise_housing_signal,
     is_wood_central_timber_policy_signal,
 )
 
@@ -97,8 +99,8 @@ POLICY_TERMS = (
     "standard",
     "policy reform",
 )
-TIMBER_TERMS = ("timber", "mass timber", "glulam", "clt")
-TIMBER_STRATEGIC_TERMS = ("demand", "adoption", "floor area", "square metre", "sq m", "growth", "capacity")
+TIMBER_TERMS = ("timber", "mass timber", "glulam", "clt", "engineered wood", "engineered wood products")
+TIMBER_STRATEGIC_TERMS = ("demand", "adoption", "floor area", "square metre", "sq m", "growth", "capacity", "mid-rise", "housing", "residential")
 TIMBER_PERFORMANCE_TERMS = (
     "heat loss",
     "thermal bridges",
@@ -486,6 +488,8 @@ def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
     housing_market_signal = is_housing_market_signal(item)
     timber_policy_signal = is_wood_central_timber_policy_signal(item)
     timber_economics_signal = is_wood_central_timber_economics_signal(item)
+    timber_mid_rise_housing_signal = is_wood_central_mid_rise_housing_signal(item)
+    timber_institutional_adoption_signal = is_wood_central_institutional_adoption_signal(item)
     construction_briefing_scope_signal = is_construction_briefing_scope_signal(item)
     construction_news_intelligence_signal = is_construction_news_intelligence_signal(item)
     interesting_engineering_scope_signal = is_interesting_engineering_scope_signal(item)
@@ -562,6 +566,8 @@ def derive_event_flags(item: StoredNormalizedItem) -> dict[str, bool]:
         "construction_news_intelligence_signal": construction_news_intelligence_signal,
         "timber_policy_signal": timber_policy_signal,
         "timber_economics_signal": timber_economics_signal,
+        "timber_mid_rise_housing_signal": timber_mid_rise_housing_signal,
+        "timber_institutional_adoption_signal": timber_institutional_adoption_signal,
         "construction_briefing_scope_signal": construction_briefing_scope_signal,
         "interesting_engineering_scope_signal": interesting_engineering_scope_signal,
         "strategic_ai_major_deal_signal": strategic_ai_major_deal_signal,

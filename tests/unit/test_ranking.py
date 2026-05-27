@@ -668,6 +668,37 @@ def test_wood_central_mass_timber_rezoning_project_avoids_showcase_penalty() -> 
     assert decision.score >= 51
 
 
+def test_wood_central_mid_rise_engineered_wood_story_now_keeps_scope() -> None:
+    item = _make_item(
+        "Engineered Wood Products Find Their Sweet Spot With Mid-Rise Housing",
+        "Engineered wood is carving out a clearer role in mid-rise housing as residential delivery shifts toward denser building formats.",
+        broad_feed=False,
+        source_id="wood_central_api",
+    )
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["timber_mid_rise_housing_signal"] is True
+    assert flags["timber_strategic_signal"] is True
+    assert decision.relevance_status == "keep"
+
+
+def test_wood_central_institutional_timber_adoption_story_now_keeps_scope() -> None:
+    item = _make_item(
+        "Firefighters Turn to Timber for Award-Winning Hawke's Bay Station",
+        "The fire station is a public emergency-services building that uses timber in a non-trivial institutional setting rather than a simple residential showcase.",
+        broad_feed=False,
+        source_id="wood_central_api",
+    )
+
+    flags = derive_event_flags(item)
+    decision = rank_item(item=item, competitor_count=0, freshness_is_fresh=True, ranking_rules=RANKING_RULES)
+
+    assert flags["timber_institutional_adoption_signal"] is True
+    assert decision.relevance_status == "keep"
+
+
 def test_broad_feed_national_robotics_strategy_is_strong_scope() -> None:
     item = _make_item(
         "IFR Reports China Making AI-Powered Robots Core of National Strategy",

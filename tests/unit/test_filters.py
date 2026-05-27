@@ -10,6 +10,8 @@ from all3_radar.pipeline.filters import (
     is_housing_market_signal,
     is_destatis_construction_statistics_signal,
     is_wood_central_timber_economics_signal,
+    is_wood_central_institutional_adoption_signal,
+    is_wood_central_mid_rise_housing_signal,
     is_wood_central_timber_policy_signal,
 )
 
@@ -364,6 +366,28 @@ def test_wood_central_timber_economics_signal_is_detected() -> None:
     item = StoredNormalizedItem(**{**item.__dict__, "source_id": "wood_central_api"})
 
     assert is_wood_central_timber_economics_signal(item) is True
+
+
+def test_wood_central_mid_rise_housing_signal_is_detected() -> None:
+    item = _make_item(
+        "Engineered Wood Products Find Their Sweet Spot With Mid-Rise Housing",
+        "Engineered wood is finding a stronger route into mid-rise residential housing as delivery systems shift toward denser formats.",
+        broad_feed=False,
+    )
+    item = StoredNormalizedItem(**{**item.__dict__, "source_id": "wood_central_api"})
+
+    assert is_wood_central_mid_rise_housing_signal(item) is True
+
+
+def test_wood_central_institutional_adoption_signal_is_detected() -> None:
+    item = _make_item(
+        "Firefighters Turn to Timber for Award-Winning Hawke's Bay Station",
+        "The new fire station shows timber being used in a public emergency-services building rather than a conventional residential showcase.",
+        broad_feed=False,
+    )
+    item = StoredNormalizedItem(**{**item.__dict__, "source_id": "wood_central_api"})
+
+    assert is_wood_central_institutional_adoption_signal(item) is True
 
 
 def test_timber_performance_comparison_story_keeps_scope() -> None:

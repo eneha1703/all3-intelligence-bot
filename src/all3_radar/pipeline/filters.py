@@ -464,6 +464,32 @@ WOOD_CENTRAL_TIMBER_POLICY_TERMS = {
     "height",
     "fire",
 }
+WOOD_CENTRAL_MID_RISE_HOUSING_TERMS = {
+    "mid-rise",
+    "mid rise",
+    "housing",
+    "residential",
+    "apartments",
+    "apartment",
+    "multifamily",
+    "multi-family",
+    "homes",
+    "homebuilding",
+}
+WOOD_CENTRAL_INSTITUTIONAL_ADOPTION_TERMS = {
+    "fire station",
+    "airport",
+    "school",
+    "college",
+    "university",
+    "civic",
+    "public building",
+    "public buildings",
+    "terminal",
+    "station",
+    "emergency services",
+    "community facility",
+}
 WOOD_CENTRAL_TIMBER_ECONOMICS_TERMS = {
     "premium",
     "premiums",
@@ -977,6 +1003,22 @@ def is_wood_central_timber_economics_signal(item: StoredNormalizedItem) -> bool:
     )
 
 
+def is_wood_central_mid_rise_housing_signal(item: StoredNormalizedItem) -> bool:
+    if item.source_id != "wood_central_api":
+        return False
+    haystack = _normalize_text(f"{item.title} {item.text_preview or ''}")
+    timber_terms = {"timber", "mass timber", "clt", "glulam", "engineered wood", "engineered wood products"}
+    return has_any_term(haystack, timber_terms) and has_any_term(haystack, WOOD_CENTRAL_MID_RISE_HOUSING_TERMS)
+
+
+def is_wood_central_institutional_adoption_signal(item: StoredNormalizedItem) -> bool:
+    if item.source_id != "wood_central_api":
+        return False
+    haystack = _normalize_text(f"{item.title} {item.text_preview or ''}")
+    timber_terms = {"timber", "mass timber", "clt", "glulam", "engineered wood", "engineered wood products"}
+    return has_any_term(haystack, timber_terms) and has_any_term(haystack, WOOD_CENTRAL_INSTITUTIONAL_ADOPTION_TERMS)
+
+
 def has_clear_all3_scope(item: StoredNormalizedItem, competitor_count: int, event_flags: dict[str, bool]) -> bool:
     haystack = _normalize_text(f"{item.title} {item.text_preview or ''}")
     source_tags = _source_tags(item)
@@ -997,6 +1039,10 @@ def has_clear_all3_scope(item: StoredNormalizedItem, competitor_count: int, even
     if event_flags.get("timber_policy_signal"):
         return True
     if event_flags.get("timber_economics_signal"):
+        return True
+    if event_flags.get("timber_mid_rise_housing_signal"):
+        return True
+    if event_flags.get("timber_institutional_adoption_signal"):
         return True
     if event_flags.get("robotic_timber_fabrication_signal"):
         return True

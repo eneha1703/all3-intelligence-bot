@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+import re
 from urllib.parse import urljoin
 
 from all3_radar.domain.models import CollectedRawItem, SourceDefinition
 from all3_radar.sources.base import FetchText, UnsupportedSourceError
 from all3_radar.sources.rss import _clean_text, fetch_text, parse_published_timestamp
+
+MAX_SNIPPET_CHARS = 900
+MAX_SNIPPET_PARAGRAPHS = 3
+PARAGRAPH_RE = re.compile(r"<p[^>]*>(.*?)</p>", re.IGNORECASE | re.DOTALL)
 
 
 def _extract_rendered_text(value: object) -> str | None:
@@ -39,6 +44,51 @@ def _extract_external_id(payload: dict) -> str | None:
     return str(identifier)
 
 
+def _extract_rendered_paragraphs(value: object) -> list[str]:
+    if not isinstance(value, dict):
+        return []
+    rendered = value.get("rendered")
+    if not isinstance(rendered, str):
+        return []
+
+    paragraphs: list[str] = []
+    for match in PARAGRAPH_RE.findall(rendered):
+        text = _clean_text(match)
+        if not text or text in paragraphs:
+            continue
+        paragraphs.append(text)
+    if paragraphs:
+        return paragraphs
+
+    fallback = _clean_text(rendered)
+    return [fallback] if fallback else []
+
+
+def _build_snippet(excerpt: str | None, content: object) -> str | None:
+    parts: list[str] = []
+    if excerpt:
+        parts.append(excerpt)
+
+    for paragraph in _extract_rendered_paragraphs(content):
+        if any(paragraph in existing or existing in paragraph for existing in parts):
+            continue
+        candidate = " ".join([*parts, paragraph]).strip()
+        if len(candidate) > MAX_SNIPPET_CHARS and parts:
+            break
+        parts.append(paragraph)
+        if len(parts) >= MAX_SNIPPET_PARAGRAPHS:
+            break
+
+    if not parts:
+        return None
+
+    snippet = " ".join(parts).strip()
+    if len(snippet) <= MAX_SNIPPET_CHARS:
+        return snippet
+    truncated = snippet[: MAX_SNIPPET_CHARS + 1].rsplit(" ", 1)[0].rstrip(" ,;:-")
+    return truncated or snippet[:MAX_SNIPPET_CHARS].rstrip(" ,;:-")
+
+
 def parse_wood_central_posts(feed_text: str, source: SourceDefinition, collected_at: datetime) -> list[CollectedRawItem]:
     try:
         payload = json.loads(feed_text)
@@ -61,7 +111,8 @@ def parse_wood_central_posts(feed_text: str, source: SourceDefinition, collected
         published_ts = parse_published_timestamp(
             post.get("date_gmt") if isinstance(post.get("date_gmt"), str) and post.get("date_gmt") else post.get("date")
         )
-        snippet = _extract_rendered_text(post.get("excerpt"))
+        excerpt = _extract_rendered_text(post.get("excerpt"))
+        snippet = _build_snippet(excerpt, post.get("content"))
 
         items.append(
             CollectedRawItem(
