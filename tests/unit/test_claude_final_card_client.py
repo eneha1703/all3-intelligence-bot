@@ -669,6 +669,45 @@ def test_summary_with_trailing_fragment_is_rejected(monkeypatch: pytest.MonkeyPa
         )
 
 
+def test_summary_with_orphaned_trailing_modifier_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "urllib.request.urlopen",
+        lambda request, timeout: _FakeResponse(
+            _payload(
+                json.dumps(
+                    {
+                        "send_ok": True,
+                        "reject_reason": None,
+                        "title": "Germany's cabinet approves BauGB overhaul to prioritise residential construction",
+                        "summary": (
+                            "The German cabinet approved a draft law on 27 May 2026 to modernise urban planning and spatial planning law. "
+                            "The reform follows the Bauturbo-Gesetz and now adds a broader package with an explicit."
+                        ),
+                        "why_it_matters": None,
+                        "duplicate_risk": "low",
+                        "confidence": "high",
+                    }
+                )
+            )
+        ),
+    )
+
+    with pytest.raises(ClaudeFinalCardUnavailableError, match="incomplete fragment"):
+        _generate_for_story(
+            _client(),
+            title="Baugesetzbuch: Upgrade im Kabinett beschlossen",
+            source="Haufe",
+            url="https://example.com/baugb",
+            text_preview=(
+                "Das Kabinett hat am 27.5.2026 den Entwurf fuer ein Gesetz zur Modernisierung "
+                "des Staedtebau- und Raumordnungsrechts beschlossen."
+            ),
+            score=37,
+            event_flags={"housing_market_signal": True},
+            existing_summary="The cabinet approved a BauGB reform draft.",
+        )
+
+
 def test_summary_normalizes_decimal_spacing_when_otherwise_valid(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         "urllib.request.urlopen",
