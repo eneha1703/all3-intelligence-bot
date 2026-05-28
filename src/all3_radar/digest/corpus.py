@@ -704,6 +704,7 @@ def build_claude_revision_prompt(window: DigestWindow, candidates: list[DigestCa
             "Review the drafted Weekly Digest Bot 2 message item by item and return a corrected final version in Telegram HTML.",
             f"Digest title: {window.title}",
             "Keep exactly 5 items, keep the same stories, and preserve the visible Link anchors.",
+            f"The first line of your response must be the digest title exactly as provided: {window.title}",
             "Return the full final digest only. Do not add notes, bullets, JSON, or commentary.",
             "Use the selected-item data as the ground truth.",
             "Treat `summary` as the cleaned editorial grounding. Prefer it over `raw_summary` when the raw text contains investor lists, conference attribution, names, or publicity noise.",

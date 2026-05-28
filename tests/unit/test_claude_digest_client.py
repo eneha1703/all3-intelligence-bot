@@ -299,3 +299,34 @@ def test_claude_digest_client_revision_rejects_visible_raw_urls(monkeypatch) -> 
 
     with pytest.raises(ClaudeDigestUnavailableError):
         client.revise_telegram_digest("prompt", expected_title=expected_title)
+
+
+def test_claude_digest_client_extracts_selection_from_bare_json_array(monkeypatch) -> None:
+    client = ClaudeDigestClient(
+        enabled=True,
+        api_key="secret",
+        model="claude-test",
+        timeout_seconds=10,
+        max_tokens=500,
+    )
+
+    def fake_urlopen(request, timeout):  # noqa: ANN001
+        return _FakeResponse(
+            {
+                "content": [
+                    {
+                        "type": "text",
+                        "text": '["id1","id2","id3","id4","id5"]',
+                    }
+                ]
+            }
+        )
+
+    monkeypatch.setattr("urllib.request.urlopen", fake_urlopen)
+
+    selected_ids = client.select_top_story_ids(
+        "prompt",
+        allowed_ids={"id1", "id2", "id3", "id4", "id5", "id6"},
+    )
+
+    assert selected_ids == ["id1", "id2", "id3", "id4", "id5"]

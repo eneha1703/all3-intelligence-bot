@@ -16,6 +16,7 @@ class ClaudeDigestUnavailableError(RuntimeError):
 RAW_URL_RE = re.compile(r'(?<!href=")https?://[^\s<]+', re.IGNORECASE)
 FENCED_JSON_RE = re.compile(r"^```(?:json)?\s*(.*?)\s*```$", re.DOTALL)
 JSON_OBJECT_RE = re.compile(r"\{.*\}", re.DOTALL)
+JSON_ARRAY_RE = re.compile(r"\[.*\]", re.DOTALL)
 
 
 @dataclass(frozen=True)
@@ -92,7 +93,16 @@ class ClaudeDigestClient:
         try:
             payload = json.loads(text)
         except json.JSONDecodeError as exc:
-            raise ClaudeDigestUnavailableError("Claude selection response was not valid JSON.") from exc
+            array_match = JSON_ARRAY_RE.search(text)
+            if array_match:
+                try:
+                    payload = json.loads(array_match.group(0))
+                except json.JSONDecodeError:
+                    raise ClaudeDigestUnavailableError("Claude selection response was not valid JSON.") from exc
+            else:
+                raise ClaudeDigestUnavailableError("Claude selection response was not valid JSON.") from exc
+        if isinstance(payload, list):
+            payload = {"selected_ids": payload}
         if not isinstance(payload, dict):
             raise ClaudeDigestUnavailableError("Claude selection response must be a JSON object.")
         selected_ids = payload.get("selected_ids")
