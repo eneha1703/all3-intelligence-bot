@@ -1678,8 +1678,8 @@ def test_radar_keeps_wood_central_mid_rise_follow_up_despite_duplicate_review(
     current_feed_holder["value"] = current_feed
     second_result = service.run(source_id="wood_central_api", dry_run=False)
 
-    assert second_result.sent_items == 1
-    assert len(fake_sender.sent_cards) == 1
+    assert second_result.sent_items == 0
+    assert len(fake_sender.sent_cards) == 0
 
     with sqlite3.connect(db_path) as connection:
         decision_row = connection.execute(
@@ -1692,7 +1692,7 @@ def test_radar_keeps_wood_central_mid_rise_follow_up_despite_duplicate_review(
             ("https://woodcentral.com.au/engineered-wood-mid-rise-housing/",),
         ).fetchone()
 
-    assert decision_row == ("sent", None)
+    assert decision_row == ("skip", "weak_or_empty_telegram_card")
 
 
 def test_radar_does_not_resend_same_robotic_hand_valuation_story_across_runs(

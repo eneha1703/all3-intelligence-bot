@@ -17,13 +17,14 @@ from all3_radar.storage.repositories import RadarRepository
 
 class _FakeDiscoveryClient:
     def discover(self, *, query_packs: tuple, freshness_days: int) -> DiscoveryClientResult:
+        fresh_date = datetime.now(timezone.utc).date().isoformat()
         return DiscoveryClientResult(
             candidates=(
                 DiscoveryCandidate(
                     title="Already seen robotics story",
                     url="https://example.com/seen?utm_source=newsletter",
                     source_name="Example",
-                    published_date="2026-05-25",
+                    published_date=fresh_date,
                     summary="Already in the bot DB.",
                     query_pack_id="test_pack",
                     matched_signal="deployment",
@@ -34,7 +35,7 @@ class _FakeDiscoveryClient:
                     title="New construction robot deployment",
                     url="https://example.com/new-robot",
                     source_name="Example",
-                    published_date="2026-05-25",
+                    published_date=fresh_date,
                     summary="New deployment on live construction sites.",
                     query_pack_id="test_pack",
                     matched_signal="active deployment",
@@ -56,7 +57,7 @@ class _FakeDiscoveryClient:
                     title="Top 10 construction robotics",
                     url="https://example.com/top-10-construction-robotics",
                     source_name="Example",
-                    published_date="2026-05-25",
+                    published_date=fresh_date,
                     summary="Evergreen ranking page.",
                     query_pack_id="test_pack",
                     matched_signal="active deployment",
@@ -67,7 +68,7 @@ class _FakeDiscoveryClient:
                     title="Borderline low-confidence item",
                     url="https://example.com/low-confidence",
                     source_name="Example",
-                    published_date="2026-05-25",
+                    published_date=fresh_date,
                     summary="Weakly related item.",
                     query_pack_id="test_pack",
                     matched_signal=None,
@@ -78,7 +79,7 @@ class _FakeDiscoveryClient:
                     title="Edge engineering enables physical AI in vehicles",
                     url="https://letsdatascience.com/news/edge-engineering-enables-physical-ai-in-vehicles-2ff1a390",
                     source_name="Let's Data Science",
-                    published_date="Mon, 25 May 2026 07:29:24 GMT",
+                    published_date=datetime.now(timezone.utc).strftime("%a, %d %b %Y %H:%M:%S GMT"),
                     summary="Automotive manufacturers are advancing ADAS and in-cabin AI with Tier 1 suppliers.",
                     query_pack_id="industrial_robotics_physical_ai",
                     matched_signal="named industrial customer, plant, site, or partner",
@@ -89,7 +90,7 @@ class _FakeDiscoveryClient:
                     title="Physical AI doubles capacity in Tennessee sorting facility",
                     url="https://example.com/sortera-facility",
                     source_name="Robot Report",
-                    published_date="2026-05-26",
+                    published_date=fresh_date,
                     summary="Industrial facility deployment with named site and capacity gain.",
                     query_pack_id="industrial_robotics_physical_ai",
                     matched_signal="factory, warehouse, construction, infrastructure, or industrial deployment",
@@ -100,7 +101,7 @@ class _FakeDiscoveryClient:
                     title="Physical AI doubles capacity at Tennessee sorting facility",
                     url="https://example.com/sortera-facility-duplicate",
                     source_name="Another Outlet",
-                    published_date="2026-05-26",
+                    published_date=fresh_date,
                     summary="Near-duplicate cross-post of the same facility story.",
                     query_pack_id="industrial_robotics_physical_ai",
                     matched_signal="factory, warehouse, construction, infrastructure, or industrial deployment",
@@ -111,7 +112,7 @@ class _FakeDiscoveryClient:
                     title="NYC reviews old construction codes to push more building",
                     url="https://nypost.com/2026/05/25/us-news/nyc-code-reform",
                     source_name="New York Post",
-                    published_date="2026-05-25",
+                    published_date=fresh_date,
                     summary=(
                         "NYC launched a construction-code reform task force to cut approval timelines, "
                         "allow non-traditional materials, and reduce elevator costs for multifamily delivery."
@@ -125,7 +126,7 @@ class _FakeDiscoveryClient:
                     title="Mamdani targets housing holdouts",
                     url="https://example.com/mamdani-land-use",
                     source_name="Politico",
-                    published_date="2026-05-25",
+                    published_date=fresh_date,
                     summary=(
                         "NYC mayoral candidate Mamdani proposed zoning and land-use initiatives in low-growth "
                         "neighbourhoods, with a 200,000 affordable-home target and a low rental vacancy rate."
@@ -139,7 +140,7 @@ class _FakeDiscoveryClient:
                     title="Affordable code reform task force reviews elevators and materials in NYC",
                     url="https://example.com/nyc-code-reform-duplicate",
                     source_name="Another City Outlet",
-                    published_date="2026-05-25",
+                    published_date=fresh_date,
                     summary=(
                         "The same NYC Affordable & Efficient Code Reform task force will review elevator rules, "
                         "materials, and approval timelines to reduce multifamily construction costs."
@@ -153,7 +154,7 @@ class _FakeDiscoveryClient:
                     title="Emerson and SiMa.ai deliver Physical AI intelligence to the industrial edge",
                     url="https://www.stocktitan.net/news/EMR/emerson-and-si-ma-ai-physical-ai.html",
                     source_name="Stock Titan / PR Newswire",
-                    published_date="2026-05-25",
+                    published_date=fresh_date,
                     summary=(
                         "Emerson and SiMa.ai announced a collaboration to embed Physical AI into rugged industrial PCs "
                         "for real-time factory-floor decision-making."
