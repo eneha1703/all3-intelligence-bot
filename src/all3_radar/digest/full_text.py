@@ -37,6 +37,12 @@ NON_ARTICLE_TYPES = {
     "videoobject",
     "listitem",
 }
+NAV_CLUSTER_RE = re.compile(
+    r"\bAll\s+Commercial\s+Mid-?Rise\s+Construction\s+Residential\b",
+    re.IGNORECASE,
+)
+WOOD_CENTRAL_NAV_RE = re.compile(r"\|\s*Wood Central\b", re.IGNORECASE)
+REPEATED_HEADLINE_RE = re.compile(r"\bWhy the Sydney Opera House Concert Hall is ARM", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -93,6 +99,10 @@ def _looks_like_article_block(text: str) -> bool:
     if len(text) < 45:
         return False
     normalized = text.lower()
+    if NAV_CLUSTER_RE.search(text):
+        return False
+    if WOOD_CENTRAL_NAV_RE.search(text) and REPEATED_HEADLINE_RE.search(text):
+        return False
     if any(
         phrase in normalized
         for phrase in (
@@ -109,6 +119,18 @@ def _looks_like_article_block(text: str) -> bool:
     ):
         return False
     return True
+
+
+def _dedupe_blocks(blocks: list[str]) -> list[str]:
+    cleaned: list[str] = []
+    seen_normalized: set[str] = set()
+    for block in blocks:
+        normalized = WHITESPACE_RE.sub(" ", block).strip().lower()
+        if not normalized or normalized in seen_normalized:
+            continue
+        seen_normalized.add(normalized)
+        cleaned.append(block)
+    return cleaned
 
 
 def _clean_text(value: str | None) -> str | None:
@@ -209,7 +231,7 @@ def extract_article_text(article_html: str, *, max_chars: int = 3500) -> Article
 
     if not parser.blocks:
         return ArticleTextResult(text=None, status="no_article_text")
-    joined = " ".join(parser.blocks)
+    joined = " ".join(_dedupe_blocks(parser.blocks))
     return ArticleTextResult(text=_truncate_text(joined, max_chars), status="html_blocks")
 
 

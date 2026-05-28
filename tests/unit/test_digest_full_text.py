@@ -106,6 +106,28 @@ def test_extract_article_text_rejects_bio_only_json_ld_and_falls_back_to_html() 
     assert "available for corporate host" not in result.text
 
 
+def test_extract_article_text_filters_wood_central_navigation_clusters() -> None:
+    html = """
+    <html>
+      <body>
+        <article>
+          <div>Engineered Wood Targets Mid-Rise Housing on Cost | Wood Central All Commercial Mid-Rise Construction Residential Firefighters Turn to Timber for Award-Winning Hawke's Bay Station Why the Sydney Opera House Concert Hall is ARM's Crowning Prize Timberland Investors Wager on a US Housing Recovery in 2026</div>
+          <p>Mercer Mass Timber's BuildSpec tool lets project teams model hybrid CLT systems for cost and embodied carbon at schematic stage instead of waiting weeks for consultant coordination.</p>
+          <p>That matters because concrete and steel assumptions are often locked in before timber gets into the comparison.</p>
+        </article>
+      </body>
+    </html>
+    """
+
+    result = extract_article_text(html, max_chars=500)
+
+    assert result.status == "html_blocks"
+    assert result.text is not None
+    assert "BuildSpec tool lets project teams model hybrid CLT systems" in result.text
+    assert "All Commercial Mid-Rise Construction Residential" not in result.text
+    assert "Why the Sydney Opera House Concert Hall" not in result.text
+
+
 def test_fetch_article_text_returns_fetch_failure_status() -> None:
     def failing_fetcher(url: str, timeout_seconds: int) -> str:
         raise TimeoutError("slow")
